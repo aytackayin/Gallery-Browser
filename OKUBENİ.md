@@ -21,8 +21,14 @@ Gallery Browser, yerel medya koleksiyonunuzu (resim ve video) Netflix tarzı mod
 
 ---
 
-## 📦 Kurulum
+## 📦 Başlangıç
 
+### Hızlı Başlat (Windows)
+1. Proje dosyalarının tam olduğundan emin olun.
+2. `GalleryLauncher.exe` dosyasını çalıştırın. Bu işlem sunucuyu otomatik olarak başlatacak ve tarayıcıyı sizin için açacaktır.
+3. Gerekirse medya yollarınızı `config.ini` dosyası üzerinden düzenleyin.
+
+### Manuel Kurulum (Geliştirici)
 1. **Gereksinimler:** Node.js (v16 veya üzeri) yüklü olmalıdır.
 2. **Bağımlılıkları Yükleyin:**
    ```bash
@@ -33,10 +39,21 @@ Gallery Browser, yerel medya koleksiyonunuzu (resim ve video) Netflix tarzı mod
      ```bash
      npm run dev
      ```
-   - Sunucuyu başlatmak için:
+   - Sunucuyu manuel başlatmak için:
      ```bash
      node server.js
      ```
+
+---
+
+## ⚙️ Yapılandırma
+Medya kütüphanesi yolunu ve ayarları `config.ini` dosyasından özelleştirebilirsiniz:
+```ini
+[Settings]
+LibraryPath=C:/Sizin/Medya/Yolunuz
+Language=tr
+AutoPlay=true
+```
 
 ---
 

@@ -21,8 +21,14 @@ Gallery Browser is a fast and stylish media gallery application that allows you 
 
 ---
 
-## 📦 Installation
+## 📦 Getting Started
 
+### Quick Start (Windows)
+1. Ensure you have the project files.
+2. Run `GalleryLauncher.exe`. This will automatically start the server and open the browser for you.
+3. Configure your media paths in `config.ini` if necessary.
+
+### Manual Installation (Development)
 1. **Prerequisites:** Node.js (v16 or higher) must be installed.
 2. **Install Dependencies:**
    ```bash
@@ -33,10 +39,21 @@ Gallery Browser is a fast and stylish media gallery application that allows you 
      ```bash
      npm run dev
      ```
-   - To start the server:
+   - To start the server manually:
      ```bash
      node server.js
      ```
+
+---
+
+## ⚙️ Configuration
+You can customize the library path and settings in the `config.ini` file:
+```ini
+[Settings]
+LibraryPath=C:/Your/Media/Path
+Language=en
+AutoPlay=true
+```
 
 ---
 
