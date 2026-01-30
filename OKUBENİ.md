@@ -2,13 +2,13 @@
 
 ![Preview](preview.png)
 
-Gallery Browser, yerel medya koleksiyonunuzu (resim ve video) Netflix tarzı modern bir arayüzle taramanıza, izlemenize ve yönetmenize olanak tanıyan hızlı ve şık bir medya galerisi uygulamasıdır.
+Gallery Browser, yerel medya koleksiyonunuzu (resim ve video) Modern bir arayüzle taramanıza, izlemenize ve yönetmenize olanak tanıyan hızlı ve şık bir medya galerisi uygulamasıdır.
 
 ---
 
 ## 🚀 Özellikler
 
-- **Netflix Tarzı Deneyim:** Modern, hızlı ve kullanıcı dostu arayüz.
+- **Tema:** Modern, hızlı ve kullanıcı dostu arayüz.
 - **Akıllı Medya Oynatıcı:** 
   - Mouse tekerleği ile zoom.
   - **Sağ tık ile sürükleyerek kaydırma (Pan).**
@@ -18,6 +18,17 @@ Gallery Browser, yerel medya koleksiyonunuzu (resim ve video) Netflix tarzı mod
 - **Gelişmiş Arama:** Tüm klasörler içinde hızlı arama.
 - **Çoklu Dil Desteği:** Türkçe ve İngilizce dil desteği.
 - **Full Screen:** Tam ekran izleme deneyimi.
+- **Klavye Kontrolleri:** Sayfa (PagUp/Down) ve Ok tuşları ile kolay geçiş.
+
+---
+
+## 🆕 v1.0.1 Yenilikleri
+- **Modern Görünüm:** Navbar üzerine cam (glassmorphism) efekti eklendi.
+- **Form Geliştirmeleri:** Açık ve koyu tema için optimize edilmiş form elemanları.
+- **Bildirim Sistemi:** Alert pencereleri yerine daha şık toast bildirme sistemi.
+- **Gelişmiş Alt Bilgi (Footer):** Geliştirici bilgileri ve GitHub bağlantısı eklendi.
+- **Video Kontrolleri:** Zoom modunda video kontrollerinin (ses, tam ekran vb.) tıklanabilme sorunu giderildi.
+- **Navigasyon:** PageUp ve PageDown tuşları ile medya geçiş desteği eklendi.
 
 ---
 

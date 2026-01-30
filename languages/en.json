@@ -41,5 +41,7 @@
     "themeDark": "Dark",
     "themeLight": "Light",
     "restartRequired": "Restart required for some changes",
-    "settingsSaved": "Settings saved"
+    "settingsSaved": "Settings saved",
+    "search": "Search",
+    "clear": "Clear"
 }

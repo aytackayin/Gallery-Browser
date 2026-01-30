@@ -41,5 +41,7 @@
     "themeDark": "Koyu",
     "themeLight": "Açık",
     "restartRequired": "Bazı değişiklikler için yeniden başlatma gerekli",
-    "settingsSaved": "Ayarlar kaydedildi"
+    "settingsSaved": "Ayarlar kaydedildi",
+    "search": "Ara",
+    "clear": "Temizle"
 }

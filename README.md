@@ -2,13 +2,13 @@
 
 ![Preview](preview.png)
 
-Gallery Browser is a fast and stylish media gallery application that allows you to browse, view, and manage your local media collection (images and videos) with a modern Netflix-style interface.
+Gallery Browser is a fast and stylish media gallery application that allows you to browse, view, and manage your local media collection (images and videos).
 
 ---
 
 ## 🚀 Features
 
-- **Netflix-Style Experience:** Modern, fast, and user-friendly UI.
+- **Theme:** Modern, fast, and user-friendly UI.
 - **Smart Media Viewer:**
   - Zoom with mouse wheel.
   - **Pan with Right-Click + Drag.**
@@ -18,6 +18,17 @@ Gallery Browser is a fast and stylish media gallery application that allows you 
 - **Advanced Search:** Quick search across all folders.
 - **Multi-Language Support:** Turkish and English support.
 - **Full Screen:** Immersive full-screen viewing experience.
+- **Keyboard Controls:** Easy navigation with Page (Up/Down) and Arrow keys.
+
+---
+
+## 🆕 v1.0.1 Changelog
+- **Modern UI:** Added glassmorphism effect to the navbar.
+- **Form Improvements:** Optimized form elements for light and dark themes.
+- **Notification System:** Replaced browser alerts with elegant toast notifications.
+- **Enhanced Footer:** Added developer info and GitHub repository link.
+- **Video Controls:** Fixed issue where video controls (volume, fullscreen, etc.) were unreachable in zoom mode.
+- **Navigation:** Added PageUp and PageDown key support for switching media.
 
 ---
 

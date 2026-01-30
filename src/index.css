@@ -37,21 +37,44 @@ body {
   top: 0;
   left: 0;
   right: 0;
-  height: 68px;
+  height: auto;
+  min-height: 80px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 15px 4%;
+  /* background: rgba(20, 20, 20, 0.8); */
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  z-index: 1000;
+  gap: 15px;
+}
+
+.navbar-top {
   display: flex;
   align-items: center;
-  padding: 0 4%;
-  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.8), transparent);
-  z-index: 1000;
+  width: 100%;
   gap: 30px;
+}
+
+.settings-btn {
+  margin-left: auto;
+}
+
+[data-theme="light"] .navbar {
+  /* background: rgba(255, 255, 255, 0.8); */
 }
 
 .search-container {
   position: relative;
   flex: 1;
-  max-width: 400px;
   display: flex;
   align-items: center;
+}
+
+.clear-search-icon:hover {
+  filter: brightness(1.2);
+  transform: translateY(-50%) scale(1.1) !important;
 }
 
 .search-icon {
@@ -62,9 +85,9 @@ body {
 
 .search-input {
   width: 100%;
-  background: rgba(0, 0, 0, 0.75);
-  border: 1px solid #444;
-  color: white;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
   padding: 10px 15px 10px 40px;
   border-radius: 4px;
   font-size: 0.9rem;
@@ -74,14 +97,14 @@ body {
 
 .search-input:focus {
   border-color: var(--netflix-red);
-  background: rgba(0, 0, 0, 0.9);
+  background: var(--bg-secondary);
 }
 
 .modal-input {
   width: 100%;
-  background: rgba(0, 0, 0, 0.75);
-  border: 1px solid #444;
-  color: white;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
   padding: 10px 15px;
   border-radius: 4px;
   font-size: 0.9rem;
@@ -92,7 +115,7 @@ body {
 
 .modal-input:focus {
   border-color: var(--netflix-red);
-  background: rgba(0, 0, 0, 0.9);
+  background: var(--bg-secondary);
 }
 
 .logo {
@@ -103,7 +126,7 @@ body {
   display: flex;
   align-items: center;
   gap: 5px;
-  color: white;
+  color: var(--text-primary);
   text-transform: uppercase;
   transition: 0.3s;
 }
@@ -122,9 +145,15 @@ body {
 }
 
 .navbar.scrolled {
-  background: rgba(20, 20, 20, 0.95);
+  /* background: rgba(20, 20, 20, 0.95); */
   backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+[data-theme="light"] .navbar.scrolled {
+  /* background: rgba(255, 255, 255, 0.95); */
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
 }
 
 .breadcrumb {
@@ -225,7 +254,9 @@ body {
   left: 0;
   right: 0;
   padding: 7px;
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(20, 20, 20, 0.30);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   display: flex;
   flex-direction: column;
   opacity: 0;
@@ -238,6 +269,11 @@ body {
   opacity: 1;
   transform: translateY(0);
   /* Hoverda yerine otursun */
+}
+
+[data-theme="light"] .media-info {
+  background: rgba(255, 255, 255, 0.50);
+  /* Light modda sınır belli olsun */
 }
 
 /* Klasörler için her zaman göster (background olmadan) */
@@ -619,4 +655,72 @@ input[type='checkbox']:checked::after {
 [data-tooltip]:hover::after {
   opacity: 1;
   transform: translateX(-50%) translateY(-5px);
+}
+
+textarea,
+select {
+  width: 100%;
+  background: var(--bg-card) !important;
+  border: 1px solid var(--border-color) !important;
+  color: var(--text-primary) !important;
+  padding: 10px;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  outline: none;
+  transition: 0.3s;
+}
+
+textarea:focus,
+select:focus {
+  border-color: var(--netflix-red) !important;
+  background: var(--bg-secondary) !important;
+}
+
+/* Toast Notification Styles */
+.toast-notification {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  padding: 15px 25px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  animation: slideIn 0.3s ease-out;
+  border: 1px solid var(--border-color);
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateY(100px);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.footer {
+  text-align: center;
+  padding: 20px;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  margin-top: 50px;
+  border-top: 1px solid var(--border-color);
+}
+
+.footer a {
+  color: var(--netflix-red);
+  text-decoration: none;
+  font-weight: bold;
+}
+
+.footer a:hover {
+  text-decoration: underline;
 }

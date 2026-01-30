@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Folder, X, Play, ChevronRight, Home, ChevronLeft, Image as ImageIcon, Video as VideoIcon, Search, Trash2, Info, Save, FolderInput, ChevronDown, Settings } from 'lucide-react';
+import { Folder, X, Play, ChevronRight, Home, ChevronLeft, Image as ImageIcon, Video as VideoIcon, Search, Trash2, Info, Save, FolderInput, ChevronDown, Settings, CheckCircle } from 'lucide-react';
 
 const FolderNode = ({ name, path, level = 0, onSelect, selectedPath, expandedFolders, toggleExpand }) => {
     const isExpanded = expandedFolders[path];
@@ -95,6 +95,7 @@ function App() {
     const [settingsModal, setSettingsModal] = useState(false);
     const [settingsData, setSettingsData] = useState({ galleryPath: '', autoPlay: false, language: 'en', theme: 'system' });
     const [theme, setTheme] = useState('system');
+    const [toast, setToast] = useState(null); // { message: string, type: 'success' | 'error' }
 
     // ... (Existing states remain)
 
@@ -336,10 +337,12 @@ function App() {
             if (data.success) {
                 setTheme(settingsData.theme);
                 setSettingsModal(false);
-                alert(t.restartRequired || 'Restart required for some changes');
+                setToast(t.restartRequired || 'Restart required for some changes');
+                setTimeout(() => setToast(null), 3000);
             }
         } catch (e) {
-            alert('Error saving settings');
+            setToast('Error saving settings');
+            setTimeout(() => setToast(null), 3000);
         }
     };
 
@@ -552,17 +555,37 @@ function App() {
     return (
         <div className="app">
             <nav className={`navbar ${scrolled ? 'scrolled' : ''}`}>
-                <div className="logo" onClick={() => fetchItems('.')}>GALLERY <span>BROWSER</span></div>
+                <div className="navbar-top">
+                    <div className="logo" onClick={() => fetchItems('.')}>GALLERY <span>BROWSER</span></div>
 
-                <div className="search-container">
-                    <Search size={18} className="search-icon" />
-                    <input
-                        type="text"
-                        placeholder={t.searchPlaceholder}
-                        value={searchQuery}
-                        onChange={handleSearch}
-                        className="search-input"
-                    />
+                    <div className="search-container" style={{ flex: 1, maxWidth: 500 }}>
+                        <Search size={18} className="search-icon" />
+                        <input
+                            type="text"
+                            placeholder={t.searchPlaceholder}
+                            value={searchQuery}
+                            onChange={handleSearch}
+                            className="search-input"
+                            style={{ paddingRight: 35 }}
+                        />
+                        {searchQuery && (
+                            <X
+                                size={16}
+                                className="clear-search-icon"
+                                onClick={() => handleSearch({ target: { value: '' } })}
+                                style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', cursor: 'pointer', color: '#888' }}
+                            />
+                        )}
+                    </div>
+
+                    <button
+                        className="settings-btn"
+                        data-tooltip={t.settings || 'Settings'}
+                        onClick={() => setSettingsModal(true)}
+                        style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 8 }}
+                    >
+                        <Settings size={20} color="#aaa" />
+                    </button>
                 </div>
 
                 <div className="breadcrumb">
@@ -575,18 +598,9 @@ function App() {
                     ))}
                     {isSearching && <><ChevronRight size={14} /><span>{t.searchResults}</span></>}
                 </div>
-
-                <button
-                    className="settings-btn"
-                    data-tooltip={t.settings || 'Settings'}
-                    onClick={() => setSettingsModal(true)}
-                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 8 }}
-                >
-                    <Settings size={20} color="#aaa" />
-                </button>
             </nav>
 
-            <div className="rows-container" style={{ paddingTop: '100px' }}>
+            <div className="rows-container" style={{ paddingTop: '120px' }}>
                 <div className="row">
                     <div className="row-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 15 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 15 }}>
@@ -915,6 +929,18 @@ function App() {
                     </div>
                 </div>
             )}
+
+
+            {toast && (
+                <div className="toast-notification">
+                    <CheckCircle size={20} color="#46d369" />
+                    <span>{toast}</span>
+                </div>
+            )}
+
+            <div className="footer">
+                Developed by <a href="https://github.com/aytackayin" target="_blank" rel="noopener noreferrer">Aytac KAYIN</a>
+            </div>
         </div>
     );
 }
