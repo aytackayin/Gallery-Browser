@@ -201,10 +201,252 @@ app.delete('/api/delete', (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+app.post('/api/move', (req, res) => {
+    const { sourcePath, destFolderPath, overwrite } = req.body;
+    const fullSource = path.join(rootGalleryPath, sourcePath);
+    const fullDestFolder = path.join(rootGalleryPath, destFolderPath);
+    const fileName = path.basename(sourcePath);
+    const fullDest = path.join(fullDestFolder, fileName);
+    const newRelPath = path.join(destFolderPath, fileName).replace(/\\/g, '/');
+
+    if (!fullSource.toLowerCase().startsWith(rootGalleryPath.toLowerCase()) ||
+        !fullDestFolder.toLowerCase().startsWith(rootGalleryPath.toLowerCase())) {
+        return res.status(403).json({ error: "Yasak" });
+    }
+
+    try {
+        if (fs.existsSync(fullSource)) {
+            if (!fs.existsSync(fullDestFolder)) {
+                return res.status(404).json({ error: "Hedef klasör bulunamadı" });
+            }
+            if (fs.existsSync(fullDest)) {
+                if (!overwrite) {
+                    return res.status(409).json({ error: "Dosya zaten var", code: 'CONFLICT' });
+                }
+                // Overwrite: Hedef dosyayı sil
+                try { fs.unlinkSync(fullDest); } catch (e) { }
+            }
+
+            fs.renameSync(fullSource, fullDest);
+
+            // Veritabanını güncelle
+            // Eski kaydı güncelle, eğer hedefte zaten kayıt varsa (overwrite durumunda) onu silmemiz gerekebilir ama
+            // rename işlemi üstüne yazdığı için hedefteki path'in id'si kalabilir ya da çakışma olabilir.
+            // Basitlik adına: Varsa eski hedef kaydı sil, sonra güncelle.
+            db.prepare("DELETE FROM item_info WHERE path = ?").run(newRelPath);
+            db.prepare("UPDATE item_info SET path = ? WHERE path = ?").run(newRelPath, sourcePath);
+
+            res.json({ success: true, newPath: newRelPath });
+        } else {
+            res.status(404).json({ error: "Kaynak dosya bulunamadı" });
+        }
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.post('/api/update', (req, res) => {
+    const { oldPath, newName, info } = req.body;
+
+    // Eğer sadece info güncellenecekse (isim değişmediyse)
+    if (!newName || newName === path.basename(oldPath)) {
+        try {
+            db.prepare("INSERT OR REPLACE INTO item_info (path, info) VALUES (?, ?)").run(oldPath, info || '');
+            res.json({ success: true, newPath: oldPath });
+        } catch (e) { res.status(500).json({ error: e.message }); }
+        return;
+    }
+
+    // İsim değişikliği varsa
+    const fullOldPath = path.join(rootGalleryPath, oldPath);
+    const dir = path.dirname(fullOldPath);
+    const fullNewPath = path.join(dir, newName);
+    const startDir = path.dirname(oldPath);
+    const newRelPath = path.join(startDir, newName).replace(/\\/g, '/');
+
+    if (!fullOldPath.toLowerCase().startsWith(rootGalleryPath.toLowerCase()) ||
+        !fullNewPath.toLowerCase().startsWith(rootGalleryPath.toLowerCase())) {
+        return res.status(403).json({ error: "Yasak" });
+    }
+
+    try {
+        if (fs.existsSync(fullOldPath)) {
+            if (fs.existsSync(fullNewPath)) {
+                return res.status(409).json({ error: "Bu isimde dosya zaten var" });
+            }
+            fs.renameSync(fullOldPath, fullNewPath);
+
+            // Path'i güncelle
+            db.prepare("UPDATE item_info SET path = ? WHERE path = ?").run(newRelPath, oldPath);
+            // Info'yu güncelle (Varsa)
+            if (info !== undefined) {
+                db.prepare("INSERT OR REPLACE INTO item_info (path, info) VALUES (?, ?)").run(newRelPath, info);
+            }
+
+            res.json({ success: true, newPath: newRelPath });
+        } else {
+            res.status(404).json({ error: "Dosya bulunamadı" });
+        }
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.post('/api/batch-delete', (req, res) => {
+    const { paths } = req.body;
+    if (!Array.isArray(paths)) return res.status(400).json({ error: "Invalid input" });
+
+    let deleted = [];
+    let failed = [];
+
+    paths.forEach(p => {
+        const fullPath = path.join(rootGalleryPath, p);
+        if (!fullPath.toLowerCase().startsWith(rootGalleryPath.toLowerCase())) {
+            failed.push({ path: p, error: "Access denied" });
+            return;
+        }
+        try {
+            if (fs.existsSync(fullPath)) {
+                if (fs.lstatSync(fullPath).isDirectory()) {
+                    fs.rmSync(fullPath, { recursive: true, force: true });
+                } else {
+                    fs.unlinkSync(fullPath);
+                }
+                const relativePath = p.replace(/\\/g, '/');
+                db.prepare("DELETE FROM item_info WHERE path = ?").run(relativePath);
+                deleted.push(p);
+            } else {
+                failed.push({ path: p, error: "Not found" });
+            }
+        } catch (e) {
+            failed.push({ path: p, error: e.message });
+        }
+    });
+    res.json({ success: true, deleted, failed });
+});
+
+app.post('/api/batch-move', (req, res) => {
+    const { sourcePaths, destFolderPath, overwrite } = req.body;
+    if (!Array.isArray(sourcePaths) || !destFolderPath) return res.status(400).json({ error: "Invalid input" });
+
+    const fullDestDir = path.join(rootGalleryPath, destFolderPath);
+    if (!fullDestDir.toLowerCase().startsWith(rootGalleryPath.toLowerCase())) return res.status(403).json({ error: "Access denied" });
+
+    let moved = [];
+    let conflicts = [];
+    let failed = [];
+
+    sourcePaths.forEach(src => {
+        const fullSrcPath = path.join(rootGalleryPath, src);
+        const fileName = path.basename(src);
+        const fullDestPath = path.join(fullDestDir, fileName);
+        const newRelPath = path.join(destFolderPath, fileName).replace(/\\/g, '/');
+
+        if (!fullSrcPath.toLowerCase().startsWith(rootGalleryPath.toLowerCase())) {
+            failed.push({ path: src, error: "Access denied" });
+            return;
+        }
+
+        try {
+            if (!fs.existsSync(fullSrcPath)) {
+                failed.push({ path: src, error: "Source not found" });
+                return;
+            }
+
+            if (fs.existsSync(fullDestPath)) {
+                if (!overwrite) {
+                    conflicts.push(src);
+                    return;
+                }
+                // Overwrite: Hedefi sil
+                if (fs.lstatSync(fullDestPath).isDirectory()) {
+                    fs.rmSync(fullDestPath, { recursive: true, force: true });
+                } else {
+                    fs.unlinkSync(fullDestPath);
+                }
+                // Eski info'yu sil
+                db.prepare("DELETE FROM item_info WHERE path = ?").run(newRelPath);
+            }
+
+            fs.renameSync(fullSrcPath, fullDestPath);
+
+            // DB güncelle
+            const oldRelPath = src.replace(/\\/g, '/');
+            db.prepare("UPDATE item_info SET path = ? WHERE path = ?").run(newRelPath, oldRelPath);
+            moved.push(src);
+
+        } catch (e) {
+            failed.push({ path: src, error: e.message });
+        }
+    });
+
+    res.json({ success: true, moved, conflicts, failed });
+});
+
 app.use('/media', (req, res) => {
     const filePath = path.join(rootGalleryPath, decodeURIComponent(req.path));
     if (fs.existsSync(filePath)) res.sendFile(filePath);
     else res.status(404).send("Bulunamadı");
+});
+
+// Settings API
+app.get('/api/settings', (req, res) => {
+    try {
+        const configPath = path.join(process.cwd(), 'config.ini');
+        let settings = {
+            galleryPath: process.cwd(),
+            autoPlay: false,
+            language: 'en',
+            theme: 'system'
+        };
+
+        if (fs.existsSync(configPath)) {
+            const content = fs.readFileSync(configPath, 'utf8');
+            const lines = content.split(/\r?\n/);
+
+            const gPath = lines.find(l => l.trim().startsWith('GalleryPath='));
+            if (gPath) settings.galleryPath = gPath.split('=')[1].trim().replace(/^["']|["']$/g, '');
+
+            const aPlay = lines.find(l => l.trim().startsWith('AutoPlay='));
+            if (aPlay) settings.autoPlay = aPlay.split('=')[1].trim() === '1';
+
+            const lang = lines.find(l => l.trim().startsWith('Language='));
+            if (lang) settings.language = lang.split('=')[1].trim().toLowerCase();
+
+            const theme = lines.find(l => l.trim().startsWith('Theme='));
+            if (theme) settings.theme = theme.split('=')[1].trim().toLowerCase();
+        }
+
+        res.json(settings);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.post('/api/settings', (req, res) => {
+    try {
+        const configPath = path.join(process.cwd(), 'config.ini');
+        const { galleryPath, autoPlay, language, theme } = req.body;
+
+        const content = `[Settings]
+BrowserPath=default
+GalleryPath=${galleryPath || 'I:\\\\'}
+
+; AutoPlay? (1=Yes, 0=No)
+AutoPlay=${autoPlay ? '1' : '0'}
+
+; Language (tr or en)
+Language=${language || 'en'}
+
+; Theme (system, dark, light)
+Theme=${theme || 'system'}
+`;
+
+        fs.writeFileSync(configPath, content, 'utf8');
+        res.json({ success: true, message: 'Settings saved. Restart required for some changes.' });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
 });
 
 app.listen(PORT, () => console.log(`Sunucu çalışıyor.`));
