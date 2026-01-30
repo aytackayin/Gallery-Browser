@@ -32,6 +32,14 @@ Gallery Browser is a fast and stylish media gallery application that allows you 
 
 ---
 
+## 🆕 v1.0.2 Changelog
+- **Image Editor:** Added Crop and Rotate features for images.
+- **Direct Save:** Edited images are saved directly over the original file, and the gallery updates instantly.
+- **Bug Fixes:** Resolved import issues and CORS errors with the Cropperjs library.
+- **Multi-Language:** Added Turkish and English translations for new features.
+
+---
+
 ## 📦 Getting Started
 
 ### Quick Start (Windows)

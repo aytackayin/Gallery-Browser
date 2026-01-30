@@ -1,5 +1,72 @@
 import { useState, useEffect, useRef } from 'react';
-import { Folder, X, Play, ChevronRight, Home, ChevronLeft, Image as ImageIcon, Video as VideoIcon, Search, Trash2, Info, Save, FolderInput, ChevronDown, Settings, CheckCircle } from 'lucide-react';
+import { Folder, X, Play, ChevronRight, Home, ChevronLeft, Image as ImageIcon, Video as VideoIcon, Search, Trash2, Info, Save, FolderInput, ChevronDown, Settings, CheckCircle, Scissors, RotateCw, Sun, Contrast } from 'lucide-react';
+import Cropper from "react-cropper";
+import "cropperjs/dist/cropper.css";
+
+const ImageEditor = ({ item, t, onSave, onClose }) => {
+    const cropperRef = useRef(null);
+    const [brightness, setBrightness] = useState(100);
+    const [contrast, setContrast] = useState(100);
+    const [saturation, setSaturation] = useState(100);
+    const [rotation, setRotation] = useState(0);
+
+    const getImageUrl = (path) => `http://localhost:3001/media/${encodeURIComponent(path)}?t=${Date.now()}`;
+
+    const handleSave = () => {
+        const cropper = cropperRef.current?.cropper;
+        if (!cropper) return;
+
+        // Apply filters to canvas
+        const canvas = cropper.getCroppedCanvas();
+        const ctx = canvas.getContext('2d');
+
+        // We can't easily apply filters to the canvas after cropper generates it without a second canvas or manipulation
+        // For simplicity, we'll use the cropper's raw result for now, 
+        // OR we can use the cropper's image element.
+
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+        onSave(dataUrl);
+    };
+
+    return (
+        <div className="modal-overlay editor-overlay" style={{ zIndex: 7000 }}>
+            <div className="modal editor-modal" onClick={e => e.stopPropagation()}>
+                <div className="modal-header">
+                    <h3>{t.editImage || 'Edit Image'} - {item.name}</h3>
+                    <div style={{ display: 'flex', gap: 10 }}>
+                        <button className="btn btn-primary" onClick={handleSave}><Save size={16} /> {t.save || 'Save'}</button>
+                        <button className="btn btn-grey" onClick={onClose}><X size={20} /></button>
+                    </div>
+                </div>
+                <div className="editor-content">
+                    <div className="cropper-container">
+                        <Cropper
+                            src={getImageUrl(item.path)}
+                            style={{ height: '60vh', width: '100%' }}
+                            initialAspectRatio={NaN}
+                            guides={true}
+                            ref={cropperRef}
+                            viewMode={1}
+                            background={false}
+                            responsive={true}
+                            autoCropArea={1}
+                            checkOrientation={false}
+                            crossOrigin="anonymous"
+                        />
+                    </div>
+                    <div className="editor-controls">
+                        <div className="control-group">
+                            <button className="action-btn" onClick={() => cropperRef.current?.cropper.rotate(90)}>
+                                <RotateCw size={18} /> <span>90°</span>
+                            </button>
+                        </div>
+                        {/* More controls like Brightness/Contrast can be added here with Canvas manipulation if needed */}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
 
 const FolderNode = ({ name, path, level = 0, onSelect, selectedPath, expandedFolders, toggleExpand }) => {
     const isExpanded = expandedFolders[path];
@@ -96,6 +163,7 @@ function App() {
     const [settingsData, setSettingsData] = useState({ galleryPath: '', autoPlay: false, language: 'en', theme: 'system' });
     const [theme, setTheme] = useState('system');
     const [toast, setToast] = useState(null); // { message: string, type: 'success' | 'error' }
+    const [showEditor, setShowEditor] = useState(false);
 
     // ... (Existing states remain)
 
@@ -202,7 +270,8 @@ function App() {
             if (e.key === 'PageDown' && !zoomMode) { e.preventDefault(); navigateMedia(1); }
             else if (e.key === 'PageUp' && !zoomMode) { e.preventDefault(); navigateMedia(-1); }
             else if (e.key === 'Escape') {
-                if (moveModal) { setMoveModal(null); setMoveConflict(false); }
+                if (showEditor) setShowEditor(false);
+                else if (moveModal) { setMoveModal(null); setMoveConflict(false); }
                 else if (editModal) setEditModal(null);
                 else { resetAndClose(); setConfirmDelete(null); }
             }
@@ -212,12 +281,12 @@ function App() {
     }, [selectedMediaIndex, zoomMode, items, confirmDelete, editModal, moveModal]);
 
     useEffect(() => {
-        if (selectedMediaIndex !== -1 || confirmDelete || editModal || moveModal) {
+        if (selectedMediaIndex !== -1 || confirmDelete || editModal || moveModal || showEditor) {
             document.body.style.overflow = 'hidden';
         } else {
             document.body.style.overflow = 'auto';
         }
-    }, [selectedMediaIndex, confirmDelete, editModal, moveModal]);
+    }, [selectedMediaIndex, confirmDelete, editModal, moveModal, showEditor]);
 
     const fetchItems = async (path) => {
         setLoading(true);
@@ -469,6 +538,25 @@ function App() {
 
     const toggleFolderExpand = (path) => {
         setExpandedFolders(prev => ({ ...prev, [path]: !prev[path] }));
+    };
+
+    const handleSaveEditedImage = async (dataUrl) => {
+        try {
+            const res = await fetch('/api/save-image', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ path: selectedMedia.path, imageData: dataUrl })
+            });
+            const data = await res.json();
+            if (data.success) {
+                setShowEditor(false);
+                setToast(t.imageSaved || 'Image saved successfully');
+                setTimeout(() => setToast(null), 3000);
+                // Refresh only if needed, or rely on URL timestamp
+            }
+        } catch (e) {
+            alert('Error saving image');
+        }
     };
 
     const sortedMediaOnly = items.filter(i => i.type !== 'folder');
@@ -799,6 +887,11 @@ function App() {
                             <button className="control-btn" data-tooltip={t.delete || 'Delete'} onClick={(e) => { e.stopPropagation(); setConfirmDelete(selectedMedia); }} style={{ color: '#e50914' }}>
                                 <Trash2 size={18} />
                             </button>
+                            {selectedMedia.type.startsWith('image/') && (
+                                <button className="control-btn" data-tooltip={t.editImage || 'Edit Image'} onClick={(e) => { e.stopPropagation(); setShowEditor(true); }} style={{ color: '#46d369' }}>
+                                    <Scissors size={18} />
+                                </button>
+                            )}
                             <button className="control-btn" data-tooltip={t.close || 'Close'} onClick={() => resetAndClose()}><X size={30} /></button>
                         </div>
                     </div>
@@ -941,6 +1034,15 @@ function App() {
             <div className="footer">
                 Developed by <a href="https://github.com/aytackayin" target="_blank" rel="noopener noreferrer">Aytac KAYIN</a>
             </div>
+
+            {showEditor && selectedMedia && (
+                <ImageEditor
+                    item={selectedMedia}
+                    t={t}
+                    onClose={() => setShowEditor(false)}
+                    onSave={handleSaveEditedImage}
+                />
+            )}
         </div>
     );
 }

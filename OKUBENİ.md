@@ -32,6 +32,14 @@ Gallery Browser, yerel medya koleksiyonunuzu (resim ve video) Modern bir arayüz
 
 ---
 
+## 🆕 v1.0.2 Yenilikleri
+- **Resim Düzenleyici:** Kırpma (Crop) ve Döndürme (Rotate) özellikleri eklendi.
+- **Doğrudan Kaydetme:** Düzenlenen resimler orijinal dosyanın üzerine kaydedilir ve galeri anında güncellenir.
+- **Hata Düzeltmeleri:** Cropperjs kütüphanesindeki import ve CORS sorunları giderildi.
+- **Dil Desteği:** Yeni özellikler için Türkçe ve İngilizce çeviriler tamamlandı.
+
+---
+
 ## 📦 Başlangıç
 
 ### Hızlı Başlat (Windows)

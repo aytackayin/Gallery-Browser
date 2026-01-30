@@ -245,6 +245,33 @@ app.post('/api/move', (req, res) => {
     }
 });
 
+app.post('/api/save-image', (req, res) => {
+    const { path: itemPath, imageData } = req.body; // imageData is base64 string
+    if (!itemPath || !imageData) return res.status(400).json({ error: "Eksik veri" });
+
+    const absolutePath = path.join(rootGalleryPath, itemPath);
+    if (!absolutePath.toLowerCase().startsWith(rootGalleryPath.toLowerCase())) {
+        return res.status(403).json({ error: "Yasak" });
+    }
+
+    try {
+        const base64Data = imageData.replace(/^data:image\/\w+;base64,/, "");
+        const buffer = Buffer.from(base64Data, 'base64');
+
+        fs.writeFileSync(absolutePath, buffer);
+
+        // Thumbnail'ı temizle
+        const thumbPath = getThumbPath(itemPath);
+        if (fs.existsSync(thumbPath)) {
+            fs.unlinkSync(thumbPath);
+        }
+
+        res.json({ success: true, message: "Resim kaydedildi" });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 app.post('/api/update', (req, res) => {
     const { oldPath, newName, info } = req.body;
 

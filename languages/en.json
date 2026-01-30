@@ -43,5 +43,7 @@
     "restartRequired": "Restart required for some changes",
     "settingsSaved": "Settings saved",
     "search": "Search",
-    "clear": "Clear"
+    "clear": "Clear",
+    "editImage": "Edit Image",
+    "imageSaved": "Image saved successfully"
 }

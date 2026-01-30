@@ -43,5 +43,7 @@
     "restartRequired": "Bazı değişiklikler için yeniden başlatma gerekli",
     "settingsSaved": "Ayarlar kaydedildi",
     "search": "Ara",
-    "clear": "Temizle"
+    "clear": "Temizle",
+    "editImage": "Resmi Düzenle",
+    "imageSaved": "Resim başarıyla kaydedildi"
 }
