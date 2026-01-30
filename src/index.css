@@ -733,7 +733,7 @@ select:focus {
 .editor-content {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 15px;
   margin-top: 10px;
 }
 
@@ -744,44 +744,163 @@ select:focus {
   border: 1px solid var(--border-color);
 }
 
-.editor-controls {
+.editor-bottom-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
   padding: 15px;
   background: var(--bg-card);
   border-radius: 8px;
-  display: flex;
-  gap: 20px;
-  align-items: center;
   border: 1px solid var(--border-color);
 }
 
-.control-group {
+.editor-controls-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+
+.editor-resizer-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding-top: 15px;
+  border-top: 1px solid var(--border-color);
+}
+
+.resize-inputs {
   display: flex;
   align-items: center;
   gap: 10px;
 }
 
-.control-group label {
-  font-size: 0.8rem;
-  color: var(--text-secondary);
+.resize-inputs .input-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-secondary);
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
 }
 
-.editor-controls input[type="range"] {
-  accent-color: var(--netflix-red);
+.resize-inputs label {
+  font-size: 0.7rem;
+  font-weight: bold;
+  color: var(--netflix-red);
+}
+
+.resize-inputs input {
+  width: 60px;
+  background: transparent;
+  border: none;
+  color: white;
+  font-size: 0.85rem;
+  outline: none;
+}
+
+/* Hide spin buttons */
+.resize-inputs input::-webkit-outer-spin-button,
+.resize-inputs input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.lock-btn {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.lock-btn.active {
+  color: var(--netflix-red);
+  border-color: var(--netflix-red);
+  background: rgba(229, 9, 20, 0.1);
+}
+
+.ratio-presets {
+  display: flex;
+  gap: 4px;
+}
+
+.ratio-presets button {
+  padding: 4px 10px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  border-radius: 4px;
+  font-size: 0.7rem;
   cursor: pointer;
 }
 
-.editor-controls .action-btn {
-  padding: 8px 15px;
+.ratio-presets button.active {
+  background: var(--netflix-red);
+  color: white;
+  border-color: var(--netflix-red);
+}
+
+.control-column {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.control-item {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.control-item label {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.control-item .val {
+  font-size: 0.7rem;
+  color: var(--netflix-red);
+  text-align: right;
+  margin-top: -5px;
+}
+
+.control-group-horizontal {
+  display: flex;
+  gap: 8px;
+  margin-top: 5px;
+}
+
+.editor-bottom-panel input[type="range"] {
+  accent-color: var(--netflix-red);
+  cursor: pointer;
+  height: 4px;
+}
+
+.action-btn {
+  padding: 6px 10px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 6px;
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 0.9rem;
+  justify-content: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: var(--text-primary);
 }
 
-.editor-controls .action-btn:hover {
+.action-btn:hover {
   background: var(--netflix-red);
   color: white;
   border-color: var(--netflix-red);

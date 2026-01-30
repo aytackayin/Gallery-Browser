@@ -45,5 +45,16 @@
     "search": "Search",
     "clear": "Clear",
     "editImage": "Edit Image",
-    "imageSaved": "Image saved successfully"
+    "imageSaved": "Image saved successfully",
+    "brightness": "Brightness",
+    "contrast": "Contrast",
+    "saturation": "Color Level",
+    "gamma": "Gamma",
+    "sharpen": "Sharpen",
+    "reset": "Reset",
+    "width": "Width",
+    "height": "Height",
+    "free": "Free",
+    "lock": "Lock",
+    "flip": "Flip"
 }

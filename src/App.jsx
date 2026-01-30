@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Folder, X, Play, ChevronRight, Home, ChevronLeft, Image as ImageIcon, Video as VideoIcon, Search, Trash2, Info, Save, FolderInput, ChevronDown, Settings, CheckCircle, Scissors, RotateCw, Sun, Contrast } from 'lucide-react';
+import { Folder, X, Play, ChevronRight, Home, ChevronLeft, Image as ImageIcon, Video as VideoIcon, Search, Trash2, Info, Save, FolderInput, ChevronDown, Settings, CheckCircle, Scissors, RotateCw, Sun, Contrast, Lock, Unlock, Maximize2 } from 'lucide-react';
 import Cropper from "react-cropper";
 import "cropperjs/dist/cropper.css";
 
@@ -8,24 +8,164 @@ const ImageEditor = ({ item, t, onSave, onClose }) => {
     const [brightness, setBrightness] = useState(100);
     const [contrast, setContrast] = useState(100);
     const [saturation, setSaturation] = useState(100);
-    const [rotation, setRotation] = useState(0);
+    const [gamma, setGamma] = useState(1.0);
+    const [sharpen, setSharpen] = useState(0);
+    const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
+    const [isLocked, setIsLocked] = useState(false);
+    const [aspectRatio, setAspectRatio] = useState(NaN);
 
-    const getImageUrl = (path) => `http://localhost:3001/media/${encodeURIComponent(path)}?t=${Date.now()}`;
+    // Stable image URL to prevent Cropper re-initializing on every render
+    const imageUrl = useRef(`http://localhost:3001/media/${encodeURIComponent(item.path)}?t=${Date.now()}`).current;
+
+    const onCrop = () => {
+        const cropper = cropperRef.current?.cropper;
+        if (cropper) {
+            const data = cropper.getData(true);
+            setDimensions({ width: Math.round(data.width), height: Math.round(data.height) });
+        }
+    };
+
+    const handleWidthChange = (val) => {
+        const width = parseInt(val) || 0;
+        let height = dimensions.height;
+        if (isLocked) {
+            const ratio = dimensions.width / dimensions.height;
+            height = Math.round(width / ratio);
+        }
+        setDimensions({ width, height });
+    };
+
+    const handleHeightChange = (val) => {
+        const height = parseInt(val) || 0;
+        let width = dimensions.width;
+        if (isLocked) {
+            const ratio = dimensions.width / dimensions.height;
+            width = Math.round(height * ratio);
+        }
+        setDimensions({ width, height });
+    };
+
+    const setPresetRatio = (ratio) => {
+        const cropper = cropperRef.current?.cropper;
+        if (!cropper) return;
+        setAspectRatio(ratio);
+        cropper.setAspectRatio(ratio);
+    };
+
+    const onReady = () => {
+        const cropper = cropperRef.current?.cropper;
+        if (cropper) {
+            // Get original image dimensions
+            const imageData = cropper.getImageData();
+            setDimensions({
+                width: Math.round(imageData.naturalWidth),
+                height: Math.round(imageData.naturalHeight)
+            });
+            // Set crop box to full image initially
+            cropper.setData({
+                x: 0,
+                y: 0,
+                width: imageData.naturalWidth,
+                height: imageData.naturalHeight
+            });
+        }
+    };
+
+    const applySharpen = (ctx, width, height, amount) => {
+        if (amount === 0) return;
+        const weights = [0, -1, 0, -1, 5 + (1 - amount / 100) * 4, -1, 0, -1, 0];
+        const imageData = ctx.getImageData(0, 0, width, height);
+        const pixels = imageData.data;
+        const side = 3;
+        const halfSide = 1;
+        const output = ctx.createImageData(width, height);
+        const dst = output.data;
+
+        for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+                const dstOff = (y * width + x) * 4;
+                let r = 0, g = 0, b = 0;
+                for (let cy = 0; cy < side; cy++) {
+                    for (let cx = 0; cx < side; cx++) {
+                        const scy = y + cy - halfSide;
+                        const scx = x + cx - halfSide;
+                        if (scy >= 0 && scy < height && scx >= 0 && scx < width) {
+                            const srcOff = (scy * width + scx) * 4;
+                            const wt = weights[cy * side + cx];
+                            r += pixels[srcOff] * wt;
+                            g += pixels[srcOff + 1] * wt;
+                            b += pixels[srcOff + 2] * wt;
+                        }
+                    }
+                }
+                dst[dstOff] = r;
+                dst[dstOff + 1] = g;
+                dst[dstOff + 2] = b;
+                dst[dstOff + 3] = pixels[dstOff + 3];
+            }
+        }
+        ctx.putImageData(output, 0, 0);
+    };
+
+    const applyGamma = (ctx, width, height, gammaValue) => {
+        if (gammaValue === 1.0) return;
+        const imageData = ctx.getImageData(0, 0, width, height);
+        const data = imageData.data;
+        const gammaCorrection = 1 / gammaValue;
+        for (let i = 0; i < data.length; i += 4) {
+            data[i] = 255 * Math.pow(data[i] / 255, gammaCorrection);
+            data[i + 1] = 255 * Math.pow(data[i + 1] / 255, gammaCorrection);
+            data[i + 2] = 255 * Math.pow(data[i + 2] / 255, gammaCorrection);
+        }
+        ctx.putImageData(imageData, 0, 0);
+    };
 
     const handleSave = () => {
         const cropper = cropperRef.current?.cropper;
         if (!cropper) return;
 
-        // Apply filters to canvas
-        const canvas = cropper.getCroppedCanvas();
+        // Final Canvas with target resolution
+        const canvas = cropper.getCroppedCanvas({
+            width: dimensions.width,
+            height: dimensions.height,
+            imageSmoothingEnabled: true,
+            imageSmoothingQuality: 'high'
+        });
+
         const ctx = canvas.getContext('2d');
+        const width = canvas.width;
+        const height = canvas.height;
 
-        // We can't easily apply filters to the canvas after cropper generates it without a second canvas or manipulation
-        // For simplicity, we'll use the cropper's raw result for now, 
-        // OR we can use the cropper's image element.
+        // Apply Native Canvas Filters
+        ctx.filter = `brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%)`;
+        ctx.drawImage(canvas, 0, 0);
+        ctx.filter = 'none';
 
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+        // Apply Gamma & Sharpen (Manual Pixel Logic handles the rest)
+        applyGamma(ctx, width, height, gamma);
+        if (sharpen > 0) applySharpen(ctx, width, height, sharpen);
+
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
         onSave(dataUrl);
+    };
+
+    const resetFilters = () => {
+        setBrightness(100);
+        setContrast(100);
+        setSaturation(100);
+        setGamma(1.0);
+        setSharpen(0);
+        setAspectRatio(NaN);
+        setIsLocked(false);
+        const cropper = cropperRef.current?.cropper;
+        if (cropper) {
+            cropper.reset();
+            const imageData = cropper.getImageData();
+            setDimensions({
+                width: Math.round(imageData.naturalWidth),
+                height: Math.round(imageData.naturalHeight)
+            });
+        }
     };
 
     return (
@@ -34,16 +174,37 @@ const ImageEditor = ({ item, t, onSave, onClose }) => {
                 <div className="modal-header">
                     <h3>{t.editImage || 'Edit Image'} - {item.name}</h3>
                     <div style={{ display: 'flex', gap: 10 }}>
+                        <button className="btn btn-grey" onClick={resetFilters}>{t.reset || 'Reset'}</button>
                         <button className="btn btn-primary" onClick={handleSave}><Save size={16} /> {t.save || 'Save'}</button>
                         <button className="btn btn-grey" onClick={onClose}><X size={20} /></button>
                     </div>
                 </div>
                 <div className="editor-content">
+                    <svg style={{ position: 'absolute', width: 0, height: 0 }}>
+                        <filter id="previewFilter">
+                            <feComponentTransfer>
+                                <feFuncR type="gamma" exponent={1 / gamma} />
+                                <feFuncG type="gamma" exponent={1 / gamma} />
+                                <feFuncB type="gamma" exponent={1 / gamma} />
+                            </feComponentTransfer>
+                            {sharpen > 0 && (
+                                <feConvolveMatrix
+                                    order="3"
+                                    preserveAlpha="true"
+                                    kernelMatrix={`0 -1 0 -1 ${5 + (sharpen / 20)} -1 0 -1 0`}
+                                />
+                            )}
+                        </filter>
+                    </svg>
                     <div className="cropper-container">
                         <Cropper
-                            src={getImageUrl(item.path)}
-                            style={{ height: '60vh', width: '100%' }}
-                            initialAspectRatio={NaN}
+                            src={imageUrl}
+                            style={{
+                                height: '48vh',
+                                width: '100%',
+                                filter: `brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%) url(#previewFilter)`
+                            }}
+                            aspectRatio={aspectRatio}
                             guides={true}
                             ref={cropperRef}
                             viewMode={1}
@@ -52,15 +213,77 @@ const ImageEditor = ({ item, t, onSave, onClose }) => {
                             autoCropArea={1}
                             checkOrientation={false}
                             crossOrigin="anonymous"
+                            crop={onCrop}
+                            ready={onReady}
                         />
                     </div>
-                    <div className="editor-controls">
-                        <div className="control-group">
-                            <button className="action-btn" onClick={() => cropperRef.current?.cropper.rotate(90)}>
-                                <RotateCw size={18} /> <span>90°</span>
-                            </button>
+                    <div className="editor-bottom-panel">
+                        <div className="editor-controls-grid">
+                            <div className="control-column">
+                                <div className="control-item">
+                                    <label><Sun size={14} /> {t.brightness || 'Brightness'}</label>
+                                    <input type="range" min="0" max="200" value={brightness} onChange={(e) => setBrightness(e.target.value)} />
+                                    <span className="val">{brightness}%</span>
+                                </div>
+                                <div className="control-item">
+                                    <label><Contrast size={14} /> {t.contrast || 'Contrast'}</label>
+                                    <input type="range" min="0" max="200" value={contrast} onChange={(e) => setContrast(e.target.value)} />
+                                    <span className="val">{contrast}%</span>
+                                </div>
+                            </div>
+                            <div className="control-column">
+                                <div className="control-item">
+                                    <label><RotateCw size={14} /> {t.saturation || 'Color Level'}</label>
+                                    <input type="range" min="0" max="200" value={saturation} onChange={(e) => setSaturation(e.target.value)} />
+                                    <span className="val">{saturation}%</span>
+                                </div>
+                                <div className="control-item">
+                                    <label><Scissors size={14} /> {t.gamma || 'Gamma'}</label>
+                                    <input type="range" min="0.1" max="3" step="0.1" value={gamma} onChange={(e) => setGamma(parseFloat(e.target.value))} />
+                                    <span className="val">{gamma.toFixed(1)}</span>
+                                </div>
+                            </div>
+                            <div className="control-column">
+                                <div className="control-item">
+                                    <label><Scissors size={14} /> {t.sharpen || 'Sharpen'}</label>
+                                    <input type="range" min="0" max="100" value={sharpen} onChange={(e) => setSharpen(e.target.value)} />
+                                    <span className="val">{sharpen}%</span>
+                                </div>
+                                <div className="control-group-horizontal">
+                                    <button className="action-btn" style={{ flex: 1 }} onClick={() => cropperRef.current?.cropper.rotate(90)} title="Rotate 90">
+                                        <RotateCw size={16} />
+                                    </button>
+                                    <button className="action-btn" style={{ flex: 1 }} onClick={() => cropperRef.current?.cropper.scaleX(cropperRef.current?.cropper.getData().scaleX === 1 ? -1 : 1)} title={t.flip || 'Flip'}>
+                                        <Maximize2 size={16} style={{ transform: 'rotate(90deg)' }} />
+                                        <span>{t.flip || 'Flip'}</span>
+                                    </button>
+                                </div>
+                            </div>
                         </div>
-                        {/* More controls like Brightness/Contrast can be added here with Canvas manipulation if needed */}
+
+                        <div className="editor-resizer-panel">
+                            <div className="resize-inputs">
+                                <div className="input-group" title={t.width || 'Width'}>
+                                    <label>W</label>
+                                    <input type="number" value={dimensions.width} onChange={(e) => handleWidthChange(e.target.value)} />
+                                </div>
+                                <button className={`lock-btn ${isLocked ? 'active' : ''}`} onClick={() => setIsLocked(!isLocked)} title={t.lock || 'Lock'}>
+                                    {isLocked ? <Lock size={14} /> : <Unlock size={14} />}
+                                </button>
+                                <div className="input-group" title={t.height || 'Height'}>
+                                    <label>H</label>
+                                    <input type="number" value={dimensions.height} onChange={(e) => handleHeightChange(e.target.value)} />
+                                </div>
+                            </div>
+                            <div className="ratio-presets">
+                                <button className={isNaN(aspectRatio) ? 'active' : ''} onClick={() => setPresetRatio(NaN)}>{t.free || 'Free'}</button>
+                                <button className={aspectRatio === 1 ? 'active' : ''} onClick={() => setPresetRatio(1)}>1:1</button>
+                                <button className={aspectRatio === 16 / 9 ? 'active' : ''} onClick={() => setPresetRatio(16 / 9)}>16:9</button>
+                                <button className={aspectRatio === 9 / 16 ? 'active' : ''} onClick={() => setPresetRatio(9 / 16)}>9:16</button>
+                                <button className={aspectRatio === 4 / 3 ? 'active' : ''} onClick={() => setPresetRatio(4 / 3)}>4:3</button>
+                                <button className={aspectRatio === 2 / 3 ? 'active' : ''} onClick={() => setPresetRatio(2 / 3)}>2:3</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -164,6 +387,7 @@ function App() {
     const [theme, setTheme] = useState('system');
     const [toast, setToast] = useState(null); // { message: string, type: 'success' | 'error' }
     const [showEditor, setShowEditor] = useState(false);
+    const [refreshKey, setRefreshKey] = useState(Date.now());
 
     // ... (Existing states remain)
 
@@ -549,13 +773,15 @@ function App() {
             });
             const data = await res.json();
             if (data.success) {
+                setRefreshKey(Date.now());
                 setShowEditor(false);
                 setToast(t.imageSaved || 'Image saved successfully');
                 setTimeout(() => setToast(null), 3000);
-                // Refresh only if needed, or rely on URL timestamp
+            } else {
+                alert(data.error || 'Error saving image');
             }
         } catch (e) {
-            alert('Error saving image');
+            alert('Error saving image: ' + e.message);
         }
     };
 
@@ -637,8 +863,8 @@ function App() {
         setIsPanning(false);
     };
 
-    const getMediaUrl = (path) => `http://localhost:3001/media/${encodeURIComponent(path)}`;
-    const getThumbUrl = (path) => `http://localhost:3001/api/thumb?path=${encodeURIComponent(path)}`;
+    const getMediaUrl = (path) => `http://localhost:3001/media/${encodeURIComponent(path)}?t=${refreshKey}`;
+    const getThumbUrl = (path) => `http://localhost:3001/api/thumb?path=${encodeURIComponent(path)}&t=${refreshKey}`;
 
     return (
         <div className="app">
@@ -763,6 +989,18 @@ function App() {
                                         <div className="item-actions">
                                             {item.type.startsWith('video/') ? <VideoIcon size={14} color="#e50914" /> : item.type.startsWith('image/') ? <ImageIcon size={14} color="#0071eb" /> : <Folder size={14} color="#ff8c00" />}
                                             <button className="action-btn info-btn" data-tooltip={t.editInfoRename || 'Edit Info & Rename'} onClick={(e) => { e.stopPropagation(); openEditModal(item); }} style={{ color: '#0071eb' }}><Info size={14} /></button>
+                                            {item.type.startsWith('image/') && (
+                                                <button className="action-btn edit-image-btn" data-tooltip={t.editImage || 'Edit Image'} onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    const idx = sortedMediaOnly.findIndex(m => m.path === item.path);
+                                                    if (idx !== -1) {
+                                                        setSelectedMediaIndex(idx);
+                                                        setShowEditor(true);
+                                                    }
+                                                }} style={{ color: '#46d369' }}>
+                                                    <Scissors size={14} />
+                                                </button>
+                                            )}
                                             <button className="action-btn info-btn" data-tooltip={t.move || 'Move'} onClick={(e) => { e.stopPropagation(); setMoveModal(item); }} style={{ color: '#ff8c00' }}><FolderInput size={14} /></button>
                                             <button className="action-btn delete-btn" data-tooltip={t.delete || 'Delete'} onClick={(e) => { e.stopPropagation(); setConfirmDelete(item); }} style={{ color: '#e50914' }}><Trash2 size={14} /></button>
                                         </div>

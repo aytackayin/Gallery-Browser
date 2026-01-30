@@ -40,6 +40,15 @@ Gallery Browser, yerel medya koleksiyonunuzu (resim ve video) Modern bir arayüz
 
 ---
 
+## 🆕 v1.0.3 Yenilikleri
+- **Gelişmiş Filtreler:** Parlaklık, Kontrast, Doygunluk, Gama ve Keskinlik (Sharpen) ayarları eklendi.
+- **Dinamik Önizleme:** Gama ve Keskinlik filtreleri için SVG tabanlı canlı önizleme sistemi geliştirildi.
+- **Profesyonel Boyutlandırma:** Özel çözünürlük girişi, en-boy oranı kilitleme ve popüler oran taslakları (16:9, 9:16 vb.) eklendi.
+- **Hızlı Erişim:** Galeri kartlarına doğrudan düzenleme butonu eklenerek kullanıcı deneyimi iyileştirildi.
+- **Performans & Stabilite:** Resim yükleme titremeleri giderildi, sunucu yükleme sınırı 50MB'a çıkarıldı ve kayıt sonrası anlık yenileme sağlandı.
+
+---
+
 ## 📦 Başlangıç
 
 ### Hızlı Başlat (Windows)

@@ -45,5 +45,16 @@
     "search": "Ara",
     "clear": "Temizle",
     "editImage": "Resmi Düzenle",
-    "imageSaved": "Resim başarıyla kaydedildi"
+    "imageSaved": "Resim başarıyla kaydedildi",
+    "brightness": "Parlaklık",
+    "contrast": "Kontrast",
+    "saturation": "Renk Düzeyi",
+    "gamma": "Gama",
+    "sharpen": "Keskinlik",
+    "reset": "Sıfırla",
+    "width": "Genişlik",
+    "height": "Yükseklik",
+    "free": "Serbest",
+    "lock": "Kilit",
+    "flip": "Çevir"
 }
