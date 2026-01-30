@@ -1,0 +1,18 @@
+{
+    "trayOpen": "Open Gallery",
+    "trayExit": "Exit",
+    "searchPlaceholder": "Search files, folders or notes...",
+    "searchResults": "Search Results",
+    "loading": "Loading...",
+    "library": "Library",
+    "deleteTitle": "Delete File",
+    "deleteConfirm": "Are you sure you want to delete? This action cannot be undone.",
+    "yesDelete": "Yes, Delete",
+    "cancel": "Cancel",
+    "detailsTitle": "Details / Notes",
+    "writeSomething": "Write something about this media...",
+    "save": "Save",
+    "deleteError": "Delete error",
+    "saveError": "Save error",
+    "searchTitle": "Results for \"{q}\""
+}

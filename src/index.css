@@ -1,0 +1,430 @@
+:root {
+  --netflix-red: #e50914;
+  --netflix-black: #141414;
+  --netflix-grey: #181818;
+}
+
+body {
+  margin: 0;
+  background-color: var(--netflix-black);
+  color: white;
+  font-family: 'Inter', sans-serif;
+  overflow-x: hidden;
+}
+
+/* NAVBAR & SEARCH */
+.navbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 68px;
+  display: flex;
+  align-items: center;
+  padding: 0 4%;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.8), transparent);
+  z-index: 1000;
+  gap: 30px;
+}
+
+.search-container {
+  position: relative;
+  flex: 1;
+  max-width: 400px;
+  display: flex;
+  align-items: center;
+}
+
+.search-icon {
+  position: absolute;
+  left: 12px;
+  color: #888;
+}
+
+.search-input {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.75);
+  border: 1px solid #444;
+  color: white;
+  padding: 10px 15px 10px 40px;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  outline: none;
+  transition: 0.3s;
+}
+
+.search-input:focus {
+  border-color: var(--netflix-red);
+  background: rgba(0, 0, 0, 0.9);
+}
+
+.logo {
+  font-size: 1.5rem;
+  font-weight: 900;
+  letter-spacing: -0.5px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: white;
+  text-transform: uppercase;
+  transition: 0.3s;
+}
+
+.logo span {
+  background: linear-gradient(45deg, var(--netflix-red), #ff4d4d);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  font-weight: 900;
+}
+
+.logo:hover {
+  transform: scale(1.02);
+  filter: brightness(1.2);
+}
+
+.navbar.scrolled {
+  background: rgba(20, 20, 20, 0.95);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #aaa;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+/* GRID & CARDS */
+.rows-container {
+  padding: 0 4%;
+}
+
+.media-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 20px;
+}
+
+.media-card {
+  position: relative;
+  aspect-ratio: 16/9;
+  border-radius: 4px;
+  overflow: hidden;
+  cursor: pointer;
+  background: #222;
+  transition: transform 0.3s ease;
+}
+
+.media-card:hover {
+  transform: scale(1.05);
+  z-index: 10;
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+}
+
+.media-wrapper {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.media-thumbnail {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.item-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 5px;
+}
+
+.action-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  color: white;
+  padding: 5px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: 0.2s;
+  display: flex;
+  align-items: center;
+}
+
+.action-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.delete-btn:hover {
+  color: var(--netflix-red);
+}
+
+.info-btn:hover {
+  color: #ffca2c;
+}
+
+.media-info {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 12px;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.95));
+  display: flex;
+  flex-direction: column;
+}
+
+.media-name {
+  font-size: 0.85rem;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.folder-icon {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 140, 0, 0.05);
+}
+
+/* MODALS */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.85);
+  z-index: 5000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal {
+  background: var(--netflix-grey);
+  border-radius: 8px;
+  padding: 30px;
+  max-width: 500px;
+  width: 90%;
+  border: 1px solid #333;
+  animation: modalPop 0.3s ease;
+}
+
+@keyframes modalPop {
+  from {
+    transform: scale(0.9);
+    opacity: 0;
+  }
+
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.info-modal {
+  max-width: 600px;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.modal-header button {
+  background: none;
+  border: none;
+  color: #888;
+  cursor: pointer;
+}
+
+.item-path-text {
+  font-size: 0.75rem;
+  color: #666;
+  margin-bottom: 15px;
+  word-break: break-all;
+}
+
+textarea {
+  width: 100%;
+  height: 150px;
+  background: #111;
+  border: 1px solid #444;
+  color: #eee;
+  padding: 12px;
+  border-radius: 4px;
+  resize: none;
+  font-family: inherit;
+  outline: none;
+}
+
+textarea:focus {
+  border-color: var(--netflix-red);
+}
+
+.modal-footer {
+  margin-top: 20px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.btn {
+  padding: 10px 20px;
+  border-radius: 4px;
+  border: none;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-primary {
+  background: var(--netflix-red);
+  color: white;
+}
+
+.btn-danger {
+  background: #b20710;
+  color: white;
+}
+
+.btn-grey {
+  background: #333;
+  color: white;
+  margin-left: 10px;
+}
+
+/* Viewer & Fixed Navigation */
+.viewer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: black;
+  z-index: 4000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.viewer-controls {
+  position: absolute;
+  top: 0;
+  right: 0;
+  padding: 20px 30px 40px 40px;
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+  z-index: 4110;
+  opacity: 0;
+  transition: 0.3s;
+}
+
+.viewer-controls:hover {
+  opacity: 1;
+}
+
+.control-btn {
+  background: none;
+  border: none;
+  color: white;
+  cursor: pointer;
+  opacity: 0.7;
+  transition: 0.3s;
+  margin-top: 20px;
+}
+
+.control-btn:hover {
+  opacity: 1;
+  transform: scale(1.1);
+}
+
+.viewer-inner {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3010;
+  pointer-events: none;
+  /* Altındaki videoya tıklanabilsin */
+}
+
+.full-media {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: auto;
+  /* Kendisi tıklanabilir olsun */
+}
+
+/* Zoom modundayken kontrolleri gizle */
+.full-media.zoomed::-webkit-media-controls {
+  display: none !important;
+}
+
+.full-media.zoomed {
+  pointer-events: auto;
+}
+
+/* FIX: Pozisyonu kenarlara çiviliyoruz */
+.nav-zone {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 60px;
+  /* Genişliği azalttık ki videonun üstüne binmesin */
+  height: 300px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 4050;
+  /* Diğer her şeyin üstünde */
+  cursor: pointer;
+  background: transparent;
+  transition: background 0.3s;
+  pointer-events: auto;
+}
+
+.nav-zone.prev {
+  left: 0 !important;
+}
+
+.nav-zone.next {
+  right: 0 !important;
+}
+
+.nav-arrow {
+  opacity: 0;
+  transition: 0.3s;
+  color: white;
+  filter: drop-shadow(0 0 15px rgba(0, 0, 0, 0.9));
+}
+
+.nav-zone:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.nav-zone:hover .nav-arrow {
+  opacity: 0.9;
+}
+
+.nav-arrow:hover {
+  transform: scale(1.2);
+  opacity: 1 !important;
+}

@@ -1,0 +1,18 @@
+{
+    "trayOpen": "Galeriyi Aç",
+    "trayExit": "Kapat",
+    "searchPlaceholder": "Dosya, klasör veya not ara...",
+    "searchResults": "Arama Sonuçları",
+    "loading": "Yükleniyor...",
+    "library": "Kütüphane",
+    "deleteTitle": "Dosyayı Sil",
+    "deleteConfirm": "dosyasını silmek istediğinize emin misiniz? Bu işlem geri alınamaz.",
+    "yesDelete": "Evet, Sil",
+    "cancel": "Vazgeç",
+    "detailsTitle": "Detaylar / Notlar",
+    "writeSomething": "Bu medya hakkında bir şeyler yazın...",
+    "save": "Kaydet",
+    "deleteError": "Silme hatası",
+    "saveError": "Kaydetme hatası",
+    "searchTitle": "\"{q}\" için sonuçlar"
+}
