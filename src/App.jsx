@@ -354,7 +354,7 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
                 if (end > max) max = end;
             });
         });
-        return max + 10; // Extra buffer
+        return Math.max(0.1, max);
     }, [duration, tracks]);
 
     const videoUrl = useMemo(() =>
@@ -945,6 +945,17 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
                             style={{ flex: 1, overflowX: 'auto', overflowY: 'auto', position: 'relative', padding: '10px 0', cursor: 'crosshair', minHeight: 180 }}>
 
                             <div className="timeline-content" style={{ position: 'relative', width: timelineDuration * zoomLevel + 100, height: '100%', minWidth: '100%' }}>
+                                {/* Time Ruler */}
+                                <div style={{ height: 25, position: 'sticky', top: 0, left: 0, zIndex: 30, background: '#111', borderBottom: '1px solid #333', display: 'flex' }}>
+                                    <div style={{ width: 60, flexShrink: 0, background: '#0a0a0a' }} />
+                                    <div style={{ position: 'relative', flex: 1 }}>
+                                        {Array.from({ length: Math.ceil(timelineDuration / 5) + 2 }).map((_, i) => (
+                                            <div key={i} style={{ position: 'absolute', left: (i * 5) * zoomLevel, borderLeft: '1px solid #444', height: i % 2 === 0 ? 15 : 8, paddingLeft: 3 }}>
+                                                {i % 2 === 0 && <span style={{ fontSize: '0.6rem', color: '#666' }}>{formatTime(i * 5)}</span>}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
                                 {tracks.map(track => (
                                     <div key={track.id} style={{ display: 'grid', gridTemplateColumns: '60px 1fr', gap: 0, marginBottom: 2, minHeight: 45, borderBottom: '1px solid #1a1a1a' }}>
                                         <div style={{ color: '#555', fontSize: '0.7rem', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0a0a0a', borderRight: '1px solid #222', position: 'sticky', left: 0, zIndex: 20 }}>
@@ -982,7 +993,8 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
                                                         whiteSpace: 'nowrap',
                                                         zIndex: isDragging?.id === clip.id ? 10 : 5,
                                                         userSelect: 'none',
-                                                        transition: isDragging ? 'none' : 'left 0.1s, width 0.1s'
+                                                        transition: isDragging ? 'none' : 'left 0.1s, width 0.1s',
+                                                        boxSizing: 'border-box'
                                                     }}
                                                 >
                                                     <div style={{ fontWeight: 'bold', marginBottom: 2 }}>{clip.name}</div>
@@ -998,13 +1010,13 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
                                     position: 'absolute',
                                     top: 0,
                                     bottom: 0,
-                                    left: 60 + (currentTime * zoomLevel),
+                                    left: 60 + (currentTime * zoomLevel) - 1,
                                     width: 2,
                                     background: '#e50914',
                                     zIndex: 100,
                                     pointerEvents: 'none'
                                 }}>
-                                    <div style={{ position: 'absolute', top: 0, left: -5, width: 12, height: 12, background: '#e50914', borderRadius: '0 0 50% 50%' }} />
+                                    <div style={{ position: 'absolute', top: 25, left: -5, width: 12, height: 12, background: '#e50914', borderRadius: '0 0 50% 50%' }} />
                                 </div>
                             </div>
                         </div>
