@@ -948,7 +948,18 @@ function App() {
                 </div>
             </nav>
 
-            <div className="rows-container" style={{ paddingTop: '120px' }}>
+            <div
+                className="rows-container"
+                style={{ paddingTop: '120px', minHeight: 'calc(100vh - 120px)' }}
+                onClick={(e) => {
+                    // Sadece arkaplana (boşluğa) tıklandığında seçimi kaldır
+                    if (e.target === e.currentTarget ||
+                        e.target.classList.contains('row') ||
+                        e.target.classList.contains('media-grid')) {
+                        setLastActivePath(null);
+                    }
+                }}
+            >
                 <div className="row">
                     <div className="row-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 15 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 15 }}>
