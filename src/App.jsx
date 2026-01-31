@@ -991,7 +991,7 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
                     <div style={{ display: 'flex', gap: 10 }}>
                         <button className="btn btn-primary" onClick={() => handleSave()} disabled={isProcessing}>
                             {isProcessing ? <div className="spinner-small" /> : <Save size={16} style={{ marginRight: 10 }} />}
-                            {t.save || 'Export'}
+                            {t.export || 'Export'}
                         </button>
                         <button className="btn" onClick={() => setShowSaveAs(true)} disabled={isProcessing} style={{ background: '#46d369', color: 'white' }}>
                             <Plus size={16} style={{ marginRight: 10 }} /> {t.saveAs || 'Save As...'}
@@ -1004,7 +1004,7 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
 
                     {/* Left: properties */}
                     <div className="editor-sidebar sidebar-group" style={{ overflowY: 'auto' }}>
-                        <label style={{ fontSize: '0.9rem', marginBottom: 15, display: 'block' }}>CLIP PROPERTIES</label>
+                        <label style={{ fontSize: '0.9rem', marginBottom: 15, display: 'block' }}>{t.clipProperties || 'CLIP PROPERTIES'}</label>
                         {selectedClip ? (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 15 }}>
                                 <div className="control-item">
@@ -1044,11 +1044,11 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
                                         }} />
                                 </div>
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5 }}>
-                                    <button className="action-btn" onClick={() => updateClip(selectedClipId, { rotate: (selectedClip.rotate + 90) % 360 })}><RotateCw size={14} style={{ marginRight: 10 }} /> Rotate</button>
-                                    <button className={`action-btn ${selectedClip.flipH ? 'active' : ''}`} onClick={() => updateClip(selectedClipId, { flipH: !selectedClip.flipH })}><Maximize2 size={14} style={{ transform: 'rotate(90deg)', marginRight: 10 }} /> Flip H</button>
+                                    <button className="action-btn" onClick={() => updateClip(selectedClipId, { rotate: (selectedClip.rotate + 90) % 360 })}><RotateCw size={14} style={{ marginRight: 10 }} /> {t.rotate || 'Rotate'}</button>
+                                    <button className={`action-btn ${selectedClip.flipH ? 'active' : ''}`} onClick={() => updateClip(selectedClipId, { flipH: !selectedClip.flipH })}><Maximize2 size={14} style={{ transform: 'rotate(90deg)', marginRight: 10 }} /> {t.flipH || 'Flip H'}</button>
                                 </div>
                                 <div style={{ marginTop: 10 }}>
-                                    <label style={{ fontSize: '0.75rem', color: '#888', marginBottom: 8, display: 'block' }}>Aspect Ratio</label>
+                                    <label style={{ fontSize: '0.75rem', color: '#888', marginBottom: 8, display: 'block' }}>{t.aspectRatio || 'Aspect Ratio'}</label>
                                     <div className="ratio-presets" style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                                         <button className="action-btn" style={{ padding: '2px 8px', fontSize: '0.7rem' }} onClick={() => setAspectRatio('free')}>{t.free || 'Free'}</button>
                                         <button className="action-btn" style={{ padding: '2px 8px', fontSize: '0.7rem' }} onClick={() => setAspectRatio(1)}>1:1</button>
@@ -1060,7 +1060,7 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
                                 </div>
                             </div>
                         ) : (
-                            <p style={{ color: '#666', fontSize: '0.8rem' }}>Select a clip to edit properties</p>
+                            <p style={{ color: '#666', fontSize: '0.8rem' }}>{t.selectClipToEdit || 'Select a clip to edit properties'}</p>
                         )}
                     </div>
 
@@ -1074,7 +1074,7 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
                                     ) : (
                                         <>
                                             <div className="spinner-small" style={{ width: 40, height: 40 }} />
-                                            <span style={{ color: '#888', fontSize: '0.8rem' }}>Loading media...</span>
+                                            <span style={{ color: '#888', fontSize: '0.8rem' }}>{t.loadingMedia || 'Loading media...'}</span>
                                         </>
                                     )}
                                 </div>
@@ -1141,7 +1141,7 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
 
                             {!activeVClip && (
                                 <div style={{ position: 'absolute', inset: 0, background: '#000', zIndex: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                    <span style={{ color: '#333', fontSize: '1rem' }}>No Media</span>
+                                    <span style={{ color: '#333', fontSize: '1rem' }}>{t.noMedia || 'No Media'}</span>
                                 </div>
                             )}
 
@@ -1204,13 +1204,13 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
                     <div style={{ gridColumn: '1 / -1', background: '#111', borderRadius: 8, display: 'flex', flexDirection: 'column' }}>
                         <div style={{ padding: '5px 10px', display: 'flex', gap: 10, borderBottom: '1px solid #222', alignItems: 'center' }}>
                             <div className="btn-group">
-                                <button className={`action-btn ${activeTool === 'select' ? 'active' : ''}`} onClick={() => setActiveTool('select')} title="Selection Tool"><Search size={14} /></button>
-                                <button className={`action-btn ${activeTool === 'split' ? 'active' : ''}`} onClick={handleSplit} title="Split at Scrubber"><Scissors size={14} /></button>
-                                <button className={`action-btn ${activeTool === 'delete' ? 'active' : ''}`} onClick={handleDelete} title="Delete Selected Clip"><Trash size={14} /></button>
-                                <button className="action-btn" onClick={packClips} title="Pack Clips (Remove Gaps)"><Droplet size={14} /></button>
+                                <button className={`action-btn ${activeTool === 'select' ? 'active' : ''}`} onClick={() => setActiveTool('select')} title={t.selectionTool || 'Selection Tool'}><Search size={14} /></button>
+                                <button className={`action-btn ${activeTool === 'split' ? 'active' : ''}`} onClick={handleSplit} title={t.splitAtScrubber || 'Split at Scrubber'}><Scissors size={14} /></button>
+                                <button className={`action-btn ${activeTool === 'delete' ? 'active' : ''}`} onClick={handleDelete} title={t.deleteSelectedClip || 'Delete Selected Clip'}><Trash size={14} /></button>
+                                <button className="action-btn" onClick={packClips} title={t.packClips || 'Pack Clips (Remove Gaps)'}><Droplet size={14} /></button>
                                 <div style={{ width: 1, height: 20, background: '#333', margin: '0 5px' }} />
-                                <button className="action-btn" onClick={() => addTrack('video')} title="Add Video Track" style={{ color: '#e50914' }}><Plus size={14} /> Video Layer</button>
-                                <button className="action-btn" onClick={() => addTrack('audio')} title="Add Audio Track" style={{ color: '#46d369' }}><Plus size={14} /> Audio Layer</button>
+                                <button className="action-btn" onClick={() => addTrack('video')} title={t.addVideoTrack || 'Add Video Track'} style={{ color: '#e50914' }}><Plus size={14} /> {t.videoLayer || 'Video Layer'}</button>
+                                <button className="action-btn" onClick={() => addTrack('audio')} title={t.addAudioTrack || 'Add Audio Track'} style={{ color: '#46d369' }}><Plus size={14} /> {t.audioLayer || 'Audio Layer'}</button>
                             </div>
                             <div style={{ flex: 1, textAlign: 'center', fontSize: '0.85rem', color: '#888', fontFamily: 'monospace' }}>
                                 {formatTime(currentTime)} / {formatTime(timelineDuration)}
@@ -1259,9 +1259,9 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
                                                 <span style={{ fontWeight: 'bold' }}>{track.id.toUpperCase()}</span>
                                             </div>
                                             <div style={{ display: 'flex', gap: 2 }}>
-                                                <button onClick={(e) => { e.stopPropagation(); setPickerTarget({ trackId: track.id }); fetchPickerItems(pickerPath); }} style={{ background: 'none', border: 'none', color: '#444', cursor: 'pointer', padding: 2 }} title="Add Media"><Plus size={12} /></button>
+                                                <button onClick={(e) => { e.stopPropagation(); setPickerTarget({ trackId: track.id }); fetchPickerItems(pickerPath); }} style={{ background: 'none', border: 'none', color: '#444', cursor: 'pointer', padding: 2 }} title={t.addMedia || 'Add Media'}><Plus size={12} /></button>
                                                 {track.id !== 'v1' && track.id !== 'a1' && (
-                                                    <button onClick={(e) => { e.stopPropagation(); removeTrack(track.id); }} style={{ background: 'none', border: 'none', color: '#444', cursor: 'pointer', padding: 2 }} title="Delete Track"><Trash size={12} /></button>
+                                                    <button onClick={(e) => { e.stopPropagation(); removeTrack(track.id); }} style={{ background: 'none', border: 'none', color: '#444', cursor: 'pointer', padding: 2 }} title={t.deleteTrack || 'Delete Track'}><Trash size={12} /></button>
                                                 )}
                                             </div>
                                         </div>
@@ -1402,7 +1402,7 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
                 <div className="modal-overlay" style={{ zIndex: 8000 }}>
                     <div className="modal" style={{ maxWidth: 500 }}>
                         <div className="modal-header">
-                            <h3>Select Media for {pickerTarget.trackId.toUpperCase()}</h3>
+                            <h3>{(t.selectMediaFor || 'Select Media for {track}').replace('{track}', pickerTarget.trackId.toUpperCase())}</h3>
                             <button className="btn btn-grey" onClick={() => setPickerTarget(null)}><X size={20} /></button>
                         </div>
                         <div className="modal-body" style={{ maxHeight: 400, overflowY: 'auto', padding: 20 }}>
@@ -1416,7 +1416,7 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
                                             <CornerUpLeft size={30} color="var(--netflix-red)" />
                                         </div>
                                         <div className="item-footer">
-                                            <span>Back</span>
+                                            <span>{t.back || 'Back'}</span>
                                         </div>
                                     </div>
                                 )}
