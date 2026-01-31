@@ -1023,7 +1023,9 @@ function App() {
                                     </div>
 
                                     {isFolder ? (
-                                        <div className="folder-icon"><Folder size={48} color="#ff8c00" /></div>
+                                        <div className="folder-icon">
+                                            <img src="/svg/folder.svg" alt="Folder" style={{ width: '60%', height: '60%', objectFit: 'contain' }} />
+                                        </div>
                                     ) : (
                                         <div className="media-wrapper">
                                             <img
