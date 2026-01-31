@@ -347,13 +347,31 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
     const [dragTrackIndex, setDragTrackIndex] = useState(null);
 
     const handleDragStart = (idx) => setDragTrackIndex(idx);
-    const handleDragOver = (e, idx) => {
+    const handleDragOver = (e, targetIdx) => {
         e.preventDefault();
-        if (dragTrackIndex === null || dragTrackIndex === idx) return;
-        setDragTrackIndex(idx);
-        moveTrack(idx === 0 ? 0 : (dragTrackIndex < idx ? idx : idx), dragTrackIndex < idx ? 1 : -1);
+        if (dragTrackIndex === null || dragTrackIndex === targetIdx) return;
+        setTracks(prev => {
+            const newTracks = [...prev];
+            const [movedTrack] = newTracks.splice(dragTrackIndex, 1);
+            newTracks.splice(targetIdx, 0, movedTrack);
+            return newTracks;
+        });
+        setDragTrackIndex(targetIdx);
     };
     const handleDrop = () => setDragTrackIndex(null);
+
+    const moveClipToTrack = (clipId, targetTrackId) => {
+        setTracks(prev => {
+            const sourceTrack = prev.find(t => t.clips.some(c => c.id === clipId));
+            if (!sourceTrack || sourceTrack.id === targetTrackId) return prev;
+            const clip = sourceTrack.clips.find(c => c.id === clipId);
+            return prev.map(t => {
+                if (t.id === sourceTrack.id) return { ...t, clips: t.clips.filter(c => c.id !== clipId) };
+                if (t.id === targetTrackId) return { ...t, clips: [...t.clips, clip] };
+                return t;
+            });
+        });
+    };
 
     // Use a unique key for the editor to prevent socket/conflict with viewer
     const [localRefreshKey] = useState(Date.now());
@@ -1107,7 +1125,14 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
                                                 )}
                                             </div>
                                         </div>
-                                        <div style={{ position: 'relative', background: '#080808' }}>
+                                        <div
+                                            style={{ position: 'relative', background: '#080808' }}
+                                            onMouseEnter={() => {
+                                                if (isDragging?.type === 'clip') {
+                                                    moveClipToTrack(isDragging.id, track.id);
+                                                }
+                                            }}
+                                        >
                                             {track.clips.map(clip => (
                                                 <div
                                                     key={clip.id}
@@ -1138,6 +1163,7 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
                                                         overflow: 'hidden',
                                                         whiteSpace: 'nowrap',
                                                         zIndex: isDragging?.id === clip.id ? 10 : 5,
+                                                        pointerEvents: isDragging?.id === clip.id ? 'none' : 'auto',
                                                         userSelect: 'none',
                                                         transition: isDragging ? 'none' : 'left 0.1s, width 0.1s',
                                                         boxSizing: 'border-box'
