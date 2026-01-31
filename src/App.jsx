@@ -1068,7 +1068,7 @@ function App() {
 
                                     <div className="media-info">
                                         <div className="media-name">{item.name}</div>
-                                        <div className="item-actions">
+                                        <div className="item-actions" onClick={e => e.stopPropagation()}>
 
                                             <button className="action-btn info-btn" data-tooltip={t.editInfoRename || 'Edit Info & Rename'} onClick={(e) => { e.stopPropagation(); openEditModal(item); }} style={{ color: '#0071eb' }}><Info size={14} /></button>
                                             {item.type.startsWith('image/') && (
