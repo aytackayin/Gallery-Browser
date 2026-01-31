@@ -533,14 +533,24 @@ function App() {
             setItems(data.items || []);
 
             // Back Navigation Logic
-            // If going up (currentPath starts with newPath), highlight the folder we came from
             const newPath = data.currentPath || '.';
-            if (currentPath && currentPath !== '.' && currentPath.startsWith(newPath) && currentPath !== newPath) {
-                const found = (data.items || []).find(i => i.type === 'folder' && (currentPath === i.path || currentPath.startsWith(i.path + '/') || currentPath.startsWith(i.path + '\\')));
-                if (found) setLastActivePath(found.path);
-                else setLastActivePath(null);
-            } else if (newPath !== currentPath) {
-                setLastActivePath(null);
+            const oldPath = currentPath;
+
+            if (newPath !== oldPath) {
+                if (oldPath === '.') {
+                    // Going down from root
+                    setLastActivePath(null);
+                } else {
+                    // Try to find which folder we came from
+                    const found = (data.items || []).find(i =>
+                        i.type === 'folder' && (
+                            oldPath === i.path ||
+                            oldPath.startsWith(i.path + '/') ||
+                            oldPath.startsWith(i.path + '\\')
+                        )
+                    );
+                    setLastActivePath(found ? found.path : null);
+                }
             }
 
             setCurrentPath(data.currentPath || '.');
