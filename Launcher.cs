@@ -11,11 +11,13 @@ public class GalleryTrayApp : ApplicationContext
     private Process npmProcess;
     private string appPath;
 
+    private string browserPath = "default";
+
     public GalleryTrayApp()
     {
         appPath = AppDomain.CurrentDomain.BaseDirectory;
         
-        // Dil Ayarını Oku
+        // Ayarları Oku
         string language = "en";
         try {
             string configPath = Path.Combine(appPath, "config.ini");
@@ -23,6 +25,9 @@ public class GalleryTrayApp : ApplicationContext
                 var lines = File.ReadAllLines(configPath);
                 var langLine = lines.FirstOrDefault(l => l.Trim().StartsWith("Language="));
                 if (langLine != null) language = langLine.Split('=')[1].Trim().ToLower();
+
+                var bLine = lines.FirstOrDefault(l => l.Trim().StartsWith("BrowserPath="));
+                if (bLine != null) browserPath = bLine.Split('=')[1].Trim();
             }
         } catch { }
 
@@ -79,6 +84,22 @@ public class GalleryTrayApp : ApplicationContext
         } catch { return null; }
     }
 
+    private void OpenUrl(string url)
+    {
+        try {
+            if (string.IsNullOrEmpty(browserPath) || browserPath.ToLower() == "default") {
+                Process.Start(url);
+            } else {
+                // Eğer tırnaklar yoksa ve boşluk varsa tırnak içine al (Yolun kendisi tırnaklı gelmiş olabilir)
+                string cleanPath = browserPath.Trim('\"');
+                Process.Start("\"" + cleanPath + "\"", url);
+            }
+        } catch (Exception ex) {
+            // Fallback: Hata olursa varsayılanla açmaya çalış
+            try { Process.Start(url); } catch { }
+        }
+    }
+
     private void StartServer()
     {
         try {
@@ -98,7 +119,7 @@ public class GalleryTrayApp : ApplicationContext
             Timer t = new Timer();
             t.Interval = 4000;
             t.Tick += (s, e) => {
-                Process.Start("http://localhost:3000");
+                OpenUrl("http://localhost:3000");
                 t.Stop();
             };
             t.Start();
@@ -108,7 +129,7 @@ public class GalleryTrayApp : ApplicationContext
 
     private void OnOpen(object sender, EventArgs e)
     {
-        Process.Start("http://localhost:3000");
+        OpenUrl("http://localhost:3000");
     }
 
     private void OnRestart(object sender, EventArgs e)
