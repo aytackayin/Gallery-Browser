@@ -565,38 +565,52 @@ app.post('/api/process-video', async (req, res) => {
 
         if (clips.length === 0) return res.status(400).json({ error: "İşlenecek geçerli bir klip yok" });
 
-        const command = ffmpeg();
-        const hasAudioMap = [];
-
-        // Her klip için input ekle ve ses olup olmadığını kontrol et
-        for (let i = 0; i < clips.length; i++) {
-            const fullPath = path.join(rootGalleryPath, clips[i].path);
-            command.input(fullPath);
-
-            const hasAudio = await new Promise(resolve => {
-                const type = mime.lookup(fullPath) || '';
-                if (type.startsWith('image/')) {
-                    resolve(false);
-                    return;
-                }
-                ffmpeg.ffprobe(fullPath, (err, metadata) => {
-                    if (err) resolve(false);
-                    else resolve(metadata.streams.some(s => s.codec_type === 'audio'));
+        // Tüm kliplerin metadatasını önden alalım
+        const clipMetadata = {};
+        for (const clip of clips) {
+            const fullPath = path.join(rootGalleryPath, clip.path);
+            await new Promise((resolve) => {
+                ffmpeg.ffprobe(fullPath, (err, data) => {
+                    if (!err && data) {
+                        const vStream = data.streams.find(s => s.codec_type === 'video');
+                        const aStream = data.streams.find(s => s.codec_type === 'audio');
+                        clipMetadata[clip.id] = {
+                            w: vStream ? vStream.width : 0,
+                            h: vStream ? vStream.height : 0,
+                            hasAudio: !!aStream,
+                            isImage: (mime.lookup(fullPath) || '').startsWith('image/')
+                        };
+                    } else {
+                        clipMetadata[clip.id] = { w: 0, h: 0, hasAudio: false, isImage: false };
+                    }
+                    resolve();
                 });
             });
-            hasAudioMap.push(hasAudio);
         }
+
+        // Proje boyutunu belirle: Tüm klipler arasındaki max W ve max H (çift sayı yaparak)
+        let targetW = 0;
+        let targetH = 0;
+        Object.values(clipMetadata).forEach(m => {
+            if (m.w > targetW) targetW = m.w;
+            if (m.h > targetH) targetH = m.h;
+        });
+
+        // Eğer hiçbir video klibi yoksa varsayılan
+        if (targetW === 0) targetW = 1920;
+        if (targetH === 0) targetH = 1080;
+
+        // Çift sayıya zorla
+        if (targetW % 2 !== 0) targetW -= 1;
+        if (targetH % 2 !== 0) targetH -= 1;
+
+        const command = ffmpeg();
+        clips.forEach(c => command.input(path.join(rootGalleryPath, c.path)));
 
         const sourceDir = path.dirname(sourcePath);
         const targetFilename = newPath || path.basename(sourcePath);
         const targetPath = path.join(rootGalleryPath, sourceDir, targetFilename);
         const tempPath = targetPath + '.tmp.mp4';
-
-        // Proje boyutunu çift sayıya zorla
-        let targetW = (clips[0].cropPixels?.w || 1920);
-        let targetH = (clips[0].cropPixels?.h || 1080);
-        if (targetW % 2 !== 0) targetW -= 1;
-        if (targetH % 2 !== 0) targetH -= 1;
 
         let totalTimelineDuration = 0;
         clips.forEach(c => {
@@ -619,38 +633,40 @@ app.post('/api/process-video', async (req, res) => {
         clips.forEach((clip, idx) => {
             if (clip.trackType !== 'video') return;
 
+            const meta = clipMetadata[clip.id];
             const outLabel = `vclip_${vClipCounter}`;
-            const isImage = clip.type === 'image' || clip.path.match(/\.(jpg|jpeg|png|webp|bmp)$/i);
 
             const bRatio = (clip.filters.brightness || 100) / 100;
             const cVal = (clip.filters.contrast || 100) / 100;
             const s = (clip.filters.saturation || 100) / 100;
             const g = (clip.filters.gamma || 1.0);
 
-            let cw = clip.cropPixels?.w || Math.round(targetW * (clip.crop.w / 100));
-            let ch = clip.cropPixels?.h || Math.round(targetH * (clip.crop.h / 100));
-            if (cw % 2 !== 0) cw -= 1;
-            if (ch % 2 !== 0) ch -= 1;
-
+            // 1. ADIM: Klibi Hazırla (Loop + Crop + Ölçekleme + Padding)
             let vFilters = [];
-            if (isImage) {
-                vFilters.push(`loop=loop=-1:size=1:start=0`);
-            }
+            if (meta.isImage) vFilters.push(`loop=loop=-1:size=1:start=0`);
+
+            let cw = Math.round((clip.crop.w / 100) * meta.w) || meta.w;
+            let ch = Math.round((clip.crop.h / 100) * meta.h) || meta.h;
+            let cx = Math.round((clip.crop.x / 100) * meta.w) || 0;
+            let cy = Math.round((clip.crop.y / 100) * meta.h) || 0;
+            if (cw + cx > meta.w) cw = meta.w - cx;
+            if (ch + cy > meta.h) ch = meta.h - cy;
+            if (cw % 2 !== 0 && cw > 2) cw -= 1;
+            if (ch % 2 !== 0 && ch > 2) ch -= 1;
+            if (cw > 0 && ch > 0) vFilters.push(`crop=w=${cw}:h=${ch}:x=${cx}:y=${cy}`);
+
+            // Siyah Bantlarla Sığdırma (Fit + Pad)
+            vFilters.push(`scale=${targetW}:${targetH}:force_original_aspect_ratio=decrease`);
+            vFilters.push(`pad=${targetW}:${targetH}:(ow-iw)/2:(oh-ih)/2:black`);
+            vFilters.push(`setsar=1`);
+
+            // 2. ADIM: Zamanlama
             vFilters.push(`trim=start=${clip.start}:duration=${clip.duration}`);
             vFilters.push(`setpts=PTS-STARTPTS+(${clip.offset}/TB)`);
 
-            // Crop calculations from pixels
-            const cx = clip.cropPixels?.x || 0;
-            const cy = clip.cropPixels?.y || 0;
-            vFilters.push(`crop=w=${cw}:h=${ch}:x=${cx}:y=${cy}`);
-
-            vFilters.push(`scale=${targetW}:${targetH}:force_original_aspect_ratio=increase,crop=${targetW}:${targetH},setsar=1,format=yuv420p`);
-
-            // Multiplicative brightness matching CSS filter
-            if (bRatio !== 1) {
-                vFilters.push(`lutyuv=y=val*${bRatio}`);
-            }
+            // 3. ADIM: Filtreler ve Renk Ayarları
             vFilters.push(`eq=brightness=0:contrast=${cVal}:saturation=${s}:gamma=${g}`);
+            if (bRatio !== 1) vFilters.push(`lutyuv=y=val*${bRatio}`);
 
             if (clip.rotate) {
                 if (clip.rotate === 90) vFilters.push('transpose=1');
@@ -658,10 +674,15 @@ app.post('/api/process-video', async (req, res) => {
                 else if (clip.rotate === 270) vFilters.push('transpose=2');
             }
             if (clip.flipH) vFilters.push('hflip');
-            if (clip.flipV) vFilters.push('vflip');
+            vFilters.push('format=yuv420p');
 
-            filterComplex.push({ inputs: `${idx}:v`, filter: vFilters.join(','), outputs: outLabel });
+            filterComplex.push({
+                inputs: `${idx}:v`,
+                filter: vFilters.join(','),
+                outputs: outLabel
+            });
 
+            // 4. ADIM: Tuvale Yerleştir
             const nextVLabel = `ov_${vClipCounter}`;
             filterComplex.push({
                 inputs: [currentVLabel, outLabel],
@@ -671,7 +692,7 @@ app.post('/api/process-video', async (req, res) => {
             currentVLabel = nextVLabel;
             vClipCounter++;
 
-            if (!isImage && hasAudioMap[idx]) {
+            if (!meta.isImage && meta.hasAudio) {
                 const aLabel = `vaudio_${idx}`;
                 const delay = Math.round(clip.offset * 1000);
                 filterComplex.push({
@@ -683,8 +704,10 @@ app.post('/api/process-video', async (req, res) => {
             }
         });
 
+        // Add pure audio tracks
         clips.forEach((clip, idx) => {
-            if (clip.trackType !== 'audio' || !hasAudioMap[idx]) return;
+            const meta = clipMetadata[clip.id];
+            if (clip.trackType !== 'audio' || !meta.hasAudio) return;
             const aLabel = `aaudio_${idx}`;
             const delay = Math.round(clip.offset * 1000);
             filterComplex.push({

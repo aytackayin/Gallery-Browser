@@ -790,37 +790,11 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
 
     const handleSave = async (options = {}) => {
         setIsProcessing(true);
-        const video = videoRef.current;
-        // Force even numbers for project size
-        const nw = (video.videoWidth || 1920) % 2 === 0 ? (video.videoWidth || 1920) : (video.videoWidth || 1920) - 1;
-        const nh = (video.videoHeight || 1080) % 2 === 0 ? (video.videoHeight || 1080) : (video.videoHeight || 1080) - 1;
-
         const timelineData = {
             tracks: tracks.map(t => ({
                 id: t.id,
                 type: t.type,
-                clips: t.clips.map(c => {
-                    const relX = c.crop.x / 100;
-                    const relY = c.crop.y / 100;
-                    const relW = c.crop.w / 100;
-                    const relH = c.crop.h / 100;
-
-                    // Force even numbers for crop pixels
-                    const cw = Math.round(relW * nw);
-                    const ch = Math.round(relH * nh);
-                    const cx = Math.round(relX * nw);
-                    const cy = Math.round(relY * nh);
-
-                    return {
-                        ...c,
-                        cropPixels: {
-                            x: cx % 2 === 0 ? cx : cx - 1,
-                            y: cy % 2 === 0 ? cy : cy - 1,
-                            w: cw % 2 === 0 ? cw : cw - 1,
-                            h: ch % 2 === 0 ? ch : ch - 1
-                        }
-                    };
-                })
+                clips: t.clips
             }))
         };
         onSave(timelineData, options);
