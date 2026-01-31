@@ -1166,3 +1166,72 @@ select:focus {
   top: 0;
   left: -5px;
 }
+
+/* Media Picker */
+.picker-list {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)) !important;
+  gap: 12px !important;
+  padding: 10px 0;
+}
+
+.picker-item {
+  background: #111;
+  border: 1px solid #333;
+  border-radius: 8px;
+  padding: 10px;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  aspect-ratio: 1/1;
+  position: relative;
+}
+
+.picker-item:hover {
+  background: #1a1a1a;
+  border-color: var(--netflix-red);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+.picker-item span {
+  font-size: 0.7rem;
+  color: #ccc;
+  text-align: center;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.picker-item .icon-wrapper {
+  background: rgba(255, 255, 255, 0.05);
+  padding: 8px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Drag and Drop Tracks */
+.track-header {
+  cursor: grab;
+  transition: background 0.2s;
+}
+
+.track-header:active {
+  cursor: grabbing;
+}
+
+.track-header.dragging {
+  opacity: 0.5;
+  background: var(--netflix-red) !important;
+}
+
+.track-header.drag-over {
+  border-top: 2px solid var(--netflix-red) !important;
+}

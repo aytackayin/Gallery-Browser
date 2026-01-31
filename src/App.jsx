@@ -319,6 +319,7 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
                     id: 'clip-0',
                     path: item.path,
                     name: item.name,
+                    type: 'video',
                     start: 0, // Source start
                     duration: 0, // Will be set on metadata
                     offset: 0, // Timeline position
@@ -343,16 +344,29 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
     const [pickerPath, setPickerPath] = useState('.');
     const [zoomLevel, setZoomLevel] = useState(25); // pixels per second
     const timelineRef = useRef(null);
+    const [dragTrackIndex, setDragTrackIndex] = useState(null);
+
+    const handleDragStart = (idx) => setDragTrackIndex(idx);
+    const handleDragOver = (e, idx) => {
+        e.preventDefault();
+        if (dragTrackIndex === null || dragTrackIndex === idx) return;
+        setDragTrackIndex(idx);
+        moveTrack(idx === 0 ? 0 : (dragTrackIndex < idx ? idx : idx), dragTrackIndex < idx ? 1 : -1);
+    };
+    const handleDrop = () => setDragTrackIndex(null);
 
     // Use a unique key for the editor to prevent socket/conflict with viewer
     const [localRefreshKey] = useState(Date.now());
 
-    // Timeline Engine Logic
-    // Find absolute topmost clip under head for preview
     const activeVClip = useMemo(() => {
         const vTracks = [...tracks].filter(t => t.type === 'video').reverse(); // Topmost first
         for (const track of vTracks) {
-            const clip = track.clips.find(c => currentTime >= c.offset && currentTime < (c.offset + c.duration));
+            // Include clips that haven't loaded duration yet (0) if playhead is at their start
+            const clip = track.clips.find(c => {
+                const end = c.offset + c.duration;
+                if (c.duration === 0) return currentTime === c.offset;
+                return currentTime >= c.offset && currentTime < end;
+            });
             if (clip) return clip;
         }
         return null;
@@ -1073,11 +1087,17 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
                                 </div>
                                 {tracks.map((track, idx) => (
                                     <div key={track.id} style={{ display: 'grid', gridTemplateColumns: '80px 1fr', gap: 0, marginBottom: 2, minHeight: 45, borderBottom: '1px solid #1a1a1a' }}>
-                                        <div style={{ color: '#555', fontSize: '0.7rem', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#0a0a0a', borderRight: '1px solid #222', position: 'sticky', left: 0, zIndex: 20, gap: 4 }}>
-                                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                                                <button onClick={(e) => { e.stopPropagation(); moveTrack(idx, -1); }} disabled={idx === 0} style={{ background: 'none', border: 'none', color: idx === 0 ? '#111' : '#444', cursor: idx === 0 ? 'default' : 'pointer', padding: 0 }}><ChevronUp size={12} /></button>
+                                        <div
+                                            className={`track-header ${dragTrackIndex === idx ? 'dragging' : ''}`}
+                                            draggable
+                                            onDragStart={() => handleDragStart(idx)}
+                                            onDragOver={(e) => handleDragOver(e, idx)}
+                                            onDragEnd={handleDrop}
+                                            style={{ color: '#555', fontSize: '0.7rem', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#0a0a0a', borderRight: '1px solid #222', position: 'sticky', left: 0, zIndex: 20, gap: 4 }}
+                                        >
+                                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', pointerEvents: 'none' }}>
+                                                <Layers size={14} style={{ opacity: 0.3, marginBottom: 2 }} />
                                                 <span style={{ fontWeight: 'bold' }}>{track.id.toUpperCase()}</span>
-                                                <button onClick={(e) => { e.stopPropagation(); moveTrack(idx, 1); }} disabled={idx === tracks.length - 1} style={{ background: 'none', border: 'none', color: idx === tracks.length - 1 ? '#111' : '#444', cursor: idx === tracks.length - 1 ? 'default' : 'pointer', padding: 0 }}><ChevronDown size={12} /></button>
                                             </div>
                                             <div style={{ display: 'flex', gap: 2 }}>
                                                 <button onClick={(e) => { e.stopPropagation(); setPickerTarget({ trackId: track.id }); fetchPickerItems(pickerPath); }} style={{ background: 'none', border: 'none', color: '#444', cursor: 'pointer', padding: 2 }} title="Add Media"><Plus size={12} /></button>
@@ -1222,10 +1242,12 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
                             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 15, color: '#888', fontSize: '0.9rem' }}>
                                 <Folder size={16} /> {pickerPath}
                             </div>
-                            <div className="picker-list" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: 10 }}>
+                            <div className="picker-list">
                                 {pickerPath !== '.' && (
                                     <div className="picker-item" onClick={() => fetchPickerItems(pickerPath.split('/').slice(0, -1).join('/') || '.')}>
-                                        <CornerUpLeft size={30} />
+                                        <div className="icon-wrapper">
+                                            <CornerUpLeft size={24} color="var(--netflix-red)" />
+                                        </div>
                                         <span>Back</span>
                                     </div>
                                 )}
@@ -1234,9 +1256,18 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
                                         if (pi.isDirectory) fetchPickerItems(pi.path);
                                         else addMediaToTrack(pi, pickerTarget.trackId);
                                     }}>
-                                        {pi.isDirectory ? <Folder size={30} color="#e50914" /> : (pi.type?.startsWith('image/') ? <ImageIcon size={30} color="#0071eb" /> : <Layers size={30} />)}
-                                        <span style={{ fontSize: '0.7rem', textAlign: 'center', wordBreak: 'break-all' }}>{pi.name}</span>
-                                        {pi.type && <span style={{ fontSize: '0.6rem', opacity: 0.5 }}>{pi.type.split('/')[0]}</span>}
+                                        <div className="icon-wrapper">
+                                            {pi.isDirectory ? (
+                                                <Folder size={24} color="var(--netflix-red)" />
+                                            ) : (
+                                                pi.type?.startsWith('image/') ? (
+                                                    <ImageIcon size={24} color="#0071eb" />
+                                                ) : (
+                                                    <Layers size={24} color="#46d369" />
+                                                )
+                                            )}
+                                        </div>
+                                        <span title={pi.name}>{pi.name}</span>
                                     </div>
                                 ))}
                             </div>
