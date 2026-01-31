@@ -386,6 +386,7 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
         const margin = 80;
         const cw = Math.max(100, container.clientWidth - margin);
         const ch = Math.max(100, container.clientHeight - margin);
+
         const vr = video.videoWidth / video.videoHeight;
         const cr = cw / ch;
 
@@ -401,6 +402,10 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
         }
         setVideoRect({ left: rl, top: rt, width: rw, height: rh });
     };
+
+    useEffect(() => {
+        updateVideoRect();
+    }, [selectedClipId]);
 
     useEffect(() => {
         const timer = setTimeout(updateVideoRect, 100);
@@ -437,15 +442,68 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
         setTimeout(updateVideoRect, 100);
     };
 
+    // Timeline Engine Logic
+    const activeVClip = useMemo(() => {
+        const vTrack = tracks.find(t => t.type === 'video');
+        return vTrack?.clips.find(c => currentTime >= c.offset && currentTime < (c.offset + c.duration));
+    }, [tracks, currentTime]);
+
     const togglePlay = () => {
-        if (videoRef.current.paused) {
-            videoRef.current.play();
-            setIsPlaying(true);
-        } else {
-            videoRef.current.pause();
+        if (isPlaying) {
             setIsPlaying(false);
+            if (videoRef.current) videoRef.current.pause();
+        } else {
+            setIsPlaying(true);
         }
     };
+
+    // Global Playback Timer (Tick)
+    useEffect(() => {
+        let lastTime = performance.now();
+        let frame;
+
+        const tick = () => {
+            if (isPlaying) {
+                const now = performance.now();
+                const delta = (now - lastTime) / 1000;
+                lastTime = now;
+
+                setCurrentTime(prev => {
+                    const next = prev + delta;
+                    if (next >= timelineDuration) {
+                        setIsPlaying(false);
+                        return timelineDuration;
+                    }
+                    return next;
+                });
+            }
+            frame = requestAnimationFrame(tick);
+        };
+
+        if (isPlaying) {
+            lastTime = performance.now();
+            frame = requestAnimationFrame(tick);
+        }
+        return () => cancelAnimationFrame(frame);
+    }, [isPlaying, timelineDuration]);
+
+    // Sync Video Playhead to Timeline
+    useEffect(() => {
+        const video = videoRef.current;
+        if (!video) return;
+
+        if (activeVClip) {
+            const targetTime = activeVClip.start + (currentTime - activeVClip.offset);
+            if (Math.abs(video.currentTime - targetTime) > 0.15) {
+                video.currentTime = targetTime;
+            }
+            if (isPlaying && video.paused) {
+                video.play().catch(() => { });
+            }
+        } else {
+            if (!video.paused) video.pause();
+        }
+    }, [currentTime, activeVClip, isPlaying]);
 
     // Background Audio Sync Effect
     useEffect(() => {
@@ -524,8 +582,7 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
     }, [selectedClipId]); // Re-bind when selectedClipId changes to have fresh closure if needed, but handleDelete uses state
 
     const handleTimeUpdate = (e) => {
-        setCurrentTime(e.target.currentTime);
-        // Track-based playback logic: handle clip transitions
+        // Timeline head drives video currentTime via sync effect
     };
 
     const handleSplit = () => {
@@ -862,14 +919,20 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
                                     objectFit: 'contain',
                                     zIndex: 1,
                                     backgroundColor: '#000',
-                                    display: 'block',
-                                    filter: selectedClip ? `brightness(${selectedClip.filters.brightness}%) contrast(${selectedClip.filters.contrast}%) saturate(${selectedClip.filters.saturation}%)` : 'none',
-                                    transform: selectedClip ? `rotate(${selectedClip.rotate}deg) scaleX(${selectedClip.flipH ? -1 : 1}) scaleY(${selectedClip.flipV ? -1 : 1})` : 'none'
+                                    display: activeVClip ? 'block' : 'none',
+                                    filter: activeVClip ? `brightness(${activeVClip.filters.brightness}%) contrast(${activeVClip.filters.contrast}%) saturate(${activeVClip.filters.saturation}%)` : 'none',
+                                    transform: activeVClip ? `rotate(${activeVClip.rotate}deg) scaleX(${activeVClip.flipH ? -1 : 1}) scaleY(${activeVClip.flipV ? -1 : 1})` : 'none'
                                 }}
                             />
 
-                            {/* Crop Overlay (Only when selected and active) */}
-                            {selectedClip && (
+                            {!activeVClip && (
+                                <div style={{ position: 'absolute', inset: 0, background: '#000', zIndex: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <span style={{ color: '#333', fontSize: '1rem' }}>No Media</span>
+                                </div>
+                            )}
+
+                            {/* Crop Overlay (Only when showing handles for selected clip IF it's under head) */}
+                            {selectedClip && getSelectedClip()?.id === activeVClip?.id && (
                                 <div
                                     style={{
                                         position: 'absolute',
