@@ -805,22 +805,103 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
 
         if (isDragging.type === 'clip') {
             const dx = (e.clientX - isDragging.startX) / zoomLevel;
-            const newOffset = Math.max(0, isDragging.startOffset + dx);
+            let newOffset = Math.max(0, isDragging.startOffset + dx);
+
+            // Snapping Logic
+            const snapThreshold = 10 / zoomLevel; // 10 pixels snapping
+            const draggingClip = tracks.flatMap(t => t.clips).find(c => c.id === isDragging.id);
+            if (draggingClip) {
+                const clipDuration = draggingClip.duration;
+                let bestSnap = null;
+                let minDelta = snapThreshold;
+
+                // Potential snap points: tracks clips edges and playhead
+                const snapPoints = [0, currentTime];
+                tracks.forEach(t => {
+                    t.clips.forEach(c => {
+                        if (c.id !== isDragging.id) {
+                            snapPoints.push(c.offset);
+                            snapPoints.push(c.offset + c.duration);
+                        }
+                    });
+                });
+
+                snapPoints.forEach(sp => {
+                    // Check clip start snapping to point
+                    const deltaStart = Math.abs(newOffset - sp);
+                    if (deltaStart < minDelta) {
+                        minDelta = deltaStart;
+                        bestSnap = sp;
+                    }
+                    // Check clip end snapping to point
+                    const deltaEnd = Math.abs((newOffset + clipDuration) - sp);
+                    if (deltaEnd < minDelta) {
+                        minDelta = deltaEnd;
+                        bestSnap = sp - clipDuration;
+                    }
+                });
+
+                if (bestSnap !== null) {
+                    newOffset = bestSnap;
+                }
+            }
+
             updateClip(isDragging.id, { offset: newOffset });
         } else if (isDragging.type === 'resize-edge') {
             const dx = (e.clientX - isDragging.startX) / zoomLevel;
             const clip = getSelectedClip();
             if (!clip) return;
 
+            const snapThreshold = 10 / zoomLevel;
+            const snapPoints = [0, currentTime];
+            tracks.forEach(t => {
+                t.clips.forEach(c => {
+                    if (c.id !== clip.id) {
+                        snapPoints.push(c.offset);
+                        snapPoints.push(c.offset + c.duration);
+                    }
+                });
+            });
+
             if (isDragging.side === 'right') {
-                const newDur = Math.max(0.1, isDragging.startDuration + dx);
+                let newDur = Math.max(0.1, isDragging.startDuration + dx);
+                let bestSnap = null;
+                let minDelta = snapThreshold;
+                const newEnd = clip.offset + newDur;
+
+                snapPoints.forEach(sp => {
+                    const delta = Math.abs(newEnd - sp);
+                    if (delta < minDelta) {
+                        minDelta = delta;
+                        bestSnap = sp;
+                    }
+                });
+
+                if (bestSnap !== null) {
+                    newDur = Math.max(0.1, bestSnap - clip.offset);
+                }
                 updateClip(clip.id, { duration: newDur });
             } else {
-                const newOffset = Math.max(0, isDragging.startOffset + dx);
+                let newOffset = Math.max(0, isDragging.startOffset + dx);
+                let bestSnap = null;
+                let minDelta = snapThreshold;
+
+                snapPoints.forEach(sp => {
+                    const delta = Math.abs(newOffset - sp);
+                    if (delta < minDelta) {
+                        minDelta = delta;
+                        bestSnap = sp;
+                    }
+                });
+
+                if (bestSnap !== null) {
+                    newOffset = bestSnap;
+                }
+
                 const actualDx = newOffset - isDragging.startOffset;
                 const newDur = Math.max(0.1, isDragging.startDuration - actualDx);
                 // If it's a video, we also shift the 'start' point
-                const newStart = clip.type === 'audio' || clip.type === 'video' ? Math.max(0, isDragging.startIn + actualDx) : 0;
+                const newStart = clip.type === 'audio' || clip.type === 'video' ? Math.max(0, (isDragging.startIn || 0) + actualDx) : 0;
                 updateClip(clip.id, { offset: newOffset, duration: newDur, start: newStart });
             }
         } else if (isDragging.type === 'crop') {
@@ -1102,7 +1183,7 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
                             }}
                             style={{ flex: 1, overflowX: 'auto', overflowY: 'auto', position: 'relative', padding: '10px 0', cursor: 'crosshair', minHeight: 180 }}>
 
-                            <div className="timeline-content" style={{ position: 'relative', width: timelineDuration * zoomLevel + 100, height: '100%', minWidth: '100%' }}>
+                            <div className="timeline-content" style={{ position: 'relative', width: timelineDuration * zoomLevel + 100, minHeight: '100%', minWidth: '100%', display: 'flex', flexDirection: 'column' }}>
                                 {/* Time Ruler */}
                                 <div style={{ height: 25, position: 'sticky', top: 0, left: 0, zIndex: 30, background: '#111', borderBottom: '1px solid #333', display: 'flex' }}>
                                     <div style={{ width: 80, flexShrink: 0, background: '#0a0a0a' }} />
