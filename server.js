@@ -181,9 +181,56 @@ app.get('/api/search', (req, res) => {
     } catch (error) { res.status(500).json({ error: error.message }); }
 });
 
-app.get('/api/info', (req, res) => {
-    const row = db.prepare("SELECT info FROM item_info WHERE path = ?").get(req.query.path);
-    res.json({ info: row ? row.info : "" });
+app.get('/api/info', async (req, res) => {
+    try {
+        const itemPath = req.query.path;
+        if (!itemPath) return res.json({ info: "" });
+
+        const row = db.prepare("SELECT info FROM item_info WHERE path = ?").get(itemPath);
+        const fullPath = path.join(rootGalleryPath, itemPath);
+
+        let metadata = { info: row ? row.info : "" };
+
+        if (fs.existsSync(fullPath) && fs.lstatSync(fullPath).isFile()) {
+            const stats = fs.statSync(fullPath);
+            metadata.size = stats.size;
+
+            // Format size
+            const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+            let size = stats.size;
+            let i = 0;
+            while (size >= 1024 && i < units.length - 1) {
+                size /= 1024;
+                i++;
+            }
+            metadata.formattedSize = `${size.toFixed(2)} ${units[i]}`;
+
+            // Get resolution/duration using ffprobe
+            await new Promise((resolve) => {
+                ffmpeg.ffprobe(fullPath, (err, data) => {
+                    if (!err && data && data.streams) {
+                        const videoStream = data.streams.find(s => s.width && s.height);
+                        if (videoStream) {
+                            metadata.width = videoStream.width;
+                            metadata.height = videoStream.height;
+                            metadata.resolution = `${videoStream.width}x${videoStream.height}`;
+                            if (videoStream.duration || data.format.duration) {
+                                const dur = parseFloat(videoStream.duration || data.format.duration);
+                                const min = Math.floor(dur / 60);
+                                const sec = Math.floor(dur % 60);
+                                metadata.duration = `${min}:${sec.toString().padStart(2, '0')}`;
+                            }
+                        }
+                    }
+                    resolve();
+                });
+            });
+        }
+
+        res.json(metadata);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
 });
 
 app.post('/api/info', (req, res) => {

@@ -369,6 +369,7 @@ function App() {
     const [editModal, setEditModal] = useState(null); // Dosya objesi
     const [editName, setEditName] = useState('');
     const [editInfo, setEditInfo] = useState('');
+    const [editMetadata, setEditMetadata] = useState(null);
 
     // Taşıma State'i
     const [moveModal, setMoveModal] = useState(null); // Taşınacak dosya
@@ -757,10 +758,12 @@ function App() {
         setEditModal(item);
         setEditName(item.name);
         setEditInfo('');
+        setEditMetadata(null);
         try {
             const res = await fetch(`/api/info?path=${encodeURIComponent(item.path)}`);
             const data = await res.json();
             setEditInfo(data.info || '');
+            setEditMetadata(data);
         } catch (e) { }
     };
 
@@ -1087,6 +1090,39 @@ function App() {
                             <button onClick={() => setEditModal(null)}><X size={20} /></button>
                         </div>
                         <div className="modal-body">
+                            {editMetadata && (
+                                <div style={{
+                                    marginBottom: 15,
+                                    fontSize: '0.85rem',
+                                    color: '#ddd',
+                                    background: 'rgba(255,255,255,0.06)',
+                                    padding: '12px',
+                                    borderRadius: 8,
+                                    display: 'flex',
+                                    flexWrap: 'wrap',
+                                    gap: '15px 25px',
+                                    border: '1px solid rgba(255,255,255,0.1)'
+                                }}>
+                                    {editMetadata.resolution && (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                            <Maximize2 size={15} color="#46d369" />
+                                            <span style={{ fontWeight: 500 }}>{editMetadata.resolution}</span>
+                                        </div>
+                                    )}
+                                    {editMetadata.formattedSize && (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                            <Save size={15} color="#e50914" />
+                                            <span style={{ fontWeight: 500 }}>{editMetadata.formattedSize}</span>
+                                        </div>
+                                    )}
+                                    {editMetadata.duration && (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                            <Play size={15} color="#ff8c00" width={15} fill="#ff8c00" />
+                                            <span style={{ fontWeight: 500 }}>{editMetadata.duration}</span>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                             <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: 5, color: '#aaa' }}>{t.name || 'Name'}</label>
                             <input
                                 type="text"
