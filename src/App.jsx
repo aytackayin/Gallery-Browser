@@ -696,6 +696,7 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
     };
 
     const addMediaToTrack = (mediaItem, trackId) => {
+        if (mediaItem.isDirectory || mediaItem.type === 'folder') return;
         const isImage = mediaItem.type?.startsWith('image/') || mediaItem.path.match(/\.(jpg|jpeg|png|webp|bmp)$/i);
         const newClip = {
             id: `clip-${Date.now()}`,
@@ -1245,29 +1246,42 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
                             <div className="picker-list">
                                 {pickerPath !== '.' && (
                                     <div className="picker-item" onClick={() => fetchPickerItems(pickerPath.split('/').slice(0, -1).join('/') || '.')}>
-                                        <div className="icon-wrapper">
-                                            <CornerUpLeft size={24} color="var(--netflix-red)" />
+                                        <div className="thumb-wrapper">
+                                            <CornerUpLeft size={30} color="var(--netflix-red)" />
                                         </div>
-                                        <span>Back</span>
+                                        <div className="item-footer">
+                                            <span>Back</span>
+                                        </div>
                                     </div>
                                 )}
                                 {pickerItems.map(pi => (
                                     <div key={pi.path} className="picker-item" onClick={() => {
-                                        if (pi.isDirectory) fetchPickerItems(pi.path);
-                                        else addMediaToTrack(pi, pickerTarget.trackId);
+                                        if (pi.isDirectory || pi.type === 'folder') {
+                                            fetchPickerItems(pi.path);
+                                        } else {
+                                            addMediaToTrack(pi, pickerTarget.trackId);
+                                        }
                                     }}>
-                                        <div className="icon-wrapper">
+                                        <div className="thumb-wrapper">
                                             {pi.isDirectory ? (
-                                                <Folder size={24} color="var(--netflix-red)" />
+                                                <Folder size={40} color="var(--netflix-red)" opacity={0.6} />
                                             ) : (
-                                                pi.type?.startsWith('image/') ? (
-                                                    <ImageIcon size={24} color="#0071eb" />
-                                                ) : (
-                                                    <Layers size={24} color="#46d369" />
-                                                )
+                                                <img
+                                                    src={`http://localhost:3001/api/thumb?path=${encodeURIComponent(pi.path)}&t=${localRefreshKey}`}
+                                                    loading="lazy"
+                                                    alt={pi.name}
+                                                    onError={(e) => {
+                                                        e.target.onerror = null;
+                                                        e.target.style.display = 'none';
+                                                        e.target.parentNode.innerHTML = pi.type?.startsWith('image/') ? '<div class="type-icon"><svg viewBox="0 0 24 24" width="30" height="30" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg></div>' : '<div class="type-icon"><svg viewBox="0 0 24 24" width="30" height="30" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg></div>';
+                                                    }}
+                                                />
                                             )}
                                         </div>
-                                        <span title={pi.name}>{pi.name}</span>
+                                        <div className="item-footer">
+                                            {pi.isDirectory ? <Folder size={12} color="var(--netflix-red)" /> : (pi.type?.startsWith('image/') ? <ImageIcon size={12} color="#0071eb" /> : <VideoIcon size={12} color="#46d369" />)}
+                                            <span title={pi.name}>{pi.name}</span>
+                                        </div>
                                     </div>
                                 ))}
                             </div>
