@@ -894,7 +894,7 @@ select:focus {
   height: 4px;
 }
 
-.action-btn {
+.editor-bottom-panel .action-btn {
   padding: 6px 10px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
@@ -907,7 +907,7 @@ select:focus {
   color: var(--text-primary);
 }
 
-.action-btn:hover {
+.editor-bottom-panel .action-btn:hover {
   background: var(--netflix-red);
   color: white;
   border-color: var(--netflix-red);
