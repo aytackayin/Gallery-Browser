@@ -1176,10 +1176,10 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
                             onClick={handleTimelineClick}
                             ref={timelineRef}
                             onWheel={(e) => {
-                                if (e.ctrlKey) {
-                                    e.preventDefault();
-                                    setZoomLevel(prev => Math.max(5, Math.min(200, prev + (e.deltaY < 0 ? 5 : -5))));
-                                }
+                                if (e.shiftKey) return; // Yatay kaydırma için Shift'e izin ver
+                                e.preventDefault();
+                                const delta = e.deltaY < 0 ? 5 : -5;
+                                setZoomLevel(prev => Math.max(5, Math.min(200, prev + delta)));
                             }}
                             style={{ flex: 1, overflowX: 'auto', overflowY: 'auto', position: 'relative', padding: '10px 0', cursor: 'crosshair', minHeight: 180 }}>
 
