@@ -582,21 +582,44 @@ app.post('/api/process-video', async (req, res) => {
         const first = clips[0];
         // Proje boyutunu belirlemek için ffprobe ile ilk girişi alalım (Eğer frontend cropPixels göndermemişse)
         // Ama biz zaten cropPixels gönderiyoruz.
-        const targetW = first.cropPixels?.w || 1920;
-        const targetH = first.cropPixels?.h || 1080;
+        const targetW = timeline.tracks[0]?.clips[0]?.cropPixels?.w || 1920;
+        const targetH = timeline.tracks[0]?.clips[0]?.cropPixels?.h || 1080;
+
+        // Calculate total duration
+        let totalTimelineDuration = 0;
+        timeline.tracks.forEach(track => {
+            track.clips.forEach(c => {
+                const end = c.offset + c.duration;
+                if (end > totalTimelineDuration) totalTimelineDuration = end;
+            });
+        });
+        totalTimelineDuration = Math.max(1, totalTimelineDuration);
 
         const filterComplex = [];
-        const videoLabels = [];
-        const audioStreams = []; // For mixing
+        const audioStreams = [];
 
-        // 1. Process Tracks
-        timeline.tracks.forEach(track => {
-            track.clips.filter(c => c.duration > 0.05).forEach((clip, i) => {
+        // 1. Create Base Black Video
+        filterComplex.push({
+            filter: `color=s=${targetW}x${targetH}:c=black:d=${totalTimelineDuration},setsar=1`,
+            outputs: 'base_v'
+        });
+
+        let currentVLabel = 'base_v';
+        let clipCounter = 0;
+
+        // 2. Process Video Tracks (Bottom to Top)
+        const vTracks = timeline.tracks.filter(t => t.type === 'video');
+        vTracks.forEach(track => {
+            // Sort clips by offset to be safe
+            const sortedClips = [...track.clips].sort((a, b) => a.offset - b.offset);
+
+            sortedClips.filter(c => c.duration > 0.05).forEach(clip => {
                 const inputIdx = uniquePaths.indexOf(clip.path);
-                const clipIdx = `${track.id}_${i}`;
+                const outLabel = `clipv_${clipCounter++}`;
+                const isImage = clip.type === 'image' || clip.path.match(/\.(jpg|jpeg|png|webp|bmp)$/i);
 
                 const b = (clip.filters.brightness || 100) / 100 - 1;
-                const c = (clip.filters.contrast || 100) / 100;
+                const cVal = (clip.filters.contrast || 100) / 100;
                 const s = (clip.filters.saturation || 100) / 100;
                 const g = (clip.filters.gamma || 1.0);
 
@@ -605,38 +628,38 @@ app.post('/api/process-video', async (req, res) => {
                 const cx = `trunc(iw*${clip.crop.x / 100}/2)*2`;
                 const cy = `trunc(ih*${clip.crop.y / 100}/2)*2`;
 
-                if (track.type === 'video') {
-                    const vLabel = `v${clipIdx}`;
-                    const aLabel = `a${clipIdx}`;
+                let vFilters = [];
+                if (isImage) {
+                    vFilters.push(`loop=loop=-1:size=1:start=0`);
+                }
+                vFilters.push(`trim=start=${clip.start}:duration=${clip.duration},setpts=PTS-STARTPTS`);
+                vFilters.push(`crop=w=${cw}:h=${ch}:x=${cx}:y=${cy}`);
+                vFilters.push(`eq=brightness=${b}:contrast=${cVal}:saturation=${s}:gamma=${g}`);
+                vFilters.push(`scale=${targetW}:${targetH}:force_original_aspect_ratio=increase,crop=${targetW}:${targetH},setsar=1,format=yuv420p`);
 
-                    let vFilters = [
-                        `trim=start=${clip.start}:duration=${clip.duration},setpts=PTS-STARTPTS`,
-                        `crop=w=${cw}:h=${ch}:x=${cx}:y=${cy}`,
-                        `eq=brightness=${b}:contrast=${c}:saturation=${s}:gamma=${g}`,
-                        `scale=${targetW}:${targetH}:force_original_aspect_ratio=increase,crop=${targetW}:${targetH},setsar=1,format=yuv420p`
-                    ];
-                    if (clip.rotate) {
-                        if (clip.rotate === 90) vFilters.push('transpose=1');
-                        else if (clip.rotate === 180) vFilters.push('transpose=1,transpose=1');
-                        else if (clip.rotate === 270) vFilters.push('transpose=2');
-                    }
-                    if (clip.flipH) vFilters.push('hflip');
-                    if (clip.flipV) vFilters.push('vflip');
+                if (clip.rotate) {
+                    if (clip.rotate === 90) vFilters.push('transpose=1');
+                    else if (clip.rotate === 180) vFilters.push('transpose=1,transpose=1');
+                    else if (clip.rotate === 270) vFilters.push('transpose=2');
+                }
+                if (clip.flipH) vFilters.push('hflip');
+                if (clip.flipV) vFilters.push('vflip');
 
-                    filterComplex.push({ inputs: `${inputIdx}:v`, filter: vFilters.join(','), outputs: vLabel });
-                    videoLabels.push(vLabel);
+                // Process Clip
+                filterComplex.push({ inputs: `${inputIdx}:v`, filter: vFilters.join(','), outputs: outLabel });
 
-                    if (hasAudioMap[clip.path]) {
-                        const delay = Math.max(0, Math.round(clip.offset * 1000));
-                        filterComplex.push({
-                            inputs: `${inputIdx}:a`,
-                            filter: `atrim=start=${clip.start}:duration=${clip.duration},asetpts=PTS-STARTPTS,volume=${(clip.volume || 100) / 100},adelay=${delay}|${delay}`,
-                            outputs: aLabel
-                        });
-                        audioStreams.push(aLabel);
-                    }
-                } else if (track.type === 'audio') {
-                    const aLabel = `exta${clipIdx}`;
+                // Overlay onto current background
+                const nextVLabel = `ov_${clipCounter}`;
+                filterComplex.push({
+                    inputs: [currentVLabel, outLabel],
+                    filter: `overlay=enable='between(t,${clip.offset},${clip.offset + clip.duration})':eof_action=pass`,
+                    outputs: nextVLabel
+                });
+                currentVLabel = nextVLabel;
+
+                // Sync audio if exists
+                if (!isImage && hasAudioMap[clip.path]) {
+                    const aLabel = `a${clipCounter}`;
                     const delay = Math.max(0, Math.round(clip.offset * 1000));
                     filterComplex.push({
                         inputs: `${inputIdx}:a`,
@@ -648,11 +671,21 @@ app.post('/api/process-video', async (req, res) => {
             });
         });
 
-        let finalVideoLabel = videoLabels[0];
-        if (videoLabels.length > 1) {
-            filterComplex.push({ inputs: videoLabels, filter: `concat=n=${videoLabels.length}:v=1:a=0`, outputs: 'vf' });
-            finalVideoLabel = 'vf';
-        }
+        // 3. Process Extra Audio Tracks
+        const aTracks = timeline.tracks.filter(t => t.type === 'audio');
+        aTracks.forEach(track => {
+            track.clips.filter(c => c.duration > 0.05).forEach(clip => {
+                const inputIdx = uniquePaths.indexOf(clip.path);
+                const aLabel = `exta_${clipCounter++}`;
+                const delay = Math.max(0, Math.round(clip.offset * 1000));
+                filterComplex.push({
+                    inputs: `${inputIdx}:a`,
+                    filter: `atrim=start=${clip.start}:duration=${clip.duration},asetpts=PTS-STARTPTS,volume=${(clip.volume || 100) / 100},adelay=${delay}|${delay}`,
+                    outputs: aLabel
+                });
+                audioStreams.push(aLabel);
+            });
+        });
 
         let finalAudioLabel = null;
         if (audioStreams.length > 1) {
@@ -662,11 +695,11 @@ app.post('/api/process-video', async (req, res) => {
             finalAudioLabel = audioStreams[0];
         }
 
-        const outputs = [finalVideoLabel];
-        if (finalAudioLabel) outputs.push(finalAudioLabel);
+        const outputLabels = [currentVLabel];
+        if (finalAudioLabel) outputLabels.push(finalAudioLabel);
 
         command
-            .complexFilter(filterComplex, outputs)
+            .complexFilter(filterComplex, outputLabels)
             .on('start', cmd => console.log('FFmpeg command:', cmd))
             .on('error', (err) => {
                 console.error('FFmpeg error:', err);

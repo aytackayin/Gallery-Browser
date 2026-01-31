@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { Folder, X, Play, Pause, ChevronRight, Home, ChevronLeft, Image as ImageIcon, Video as VideoIcon, Search, Trash2, Info, Save, FolderInput, ChevronDown, Settings, CheckCircle, Scissors, RotateCw, Sun, Contrast, Lock, Unlock, Maximize2, Volume2, Plus, Trash, Droplet } from 'lucide-react';
+import { Folder, X, Play, Pause, ChevronRight, Home, ChevronLeft, Image as ImageIcon, Video as VideoIcon, Search, Trash2, Info, Save, FolderInput, ChevronDown, ChevronUp, Settings, CheckCircle, Scissors, RotateCw, Sun, Contrast, Lock, Unlock, Maximize2, Volume2, Plus, Trash, Droplet, CornerUpLeft, Layers } from 'lucide-react';
 import Cropper from "react-cropper";
 import "cropperjs/dist/cropper.css";
 
@@ -338,7 +338,7 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
     const [showSaveAs, setShowSaveAs] = useState(false);
     const [saveAsName, setSaveAsName] = useState(item.name.replace(/\.[^/.]+$/, ""));
     const [saveAsExt, setSaveAsExt] = useState(item.name.split('.').pop() || 'mp4');
-    const [showPicker, setShowPicker] = useState(false);
+    const [pickerTarget, setPickerTarget] = useState(null); // { trackId }
     const [pickerItems, setPickerItems] = useState([]);
     const [pickerPath, setPickerPath] = useState('.');
     const [zoomLevel, setZoomLevel] = useState(25); // pixels per second
@@ -346,6 +346,23 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
 
     // Use a unique key for the editor to prevent socket/conflict with viewer
     const [localRefreshKey] = useState(Date.now());
+
+    // Timeline Engine Logic
+    // Find absolute topmost clip under head for preview
+    const activeVClip = useMemo(() => {
+        const vTracks = [...tracks].filter(t => t.type === 'video').reverse(); // Topmost first
+        for (const track of vTracks) {
+            const clip = track.clips.find(c => currentTime >= c.offset && currentTime < (c.offset + c.duration));
+            if (clip) return clip;
+        }
+        return null;
+    }, [tracks, currentTime]);
+
+    const videoUrl = useMemo(() => {
+        const path = (activeVClip && activeVClip.type === 'video') ? activeVClip.path : item.path;
+        return `http://localhost:3001/media/${encodeURIComponent(path)}?t=${localRefreshKey}`;
+    }, [activeVClip?.path, item.path, localRefreshKey]);
+
     const timelineDuration = useMemo(() => {
         let max = duration || 0;
         tracks.forEach(t => {
@@ -357,10 +374,7 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
         return Math.max(0.1, max);
     }, [duration, tracks]);
 
-    const videoUrl = useMemo(() =>
-        `http://localhost:3001/media/${encodeURIComponent(item.path)}?t=${localRefreshKey}`,
-        [item.path, localRefreshKey]
-    );
+
 
     const getSelectedClip = () => {
         for (const track of tracks) {
@@ -375,6 +389,29 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
             ...track,
             clips: track.clips.map(c => c.id === clipId ? { ...c, ...updates } : c)
         })));
+    };
+
+    const addTrack = (type) => {
+        setTracks(prev => {
+            const sameType = prev.filter(t => t.type === type);
+            const newId = `${type === 'video' ? 'v' : 'a'}${sameType.length + 1}`;
+            return [...prev, { id: newId, type, clips: [] }];
+        });
+    };
+
+    const removeTrack = (trackId) => {
+        if (trackId === 'v1' || trackId === 'a1') return;
+        setTracks(prev => prev.filter(t => t.id !== trackId));
+    };
+
+    const moveTrack = (index, direction) => {
+        setTracks(prev => {
+            const newTracks = [...prev];
+            const targetIndex = index + direction;
+            if (targetIndex < 0 || targetIndex >= newTracks.length) return prev;
+            [newTracks[index], newTracks[targetIndex]] = [newTracks[targetIndex], newTracks[index]];
+            return newTracks;
+        });
     };
 
     const updateVideoRect = () => {
@@ -442,11 +479,7 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
         setTimeout(updateVideoRect, 100);
     };
 
-    // Timeline Engine Logic
-    const activeVClip = useMemo(() => {
-        const vTrack = tracks.find(t => t.type === 'video');
-        return vTrack?.clips.find(c => currentTime >= c.offset && currentTime < (c.offset + c.duration));
-    }, [tracks, currentTime]);
+
 
     const togglePlay = () => {
         if (isPlaying) {
@@ -648,33 +681,24 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
         } catch (e) { }
     };
 
-    const addAudioTrack = (audioItem) => {
+    const addMediaToTrack = (mediaItem, trackId) => {
+        const isImage = mediaItem.type?.startsWith('image/') || mediaItem.path.match(/\.(jpg|jpeg|png|webp|bmp)$/i);
         const newClip = {
-            id: `audio-${Date.now()}`,
-            path: audioItem.path,
-            name: audioItem.name,
+            id: `clip-${Date.now()}`,
+            path: mediaItem.path,
+            name: mediaItem.name,
+            type: isImage ? 'image' : (trackId.startsWith('v') ? 'video' : 'audio'),
             start: 0,
-            duration: 10, // Default 10s or fetch actual duration? For now 10s until metadata
+            duration: isImage ? 5 : (mediaItem.duration || 10),
             offset: currentTime,
             filters: { brightness: 100, contrast: 100, saturation: 100, gamma: 1.0 },
             crop: { x: 0, y: 0, w: 100, h: 100 },
-            rotate: 0, flipH: false, flipV: false, volume: 100,
-            type: 'audio'
+            rotate: 0, flipH: false, flipV: false, volume: 100
         };
 
-        // Try to get duration from an invisible audio element
-        const tempAudio = new Audio(`http://localhost:3001/media/${encodeURIComponent(audioItem.path)}`);
-        tempAudio.onloadedmetadata = () => {
-            newClip.duration = tempAudio.duration;
-            setTracks(prev => prev.map(t => t.id === 'a1' ? { ...t, clips: [...t.clips, newClip] } : t));
-            setSelectedClipId(newClip.id);
-        };
-        tempAudio.onerror = () => {
-            setTracks(prev => prev.map(t => t.id === 'a1' ? { ...t, clips: [...t.clips, newClip] } : t));
-            setSelectedClipId(newClip.id);
-        };
-
-        setShowPicker(false);
+        setTracks(prev => prev.map(t => t.id === trackId ? { ...t, clips: [...t.clips, newClip] } : t));
+        setPickerTarget(null);
+        setSelectedClipId(newClip.id);
     };
 
     const handleSave = async (options = {}) => {
@@ -736,7 +760,27 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
     const handleMouseMove = (e) => {
         if (!isDragging) return;
 
-        if (isDragging.type === 'crop') {
+        if (isDragging.type === 'clip') {
+            const dx = (e.clientX - isDragging.startX) / zoomLevel;
+            const newOffset = Math.max(0, isDragging.startOffset + dx);
+            updateClip(isDragging.id, { offset: newOffset });
+        } else if (isDragging.type === 'resize-edge') {
+            const dx = (e.clientX - isDragging.startX) / zoomLevel;
+            const clip = getSelectedClip();
+            if (!clip) return;
+
+            if (isDragging.side === 'right') {
+                const newDur = Math.max(0.1, isDragging.startDuration + dx);
+                updateClip(clip.id, { duration: newDur });
+            } else {
+                const newOffset = Math.max(0, isDragging.startOffset + dx);
+                const actualDx = newOffset - isDragging.startOffset;
+                const newDur = Math.max(0.1, isDragging.startDuration - actualDx);
+                // If it's a video, we also shift the 'start' point
+                const newStart = clip.type === 'audio' || clip.type === 'video' ? Math.max(0, isDragging.startIn + actualDx) : 0;
+                updateClip(clip.id, { offset: newOffset, duration: newDur, start: newStart });
+            }
+        } else if (isDragging.type === 'crop') {
             if (!videoRect.width) return;
             const rect = containerRef.current.getBoundingClientRect();
             const mouseX = e.clientX - rect.left - videoRect.left;
@@ -767,26 +811,6 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
                 }
                 updateClip(selectedClipId, { crop: { x, y, w, h } });
             }
-        }
-        else if (isDragging.type === 'clip') {
-            const deltaX = e.clientX - isDragging.startX;
-            const deltaSeconds = deltaX / zoomLevel;
-            let newOffset = Math.max(0, isDragging.startOffset + deltaSeconds);
-
-            const track = tracks.find(t => t.clips.some(c => c.id === isDragging.id));
-            if (track) {
-                const others = track.clips.filter(c => c.id !== isDragging.id);
-                for (const other of others) {
-                    const otherEnd = other.offset + other.duration;
-                    if (Math.abs(newOffset - otherEnd) < (10 / zoomLevel)) {
-                        newOffset = otherEnd; break;
-                    }
-                    if (Math.abs((newOffset + selectedClip.duration) - other.offset) < (10 / zoomLevel)) {
-                        newOffset = other.offset - selectedClip.duration; break;
-                    }
-                }
-            }
-            updateClip(isDragging.id, { offset: newOffset });
         }
     };
 
@@ -919,11 +943,28 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
                                     objectFit: 'contain',
                                     zIndex: 1,
                                     backgroundColor: '#000',
-                                    display: activeVClip ? 'block' : 'none',
+                                    display: activeVClip && activeVClip.type === 'video' ? 'block' : 'none',
                                     filter: activeVClip ? `brightness(${activeVClip.filters.brightness}%) contrast(${activeVClip.filters.contrast}%) saturate(${activeVClip.filters.saturation}%)` : 'none',
                                     transform: activeVClip ? `rotate(${activeVClip.rotate}deg) scaleX(${activeVClip.flipH ? -1 : 1}) scaleY(${activeVClip.flipV ? -1 : 1})` : 'none'
                                 }}
                             />
+
+                            {activeVClip && activeVClip.type === 'image' && (
+                                <img
+                                    src={`http://localhost:3001/media/${encodeURIComponent(activeVClip.path)}`}
+                                    alt="Preview"
+                                    style={{
+                                        position: 'absolute',
+                                        width: videoRect.width ? `${videoRect.width}px` : '100%',
+                                        height: videoRect.height ? `${videoRect.height}px` : '100%',
+                                        objectFit: 'contain',
+                                        zIndex: 1,
+                                        backgroundColor: '#000',
+                                        filter: `brightness(${activeVClip.filters.brightness}%) contrast(${activeVClip.filters.contrast}%) saturate(${activeVClip.filters.saturation}%)`,
+                                        transform: `rotate(${activeVClip.rotate}deg) scaleX(${activeVClip.flipH ? -1 : 1}) scaleY(${activeVClip.flipV ? -1 : 1})`
+                                    }}
+                                />
+                            )}
 
                             {!activeVClip && (
                                 <div style={{ position: 'absolute', inset: 0, background: '#000', zIndex: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -994,7 +1035,9 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
                                 <button className={`action-btn ${activeTool === 'split' ? 'active' : ''}`} onClick={handleSplit} title="Split at Scrubber"><Scissors size={14} /></button>
                                 <button className={`action-btn ${activeTool === 'delete' ? 'active' : ''}`} onClick={handleDelete} title="Delete Selected Clip"><Trash size={14} /></button>
                                 <button className="action-btn" onClick={packClips} title="Pack Clips (Remove Gaps)"><Droplet size={14} /></button>
-                                <button className="action-btn" onClick={() => { setShowPicker(true); fetchPickerItems(pickerPath); }} title="Add Audio File" style={{ color: '#46d369' }}><Plus size={14} /> Audio</button>
+                                <div style={{ width: 1, height: 20, background: '#333', margin: '0 5px' }} />
+                                <button className="action-btn" onClick={() => addTrack('video')} title="Add Video Track" style={{ color: '#e50914' }}><Plus size={14} /> Video Layer</button>
+                                <button className="action-btn" onClick={() => addTrack('audio')} title="Add Audio Track" style={{ color: '#46d369' }}><Plus size={14} /> Audio Layer</button>
                             </div>
                             <div style={{ flex: 1, textAlign: 'center', fontSize: '0.85rem', color: '#888', fontFamily: 'monospace' }}>
                                 {formatTime(currentTime)} / {formatTime(timelineDuration)}
@@ -1019,7 +1062,7 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
                             <div className="timeline-content" style={{ position: 'relative', width: timelineDuration * zoomLevel + 100, height: '100%', minWidth: '100%' }}>
                                 {/* Time Ruler */}
                                 <div style={{ height: 25, position: 'sticky', top: 0, left: 0, zIndex: 30, background: '#111', borderBottom: '1px solid #333', display: 'flex' }}>
-                                    <div style={{ width: 60, flexShrink: 0, background: '#0a0a0a' }} />
+                                    <div style={{ width: 80, flexShrink: 0, background: '#0a0a0a' }} />
                                     <div style={{ position: 'relative', flex: 1 }}>
                                         {Array.from({ length: Math.ceil(timelineDuration / 5) + 2 }).map((_, i) => (
                                             <div key={i} style={{ position: 'absolute', left: (i * 5) * zoomLevel, borderLeft: '1px solid #444', height: i % 2 === 0 ? 15 : 8, paddingLeft: 3 }}>
@@ -1028,10 +1071,20 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
                                         ))}
                                     </div>
                                 </div>
-                                {tracks.map(track => (
-                                    <div key={track.id} style={{ display: 'grid', gridTemplateColumns: '60px 1fr', gap: 0, marginBottom: 2, minHeight: 45, borderBottom: '1px solid #1a1a1a' }}>
-                                        <div style={{ color: '#555', fontSize: '0.7rem', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0a0a0a', borderRight: '1px solid #222', position: 'sticky', left: 0, zIndex: 20 }}>
-                                            {track.id.toUpperCase()}
+                                {tracks.map((track, idx) => (
+                                    <div key={track.id} style={{ display: 'grid', gridTemplateColumns: '80px 1fr', gap: 0, marginBottom: 2, minHeight: 45, borderBottom: '1px solid #1a1a1a' }}>
+                                        <div style={{ color: '#555', fontSize: '0.7rem', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#0a0a0a', borderRight: '1px solid #222', position: 'sticky', left: 0, zIndex: 20, gap: 4 }}>
+                                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                                                <button onClick={(e) => { e.stopPropagation(); moveTrack(idx, -1); }} disabled={idx === 0} style={{ background: 'none', border: 'none', color: idx === 0 ? '#111' : '#444', cursor: idx === 0 ? 'default' : 'pointer', padding: 0 }}><ChevronUp size={12} /></button>
+                                                <span style={{ fontWeight: 'bold' }}>{track.id.toUpperCase()}</span>
+                                                <button onClick={(e) => { e.stopPropagation(); moveTrack(idx, 1); }} disabled={idx === tracks.length - 1} style={{ background: 'none', border: 'none', color: idx === tracks.length - 1 ? '#111' : '#444', cursor: idx === tracks.length - 1 ? 'default' : 'pointer', padding: 0 }}><ChevronDown size={12} /></button>
+                                            </div>
+                                            <div style={{ display: 'flex', gap: 2 }}>
+                                                <button onClick={(e) => { e.stopPropagation(); setPickerTarget({ trackId: track.id }); fetchPickerItems(pickerPath); }} style={{ background: 'none', border: 'none', color: '#444', cursor: 'pointer', padding: 2 }} title="Add Media"><Plus size={12} /></button>
+                                                {track.id !== 'v1' && track.id !== 'a1' && (
+                                                    <button onClick={(e) => { e.stopPropagation(); removeTrack(track.id); }} style={{ background: 'none', border: 'none', color: '#444', cursor: 'pointer', padding: 2 }} title="Delete Track"><Trash size={12} /></button>
+                                                )}
+                                            </div>
                                         </div>
                                         <div style={{ position: 'relative', background: '#080808' }}>
                                             {track.clips.map(clip => (
@@ -1069,8 +1122,24 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
                                                         boxSizing: 'border-box'
                                                     }}
                                                 >
-                                                    <div style={{ fontWeight: 'bold', marginBottom: 2 }}>{clip.name}</div>
-                                                    <div style={{ fontSize: '0.65rem', opacity: 0.6 }}>{clip.duration.toFixed(1)}s</div>
+                                                    {/* Resize Handles */}
+                                                    <div
+                                                        onMouseDown={(e) => {
+                                                            e.stopPropagation();
+                                                            setIsDragging({ type: 'resize-edge', side: 'left', startX: e.clientX, startOffset: clip.offset, startDuration: clip.duration, startIn: clip.start });
+                                                        }}
+                                                        style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 6, cursor: 'ew-resize', background: 'rgba(255,255,255,0.1)' }}
+                                                    />
+                                                    <div
+                                                        onMouseDown={(e) => {
+                                                            e.stopPropagation();
+                                                            setIsDragging({ type: 'resize-edge', side: 'right', startX: e.clientX, startDuration: clip.duration });
+                                                        }}
+                                                        style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 6, cursor: 'ew-resize', background: 'rgba(255,255,255,0.1)' }}
+                                                    />
+
+                                                    <div style={{ fontWeight: 'bold', marginBottom: 2, pointerEvents: 'none' }}>{clip.name}</div>
+                                                    <div style={{ fontSize: '0.65rem', opacity: 0.6, pointerEvents: 'none' }}>{clip.duration.toFixed(1)}s</div>
                                                 </div>
                                             ))}
                                         </div>
@@ -1082,7 +1151,7 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
                                     position: 'absolute',
                                     top: 0,
                                     bottom: 0,
-                                    left: 60 + (currentTime * zoomLevel) - 1,
+                                    left: 80 + (currentTime * zoomLevel) - 1,
                                     width: 2,
                                     background: '#e50914',
                                     zIndex: 100,
@@ -1142,32 +1211,34 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
                 )}
             </div>
 
-            {showPicker && (
+            {pickerTarget && (
                 <div className="modal-overlay" style={{ zIndex: 8000 }}>
                     <div className="modal" style={{ maxWidth: 500 }}>
                         <div className="modal-header">
-                            <h3>Select Audio File</h3>
-                            <button className="btn btn-grey" onClick={() => setShowPicker(false)}><X size={20} /></button>
+                            <h3>Select Media for {pickerTarget.trackId.toUpperCase()}</h3>
+                            <button className="btn btn-grey" onClick={() => setPickerTarget(null)}><X size={20} /></button>
                         </div>
-                        <div style={{ padding: 15 }}>
-                            <div style={{ display: 'flex', gap: 5, marginBottom: 10 }}>
-                                <button className="btn btn-grey" onClick={() => fetchPickerItems(pickerPath.split('/').slice(0, -1).join('/') || '.')}>..</button>
-                                <span style={{ fontSize: '0.8rem', color: '#888' }}>{pickerPath}</span>
+                        <div className="modal-body" style={{ maxHeight: 400, overflowY: 'auto', padding: 20 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 15, color: '#888', fontSize: '0.9rem' }}>
+                                <Folder size={16} /> {pickerPath}
                             </div>
-                            <div style={{ maxHeight: 300, overflowY: 'auto', background: '#0a0a0a', borderRadius: 4 }}>
-                                {pickerItems
-                                    .filter(pi => pi.type === 'folder' || (pi.type && (pi.type.startsWith('audio/') || pi.type.startsWith('video/'))))
-                                    .map(pi => (
-                                        <div key={pi.path}
-                                            onClick={() => pi.type === 'folder' ? fetchPickerItems(pi.path) : (pi.type && (pi.type.startsWith('audio/') || pi.type.startsWith('video/'))) ? addAudioTrack(pi) : null}
-                                            style={{ padding: '8px 12px', borderBottom: '1px solid #1a1a1a', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10 }}>
-                                            {pi.type === 'folder' ? <Folder size={14} color="#ff8c00" /> : <Volume2 size={14} color="#0071eb" />}
-                                            <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                                <span style={{ fontSize: '0.9rem' }}>{pi.name}</span>
-                                                <span style={{ fontSize: '0.7rem', color: '#666' }}>{pi.type}</span>
-                                            </div>
-                                        </div>
-                                    ))}
+                            <div className="picker-list" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: 10 }}>
+                                {pickerPath !== '.' && (
+                                    <div className="picker-item" onClick={() => fetchPickerItems(pickerPath.split('/').slice(0, -1).join('/') || '.')}>
+                                        <CornerUpLeft size={30} />
+                                        <span>Back</span>
+                                    </div>
+                                )}
+                                {pickerItems.map(pi => (
+                                    <div key={pi.path} className="picker-item" onClick={() => {
+                                        if (pi.isDirectory) fetchPickerItems(pi.path);
+                                        else addMediaToTrack(pi, pickerTarget.trackId);
+                                    }}>
+                                        {pi.isDirectory ? <Folder size={30} color="#e50914" /> : (pi.type?.startsWith('image/') ? <ImageIcon size={30} color="#0071eb" /> : <Layers size={30} />)}
+                                        <span style={{ fontSize: '0.7rem', textAlign: 'center', wordBreak: 'break-all' }}>{pi.name}</span>
+                                        {pi.type && <span style={{ fontSize: '0.6rem', opacity: 0.5 }}>{pi.type.split('/')[0]}</span>}
+                                    </div>
+                                ))}
                             </div>
                         </div>
                     </div>
