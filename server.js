@@ -208,19 +208,24 @@ app.get('/api/info', async (req, res) => {
             // Get resolution/duration using ffprobe
             await new Promise((resolve) => {
                 ffmpeg.ffprobe(fullPath, (err, data) => {
-                    if (!err && data && data.streams) {
-                        const videoStream = data.streams.find(s => s.width && s.height);
-                        if (videoStream) {
-                            metadata.width = videoStream.width;
-                            metadata.height = videoStream.height;
-                            metadata.resolution = `${videoStream.width}x${videoStream.height}`;
-                            if (videoStream.duration || data.format.duration) {
-                                const dur = parseFloat(videoStream.duration || data.format.duration);
-                                metadata.durationSeconds = dur;
-                                const min = Math.floor(dur / 60);
-                                const sec = Math.floor(dur % 60);
-                                metadata.duration = `${min}:${sec.toString().padStart(2, '0')}`;
+                    if (!err && data) {
+                        if (data.streams) {
+                            const videoStream = data.streams.find(s => s.width && s.height);
+                            if (videoStream) {
+                                metadata.width = videoStream.width;
+                                metadata.height = videoStream.height;
+                                metadata.resolution = `${videoStream.width}x${videoStream.height}`;
                             }
+                        }
+
+                        // Duration both for audio and video
+                        const totalDuration = data.format.duration || (data.streams && data.streams[0] ? data.streams[0].duration : null);
+                        if (totalDuration) {
+                            const dur = parseFloat(totalDuration);
+                            metadata.durationSeconds = dur;
+                            const min = Math.floor(dur / 60);
+                            const sec = Math.floor(dur % 60);
+                            metadata.duration = `${min}:${sec.toString().padStart(2, '0')}`;
                         }
                     }
                     resolve();
