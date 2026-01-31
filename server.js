@@ -550,149 +550,144 @@ app.post('/api/process-video', async (req, res) => {
     if (!timeline || !timeline.tracks) return res.status(400).json({ error: "Eksik timeline verisi" });
 
     try {
-        let clips = timeline.tracks.flatMap(t => t.clips).filter(c => c.duration > 0.05);
-        if (clips.length === 0) return res.status(400).json({ error: "İşlenecek geçerli bir klip yok (Süre çok kısa olabilir)" });
+        let clips = [];
+        timeline.tracks.forEach(t => {
+            t.clips.forEach(c => {
+                if (c.duration > 0.05) clips.push({ ...c, trackType: t.type });
+            });
+        });
 
-        const uniquePaths = [...new Set(clips.map(c => c.path))];
+        if (clips.length === 0) return res.status(400).json({ error: "İşlenecek geçerli bir klip yok" });
+
         const command = ffmpeg();
-        uniquePaths.forEach(p => command.input(path.join(rootGalleryPath, p)));
+        const hasAudioMap = [];
 
-        const firstClip = clips[0];
-        // Eğer newPath verilmişse, o klasördeki yeni ismi kullan. Yoksa orijinalin üzerine yaz.
+        // Her klip için input ekle ve ses olup olmadığını kontrol et
+        for (let i = 0; i < clips.length; i++) {
+            const fullPath = path.join(rootGalleryPath, clips[i].path);
+            command.input(fullPath);
+
+            const hasAudio = await new Promise(resolve => {
+                const type = mime.lookup(fullPath) || '';
+                if (type.startsWith('image/')) {
+                    resolve(false);
+                    return;
+                }
+                ffmpeg.ffprobe(fullPath, (err, metadata) => {
+                    if (err) resolve(false);
+                    else resolve(metadata.streams.some(s => s.codec_type === 'audio'));
+                });
+            });
+            hasAudioMap.push(hasAudio);
+        }
+
         const sourceDir = path.dirname(sourcePath);
         const targetFilename = newPath || path.basename(sourcePath);
         const targetPath = path.join(rootGalleryPath, sourceDir, targetFilename);
         const tempPath = targetPath + '.tmp.mp4';
 
-        // Check for audio streams in all inputs
-        const hasAudioMap = {};
-        for (const p of uniquePaths) {
-            hasAudioMap[p] = await new Promise(resolve => {
-                ffmpeg.ffprobe(path.join(rootGalleryPath, p), (err, metadata) => {
-                    if (err) resolve(false);
-                    else resolve(metadata.streams.some(s => s.codec_type === 'audio'));
-                });
-            });
-        }
+        // Proje boyutunu çift sayıya zorla
+        let targetW = (clips[0].cropPixels?.w || 1920);
+        let targetH = (clips[0].cropPixels?.h || 1080);
+        if (targetW % 2 !== 0) targetW -= 1;
+        if (targetH % 2 !== 0) targetH -= 1;
 
-        // Proje baz boyutunu ilk klibin (crop edilmişse o boyut, edilmemişse orijinal boyut) üzerinden belirle
-        // Not: ffmpeg-probe veya frontend'den gelen cropPixels'i kullanabiliriz.
-        // Ama en garantisi kliplerin kendi içindeki crop oranlarını kullanmak.
-
-        const first = clips[0];
-        // Proje boyutunu belirlemek için ffprobe ile ilk girişi alalım (Eğer frontend cropPixels göndermemişse)
-        // Ama biz zaten cropPixels gönderiyoruz.
-        const targetW = timeline.tracks[0]?.clips[0]?.cropPixels?.w || 1920;
-        const targetH = timeline.tracks[0]?.clips[0]?.cropPixels?.h || 1080;
-
-        // Calculate total duration
         let totalTimelineDuration = 0;
-        timeline.tracks.forEach(track => {
-            track.clips.forEach(c => {
-                const end = c.offset + c.duration;
-                if (end > totalTimelineDuration) totalTimelineDuration = end;
-            });
+        clips.forEach(c => {
+            const end = c.offset + c.duration;
+            if (end > totalTimelineDuration) totalTimelineDuration = end;
         });
         totalTimelineDuration = Math.max(1, totalTimelineDuration);
 
         const filterComplex = [];
         const audioStreams = [];
 
-        // 1. Create Base Black Video
         filterComplex.push({
             filter: `color=s=${targetW}x${targetH}:c=black:d=${totalTimelineDuration},setsar=1`,
             outputs: 'base_v'
         });
 
         let currentVLabel = 'base_v';
-        let clipCounter = 0;
+        let vClipCounter = 0;
 
-        // 2. Process Video Tracks (Bottom to Top)
-        const vTracks = timeline.tracks.filter(t => t.type === 'video');
-        vTracks.forEach(track => {
-            // Sort clips by offset to be safe
-            const sortedClips = [...track.clips].sort((a, b) => a.offset - b.offset);
+        clips.forEach((clip, idx) => {
+            if (clip.trackType !== 'video') return;
 
-            sortedClips.filter(c => c.duration > 0.05).forEach(clip => {
-                const inputIdx = uniquePaths.indexOf(clip.path);
-                const outLabel = `clipv_${clipCounter++}`;
-                const isImage = clip.type === 'image' || clip.path.match(/\.(jpg|jpeg|png|webp|bmp)$/i);
+            const outLabel = `vclip_${vClipCounter}`;
+            const isImage = clip.type === 'image' || clip.path.match(/\.(jpg|jpeg|png|webp|bmp)$/i);
 
-                const b = (clip.filters.brightness || 100) / 100 - 1;
-                const cVal = (clip.filters.contrast || 100) / 100;
-                const s = (clip.filters.saturation || 100) / 100;
-                const g = (clip.filters.gamma || 1.0);
+            const b = (clip.filters.brightness || 100) / 100 - 1;
+            const cVal = (clip.filters.contrast || 100) / 100;
+            const s = (clip.filters.saturation || 100) / 100;
+            const g = (clip.filters.gamma || 1.0);
 
-                const cw = `trunc(iw*${clip.crop.w / 100}/2)*2`;
-                const ch = `trunc(ih*${clip.crop.h / 100}/2)*2`;
-                const cx = `trunc(iw*${clip.crop.x / 100}/2)*2`;
-                const cy = `trunc(ih*${clip.crop.y / 100}/2)*2`;
+            let cw = clip.cropPixels?.w || Math.round(targetW * (clip.crop.w / 100));
+            let ch = clip.cropPixels?.h || Math.round(targetH * (clip.crop.h / 100));
+            if (cw % 2 !== 0) cw -= 1;
+            if (ch % 2 !== 0) ch -= 1;
 
-                let vFilters = [];
-                if (isImage) {
-                    vFilters.push(`loop=loop=-1:size=1:start=0`);
-                }
-                vFilters.push(`trim=start=${clip.start}:duration=${clip.duration},setpts=PTS-STARTPTS`);
-                vFilters.push(`crop=w=${cw}:h=${ch}:x=${cx}:y=${cy}`);
-                vFilters.push(`eq=brightness=${b}:contrast=${cVal}:saturation=${s}:gamma=${g}`);
-                vFilters.push(`scale=${targetW}:${targetH}:force_original_aspect_ratio=increase,crop=${targetW}:${targetH},setsar=1,format=yuv420p`);
+            let vFilters = [];
+            if (isImage) {
+                vFilters.push(`loop=loop=-1:size=1:start=0`);
+            }
+            vFilters.push(`trim=start=${clip.start}:duration=${clip.duration}`);
+            vFilters.push(`setpts=PTS-STARTPTS+(${clip.offset}/TB)`);
 
-                if (clip.rotate) {
-                    if (clip.rotate === 90) vFilters.push('transpose=1');
-                    else if (clip.rotate === 180) vFilters.push('transpose=1,transpose=1');
-                    else if (clip.rotate === 270) vFilters.push('transpose=2');
-                }
-                if (clip.flipH) vFilters.push('hflip');
-                if (clip.flipV) vFilters.push('vflip');
+            // Crop calculations from pixels
+            const cx = clip.cropPixels?.x || 0;
+            const cy = clip.cropPixels?.y || 0;
+            vFilters.push(`crop=w=${cw}:h=${ch}:x=${cx}:y=${cy}`);
 
-                // Process Clip
-                filterComplex.push({ inputs: `${inputIdx}:v`, filter: vFilters.join(','), outputs: outLabel });
+            vFilters.push(`scale=${targetW}:${targetH}:force_original_aspect_ratio=increase,crop=${targetW}:${targetH},setsar=1,format=yuv420p`);
+            vFilters.push(`eq=brightness=${b}:contrast=${cVal}:saturation=${s}:gamma=${g}`);
 
-                // Overlay onto current background
-                const nextVLabel = `ov_${clipCounter}`;
-                filterComplex.push({
-                    inputs: [currentVLabel, outLabel],
-                    filter: `overlay=enable='between(t,${clip.offset},${clip.offset + clip.duration})':eof_action=pass`,
-                    outputs: nextVLabel
-                });
-                currentVLabel = nextVLabel;
+            if (clip.rotate) {
+                if (clip.rotate === 90) vFilters.push('transpose=1');
+                else if (clip.rotate === 180) vFilters.push('transpose=1,transpose=1');
+                else if (clip.rotate === 270) vFilters.push('transpose=2');
+            }
+            if (clip.flipH) vFilters.push('hflip');
+            if (clip.flipV) vFilters.push('vflip');
 
-                // Sync audio if exists
-                if (!isImage && hasAudioMap[clip.path]) {
-                    const aLabel = `a${clipCounter}`;
-                    const delay = Math.max(0, Math.round(clip.offset * 1000));
-                    filterComplex.push({
-                        inputs: `${inputIdx}:a`,
-                        filter: `atrim=start=${clip.start}:duration=${clip.duration},asetpts=PTS-STARTPTS,volume=${(clip.volume || 100) / 100},adelay=${delay}|${delay}`,
-                        outputs: aLabel
-                    });
-                    audioStreams.push(aLabel);
-                }
+            filterComplex.push({ inputs: `${idx}:v`, filter: vFilters.join(','), outputs: outLabel });
+
+            const nextVLabel = `ov_${vClipCounter}`;
+            filterComplex.push({
+                inputs: [currentVLabel, outLabel],
+                filter: `overlay=enable='between(t,${clip.offset},${clip.offset + clip.duration})':eof_action=pass`,
+                outputs: nextVLabel
             });
-        });
+            currentVLabel = nextVLabel;
+            vClipCounter++;
 
-        // 3. Process Extra Audio Tracks
-        const aTracks = timeline.tracks.filter(t => t.type === 'audio');
-        aTracks.forEach(track => {
-            track.clips.filter(c => c.duration > 0.05).forEach(clip => {
-                const inputIdx = uniquePaths.indexOf(clip.path);
-                const aLabel = `exta_${clipCounter++}`;
-                const delay = Math.max(0, Math.round(clip.offset * 1000));
+            if (!isImage && hasAudioMap[idx]) {
+                const aLabel = `vaudio_${idx}`;
+                const delay = Math.round(clip.offset * 1000);
                 filterComplex.push({
-                    inputs: `${inputIdx}:a`,
-                    filter: `atrim=start=${clip.start}:duration=${clip.duration},asetpts=PTS-STARTPTS,volume=${(clip.volume || 100) / 100},adelay=${delay}|${delay}`,
+                    inputs: `${idx}:a`,
+                    filter: `atrim=start=${clip.start}:duration=${clip.duration},asetpts=PTS-STARTPTS,volume=${(clip.volume || 100) / 100},adelay=${delay}:all=1`,
                     outputs: aLabel
                 });
                 audioStreams.push(aLabel);
+            }
+        });
+
+        clips.forEach((clip, idx) => {
+            if (clip.trackType !== 'audio' || !hasAudioMap[idx]) return;
+            const aLabel = `aaudio_${idx}`;
+            const delay = Math.round(clip.offset * 1000);
+            filterComplex.push({
+                inputs: `${idx}:a`,
+                filter: `atrim=start=${clip.start}:duration=${clip.duration},asetpts=PTS-STARTPTS,volume=${(clip.volume || 100) / 100},adelay=${delay}:all=1`,
+                outputs: aLabel
             });
+            audioStreams.push(aLabel);
         });
 
         let finalAudioLabel = null;
-        if (audioStreams.length > 1) {
+        if (audioStreams.length > 0) {
             filterComplex.push({ inputs: audioStreams, filter: `amix=inputs=${audioStreams.length}:normalize=0`, outputs: 'af' });
             finalAudioLabel = 'af';
-        } else if (audioStreams.length === 1) {
-            finalAudioLabel = audioStreams[0];
         }
 
         const outputLabels = [currentVLabel];
@@ -708,16 +703,13 @@ app.post('/api/process-video', async (req, res) => {
             })
             .on('end', () => {
                 try {
-                    // Eğer üzerine yazıyorsak eskiyi sil, yoksa sadece temp'i taşı
                     if (fs.existsSync(targetPath) && tempPath !== targetPath) {
                         try { fs.unlinkSync(targetPath); } catch (e) { }
                     }
                     fs.renameSync(tempPath, targetPath);
-
                     const finalRelPath = path.relative(rootGalleryPath, targetPath).replace(/\\/g, '/');
                     const thumbPath = getThumbPath(finalRelPath);
                     if (fs.existsSync(thumbPath)) fs.unlinkSync(thumbPath);
-
                     res.json({ success: true, message: "Video başarıyla işlendi", path: finalRelPath });
                 } catch (e) {
                     res.status(500).json({ error: e.message });

@@ -735,26 +735,14 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
     };
 
     const handleSave = async (options = {}) => {
-        let currentTracks = tracks;
-        const videoTrack = tracks.find(t => t.id === 'v1');
-        if (videoTrack && videoTrack.clips.length > 0) {
-            let offset = 0;
-            const packedClips = [...videoTrack.clips].sort((a, b) => a.offset - b.offset).map(c => {
-                const updated = { ...c, offset };
-                offset += c.duration;
-                return updated;
-            });
-            currentTracks = tracks.map(t => t.id === 'v1' ? { ...t, clips: packedClips } : t);
-            setTracks(currentTracks);
-        }
-
         setIsProcessing(true);
         const video = videoRef.current;
-        const nw = video.videoWidth || 1920;
-        const nh = video.videoHeight || 1080;
+        // Force even numbers for project size
+        const nw = (video.videoWidth || 1920) % 2 === 0 ? (video.videoWidth || 1920) : (video.videoWidth || 1920) - 1;
+        const nh = (video.videoHeight || 1080) % 2 === 0 ? (video.videoHeight || 1080) : (video.videoHeight || 1080) - 1;
 
         const timelineData = {
-            tracks: currentTracks.map(t => ({
+            tracks: tracks.map(t => ({
                 id: t.id,
                 type: t.type,
                 clips: t.clips.map(c => {
@@ -763,13 +751,19 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
                     const relW = c.crop.w / 100;
                     const relH = c.crop.h / 100;
 
+                    // Force even numbers for crop pixels
+                    const cw = Math.round(relW * nw);
+                    const ch = Math.round(relH * nh);
+                    const cx = Math.round(relX * nw);
+                    const cy = Math.round(relY * nh);
+
                     return {
                         ...c,
                         cropPixels: {
-                            x: Math.round(relX * nw),
-                            y: Math.round(relY * nh),
-                            w: Math.round(relW * nw),
-                            h: Math.round(relH * nh)
+                            x: cx % 2 === 0 ? cx : cx - 1,
+                            y: cy % 2 === 0 ? cy : cy - 1,
+                            w: cw % 2 === 0 ? cw : cw - 1,
+                            h: ch % 2 === 0 ? ch : ch - 1
                         }
                     };
                 })
@@ -2140,7 +2134,6 @@ function App() {
                                                 </div>
                                             )}
                                         </div>
-
                                     )}
 
                                     <div className="media-info">
@@ -2170,8 +2163,8 @@ function App() {
                             );
                         })}
                     </div>
-                </div>
-            </div>
+                </div >
+            </div >
 
             {confirmDelete && (
                 <div className="modal-overlay" onClick={() => setConfirmDelete(null)}>
@@ -2188,329 +2181,344 @@ function App() {
                         </div>
                     </div>
                 </div>
-            )}
+            )
+            }
 
-            {editModal && (
-                <div className="modal-overlay" onClick={() => setEditModal(null)}>
-                    <div className="modal info-modal" onClick={e => e.stopPropagation()}>
-                        <div className="modal-header">
-                            <h3>{t.editItem || 'Edit Item'}</h3>
-                            <button onClick={() => setEditModal(null)}><X size={20} /></button>
-                        </div>
-                        <div className="modal-body">
-                            {editMetadata && (
-                                <div style={{
-                                    marginBottom: 15,
-                                    fontSize: '0.85rem',
-                                    color: '#ddd',
-                                    background: 'rgba(255,255,255,0.06)',
-                                    padding: '12px',
-                                    borderRadius: 8,
-                                    display: 'flex',
-                                    flexWrap: 'wrap',
-                                    gap: '15px 25px',
-                                    border: '1px solid rgba(255,255,255,0.1)'
-                                }}>
-                                    {editMetadata.resolution && (
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                            <Maximize2 size={15} color="#46d369" />
-                                            <span style={{ fontWeight: 500 }}>{editMetadata.resolution}</span>
-                                        </div>
-                                    )}
-                                    {editMetadata.formattedSize && (
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                            <Save size={15} color="#e50914" />
-                                            <span style={{ fontWeight: 500 }}>{editMetadata.formattedSize}</span>
-                                        </div>
-                                    )}
-                                    {editMetadata.duration && (
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                            <Play size={15} color="#ff8c00" width={15} fill="#ff8c00" />
-                                            <span style={{ fontWeight: 500 }}>{editMetadata.duration}</span>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-                            <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: 5, color: '#aaa' }}>{t.name || 'Name'}</label>
-                            <input
-                                type="text"
-                                value={editName}
-                                onChange={(e) => setEditName(e.target.value)}
-                                className="modal-input"
-                                style={{ marginBottom: 20 }}
-                            />
-
-                            <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: 5, color: '#aaa' }}>{t.notesDetails || 'Notes / Details'}</label>
-                            <textarea
-                                value={editInfo}
-                                onChange={(e) => setEditInfo(e.target.value)}
-                                placeholder={t.writeSomething}
-                                style={{ height: 120 }}
-                            />
-                        </div>
-                        <div className="modal-footer">
-                            <button className="btn btn-primary" onClick={handleSaveEdit}><Save size={16} /> {t.save || 'Save'}</button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {moveModal && (
-                <div className="modal-overlay" style={{ zIndex: 6000 }} onClick={() => { setMoveModal(null); setMoveConflict(false); }}>
-                    <div className="modal move-modal" onClick={e => e.stopPropagation()} style={{ height: '70vh', display: 'flex', flexDirection: 'column' }}>
-                        <div className="modal-header">
-                            <h3>{moveModal.batch ? (t.moveItems || 'Move {count} Items').replace('{count}', moveModal.count) : (t.moveItem || 'Move Item')}</h3>
-                            <button onClick={() => { setMoveModal(null); setMoveConflict(false); }}><X size={20} /></button>
-                        </div>
-
-                        {moveConflict ? (
-                            <div className="modal-body" style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
-                                <FolderInput size={64} color="#e50914" />
-                                <h3 style={{ margin: '20px 0' }}>{t.fileConflict || 'File Conflict!'}</h3>
-                                <p style={{ color: '#aaa', marginBottom: 30 }}>{t.conflictMessage || 'Some files already exist in the destination. Overwrite them?'}</p>
-                                <div style={{ display: 'flex', gap: 10 }}>
-                                    <button className="btn btn-danger" onClick={() => handleMoveItem(true)}>{t.yesOverwrite || 'Yes, Overwrite All'}</button>
-                                    <button className="btn btn-grey" onClick={() => { setMoveModal(null); setMoveConflict(false); resetAndClose(); }}>{t.cancel || 'Cancel'}</button>
-                                </div>
+            {
+                editModal && (
+                    <div className="modal-overlay" onClick={() => setEditModal(null)}>
+                        <div className="modal info-modal" onClick={e => e.stopPropagation()}>
+                            <div className="modal-header">
+                                <h3>{t.editItem || 'Edit Item'}</h3>
+                                <button onClick={() => setEditModal(null)}><X size={20} /></button>
                             </div>
-                        ) : (
-                            <>
-                                <p style={{ marginBottom: 10, color: '#aaa' }}>{t.selectDestination || 'Select destination folder for'} <strong>{moveModal.batch ? (t.selectedItems || 'selected items') : moveModal.name}</strong>:</p>
-                                <div className="modal-body" style={{ flex: 1, overflowY: 'auto', border: '1px solid #333', borderRadius: 4, padding: 10 }}>
-                                    <div
-                                        className="folder-tree-item"
-                                        style={{
-                                            padding: '5px',
-                                            cursor: 'pointer',
-                                            background: targetFolder === '.' ? 'rgba(229, 9, 20, 0.2)' : 'transparent',
-                                            fontWeight: 'bold'
-                                        }}
-                                        onClick={() => setTargetFolder('.')}
-                                    >
-                                        <Folder size={14} style={{ marginRight: 5, color: '#ff8c00' }} />
-                                        {t.root || 'Root'}
+                            <div className="modal-body">
+                                {editMetadata && (
+                                    <div style={{
+                                        marginBottom: 15,
+                                        fontSize: '0.85rem',
+                                        color: '#ddd',
+                                        background: 'rgba(255,255,255,0.06)',
+                                        padding: '12px',
+                                        borderRadius: 8,
+                                        display: 'flex',
+                                        flexWrap: 'wrap',
+                                        gap: '15px 25px',
+                                        border: '1px solid rgba(255,255,255,0.1)'
+                                    }}>
+                                        {editMetadata.resolution && (
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                <Maximize2 size={15} color="#46d369" />
+                                                <span style={{ fontWeight: 500 }}>{editMetadata.resolution}</span>
+                                            </div>
+                                        )}
+                                        {editMetadata.formattedSize && (
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                <Save size={15} color="#e50914" />
+                                                <span style={{ fontWeight: 500 }}>{editMetadata.formattedSize}</span>
+                                            </div>
+                                        )}
+                                        {editMetadata.duration && (
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                <Play size={15} color="#ff8c00" width={15} fill="#ff8c00" />
+                                                <span style={{ fontWeight: 500 }}>{editMetadata.duration}</span>
+                                            </div>
+                                        )}
                                     </div>
-                                    {rootFolders.map(folder => (
-                                        <FolderNode key={folder.path} name={folder.name} path={folder.path} onSelect={setTargetFolder} selectedPath={targetFolder} expandedFolders={expandedFolders} toggleExpand={toggleFolderExpand} />
-                                    ))}
-                                </div>
-                                <div className="modal-footer">
-                                    <button className="btn btn-primary" disabled={targetFolder === null} onClick={() => handleMoveItem(false)}>
-                                        <FolderInput size={16} /> {t.move || 'Move'}
-                                    </button>
-                                    <button className="btn btn-grey" onClick={() => setMoveModal(null)}>{t.cancel}</button>
-                                </div>
-                            </>
-                        )}
-                    </div>
-                </div>
-            )}
+                                )}
+                                <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: 5, color: '#aaa' }}>{t.name || 'Name'}</label>
+                                <input
+                                    type="text"
+                                    value={editName}
+                                    onChange={(e) => setEditName(e.target.value)}
+                                    className="modal-input"
+                                    style={{ marginBottom: 20 }}
+                                />
 
-            {selectedMedia && !showVideoEditor && !showEditor && (
-                <div className="viewer" onClick={() => resetAndClose()} onContextMenu={(e) => { e.preventDefault(); if (zoomMode && !hasMoved) { setZoomMode(false); setZoomScale(1); } }}>
-                    <div className="viewer-controls">
-                        <div className="viewer-controls-inner">
-                            <button className="control-btn" data-tooltip={t.editInfoRename || 'Edit Info & Rename'} onClick={(e) => { e.stopPropagation(); openEditModal(selectedMedia); }} style={{ color: '#0071eb' }}>
-                                <Info size={18} />
-                            </button>
-                            <button className="control-btn" data-tooltip={t.move || 'Move'} onClick={(e) => { e.stopPropagation(); setMoveModal(selectedMedia); }} style={{ color: '#ff8c00' }}>
-                                <FolderInput size={18} />
-                            </button>
-                            <button className="control-btn" data-tooltip={t.delete || 'Delete'} onClick={(e) => { e.stopPropagation(); setConfirmDelete(selectedMedia); }} style={{ color: '#e50914' }}>
-                                <Trash2 size={18} />
-                            </button>
-                            {selectedMedia.type.startsWith('image/') && (
-                                <button className="control-btn" data-tooltip={t.editImage || 'Edit Image'} onClick={(e) => {
-                                    e.stopPropagation();
-                                    setShowEditor(true);
-                                }} style={{ color: '#46d369' }}>
-                                    <Scissors size={18} />
-                                </button>
+                                <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: 5, color: '#aaa' }}>{t.notesDetails || 'Notes / Details'}</label>
+                                <textarea
+                                    value={editInfo}
+                                    onChange={(e) => setEditInfo(e.target.value)}
+                                    placeholder={t.writeSomething}
+                                    style={{ height: 120 }}
+                                />
+                            </div>
+                            <div className="modal-footer">
+                                <button className="btn btn-primary" onClick={handleSaveEdit}><Save size={16} /> {t.save || 'Save'}</button>
+                            </div>
+                        </div>
+                    </div>
+                )
+            }
+
+            {
+                moveModal && (
+                    <div className="modal-overlay" style={{ zIndex: 6000 }} onClick={() => { setMoveModal(null); setMoveConflict(false); }}>
+                        <div className="modal move-modal" onClick={e => e.stopPropagation()} style={{ height: '70vh', display: 'flex', flexDirection: 'column' }}>
+                            <div className="modal-header">
+                                <h3>{moveModal.batch ? (t.moveItems || 'Move {count} Items').replace('{count}', moveModal.count) : (t.moveItem || 'Move Item')}</h3>
+                                <button onClick={() => { setMoveModal(null); setMoveConflict(false); }}><X size={20} /></button>
+                            </div>
+
+                            {moveConflict ? (
+                                <div className="modal-body" style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
+                                    <FolderInput size={64} color="#e50914" />
+                                    <h3 style={{ margin: '20px 0' }}>{t.fileConflict || 'File Conflict!'}</h3>
+                                    <p style={{ color: '#aaa', marginBottom: 30 }}>{t.conflictMessage || 'Some files already exist in the destination. Overwrite them?'}</p>
+                                    <div style={{ display: 'flex', gap: 10 }}>
+                                        <button className="btn btn-danger" onClick={() => handleMoveItem(true)}>{t.yesOverwrite || 'Yes, Overwrite All'}</button>
+                                        <button className="btn btn-grey" onClick={() => { setMoveModal(null); setMoveConflict(false); resetAndClose(); }}>{t.cancel || 'Cancel'}</button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <>
+                                    <p style={{ marginBottom: 10, color: '#aaa' }}>{t.selectDestination || 'Select destination folder for'} <strong>{moveModal.batch ? (t.selectedItems || 'selected items') : moveModal.name}</strong>:</p>
+                                    <div className="modal-body" style={{ flex: 1, overflowY: 'auto', border: '1px solid #333', borderRadius: 4, padding: 10 }}>
+                                        <div
+                                            className="folder-tree-item"
+                                            style={{
+                                                padding: '5px',
+                                                cursor: 'pointer',
+                                                background: targetFolder === '.' ? 'rgba(229, 9, 20, 0.2)' : 'transparent',
+                                                fontWeight: 'bold'
+                                            }}
+                                            onClick={() => setTargetFolder('.')}
+                                        >
+                                            <Folder size={14} style={{ marginRight: 5, color: '#ff8c00' }} />
+                                            {t.root || 'Root'}
+                                        </div>
+                                        {rootFolders.map(folder => (
+                                            <FolderNode key={folder.path} name={folder.name} path={folder.path} onSelect={setTargetFolder} selectedPath={targetFolder} expandedFolders={expandedFolders} toggleExpand={toggleFolderExpand} />
+                                        ))}
+                                    </div>
+                                    <div className="modal-footer">
+                                        <button className="btn btn-primary" disabled={targetFolder === null} onClick={() => handleMoveItem(false)}>
+                                            <FolderInput size={16} /> {t.move || 'Move'}
+                                        </button>
+                                        <button className="btn btn-grey" onClick={() => setMoveModal(null)}>{t.cancel}</button>
+                                    </div>
+                                </>
                             )}
-                            <button className="control-btn" data-tooltip={t.close || 'Close'} onClick={() => resetAndClose()}><X size={30} /></button>
                         </div>
                     </div>
-                    {!zoomMode && selectedMediaIndex > 0 && <div className="nav-zone prev" onClick={(e) => { e.stopPropagation(); navigateMedia(-1); }}><ChevronLeft size={60} className="nav-arrow" /></div>}
-                    <div
-                        className="viewer-inner"
-                        onWheel={handleZoomWheel}
-                        onMouseDown={handleMouseDown}
-                        onMouseMove={handleMouseMove}
-                        onMouseUp={handleMouseUp}
-                        onMouseLeave={handleMouseUp}
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            if (hasMoved) { setHasMoved(false); return; }
+                )
+            }
 
-                            if (selectedMedia.type.startsWith('video/') && videoRef.current) {
-                                if (zoomMode || e.target === e.currentTarget) {
-                                    if (videoRef.current.paused) videoRef.current.play();
-                                    else videoRef.current.pause();
+            {
+                selectedMedia && !showVideoEditor && !showEditor && (
+                    <div className="viewer" onClick={() => resetAndClose()} onContextMenu={(e) => { e.preventDefault(); if (zoomMode && !hasMoved) { setZoomMode(false); setZoomScale(1); } }}>
+                        <div className="viewer-controls">
+                            <div className="viewer-controls-inner">
+                                <button className="control-btn" data-tooltip={t.editInfoRename || 'Edit Info & Rename'} onClick={(e) => { e.stopPropagation(); openEditModal(selectedMedia); }} style={{ color: '#0071eb' }}>
+                                    <Info size={18} />
+                                </button>
+                                <button className="control-btn" data-tooltip={t.move || 'Move'} onClick={(e) => { e.stopPropagation(); setMoveModal(selectedMedia); }} style={{ color: '#ff8c00' }}>
+                                    <FolderInput size={18} />
+                                </button>
+                                <button className="control-btn" data-tooltip={t.delete || 'Delete'} onClick={(e) => { e.stopPropagation(); setConfirmDelete(selectedMedia); }} style={{ color: '#e50914' }}>
+                                    <Trash2 size={18} />
+                                </button>
+                                {selectedMedia.type.startsWith('image/') && (
+                                    <button className="control-btn" data-tooltip={t.editImage || 'Edit Image'} onClick={(e) => {
+                                        e.stopPropagation();
+                                        setShowEditor(true);
+                                    }} style={{ color: '#46d369' }}>
+                                        <Scissors size={18} />
+                                    </button>
+                                )}
+                                <button className="control-btn" data-tooltip={t.close || 'Close'} onClick={() => resetAndClose()}><X size={30} /></button>
+                            </div>
+                        </div>
+                        {!zoomMode && selectedMediaIndex > 0 && <div className="nav-zone prev" onClick={(e) => { e.stopPropagation(); navigateMedia(-1); }}><ChevronLeft size={60} className="nav-arrow" /></div>}
+                        <div
+                            className="viewer-inner"
+                            onWheel={handleZoomWheel}
+                            onMouseDown={handleMouseDown}
+                            onMouseMove={handleMouseMove}
+                            onMouseUp={handleMouseUp}
+                            onMouseLeave={handleMouseUp}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                if (hasMoved) { setHasMoved(false); return; }
+
+                                if (selectedMedia.type.startsWith('video/') && videoRef.current) {
+                                    if (zoomMode || e.target === e.currentTarget) {
+                                        if (videoRef.current.paused) videoRef.current.play();
+                                        else videoRef.current.pause();
+                                    }
                                 }
-                            }
-                        }}
-                        style={{ cursor: zoomMode ? (isPanning ? 'grabbing' : 'grab') : 'default', pointerEvents: 'auto' }}
-                    >
-                        {selectedMedia.type.startsWith('image/') ? (
-                            <img
-                                src={getMediaUrl(selectedMedia.path)}
-                                className="full-media"
-                                style={{ transform: `scale(${zoomScale})`, transformOrigin: `${zoomOrigin.x}% ${zoomOrigin.y}%`, transition: (zoomScale === 1 || isPanning) ? 'none' : 'transform 0.3s' }}
-                                draggable="false"
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                }}
-                            />
-                        ) : (
-                            <video
-                                ref={videoRef}
-                                key={selectedMedia.path}
-                                src={getMediaUrl(selectedMedia.path)}
-                                className={`full-media ${zoomMode ? 'zoomed' : ''}`}
-                                controls={true}
-                                autoPlay={autoPlaySetting}
-                                style={{
-                                    display: (showVideoEditor || showEditor) ? 'none' : 'block',
-                                    transform: `scale(${zoomScale})`,
-                                    transformOrigin: `${zoomOrigin.x}% ${zoomOrigin.y}%`,
-                                    transition: (zoomScale === 1 || isPanning) ? 'none' : 'transform 0.3s',
-                                    pointerEvents: zoomMode ? 'none' : 'auto'
-                                }}
-                                draggable="false"
-                                onPlay={() => setIsPlaying(true)}
-                                onPause={() => setIsPlaying(false)}
-                                onLoadedMetadata={() => {
-                                    if (videoRef.current) videoRef.current.volume = 1;
-                                }}
-                            />
-                        )}
-                    </div>
-                    {!zoomMode && selectedMediaIndex < sortedMediaOnly.length - 1 && <div className="nav-zone next" onClick={(e) => { e.stopPropagation(); navigateMedia(1); }}><ChevronRight size={60} className="nav-arrow" /></div>}
-                </div>
-            )}
-
-            {settingsModal && (
-                <div className="modal-overlay" onClick={() => setSettingsModal(false)}>
-                    <div className="modal settings-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 450 }}>
-                        <div className="modal-header">
-                            <h3>{t.settings || 'Settings'}</h3>
-                            <button onClick={() => setSettingsModal(false)}><X size={20} /></button>
+                            }}
+                            style={{ cursor: zoomMode ? (isPanning ? 'grabbing' : 'grab') : 'default', pointerEvents: 'auto' }}
+                        >
+                            {selectedMedia.type.startsWith('image/') ? (
+                                <img
+                                    src={getMediaUrl(selectedMedia.path)}
+                                    className="full-media"
+                                    style={{ transform: `scale(${zoomScale})`, transformOrigin: `${zoomOrigin.x}% ${zoomOrigin.y}%`, transition: (zoomScale === 1 || isPanning) ? 'none' : 'transform 0.3s' }}
+                                    draggable="false"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                    }}
+                                />
+                            ) : (
+                                <video
+                                    ref={videoRef}
+                                    key={selectedMedia.path}
+                                    src={getMediaUrl(selectedMedia.path)}
+                                    className={`full-media ${zoomMode ? 'zoomed' : ''}`}
+                                    controls={true}
+                                    autoPlay={autoPlaySetting}
+                                    style={{
+                                        display: (showVideoEditor || showEditor) ? 'none' : 'block',
+                                        transform: `scale(${zoomScale})`,
+                                        transformOrigin: `${zoomOrigin.x}% ${zoomOrigin.y}%`,
+                                        transition: (zoomScale === 1 || isPanning) ? 'none' : 'transform 0.3s',
+                                        pointerEvents: zoomMode ? 'none' : 'auto'
+                                    }}
+                                    draggable="false"
+                                    onPlay={() => setIsPlaying(true)}
+                                    onPause={() => setIsPlaying(false)}
+                                    onLoadedMetadata={() => {
+                                        if (videoRef.current) videoRef.current.volume = 1;
+                                    }}
+                                />
+                            )}
                         </div>
-                        <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-                            <div>
-                                <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: 5, color: '#aaa' }}>{t.galleryPath || 'Gallery Path'}</label>
-                                <input
-                                    type="text"
-                                    value={settingsData.galleryPath}
-                                    onChange={(e) => setSettingsData({ ...settingsData, galleryPath: e.target.value })}
-                                    className="modal-input"
-                                />
-                            </div>
+                        {!zoomMode && selectedMediaIndex < sortedMediaOnly.length - 1 && <div className="nav-zone next" onClick={(e) => { e.stopPropagation(); navigateMedia(1); }}><ChevronRight size={60} className="nav-arrow" /></div>}
+                    </div>
+                )
+            }
 
-                            <div>
-                                <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: 5, color: '#aaa' }}>{t.browserPath || 'Browser Path'}</label>
-                                <input
-                                    type="text"
-                                    value={settingsData.browserPath}
-                                    onChange={(e) => setSettingsData({ ...settingsData, browserPath: e.target.value })}
-                                    className="modal-input"
-                                    placeholder="default"
-                                />
+            {
+                settingsModal && (
+                    <div className="modal-overlay" onClick={() => setSettingsModal(false)}>
+                        <div className="modal settings-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 450 }}>
+                            <div className="modal-header">
+                                <h3>{t.settings || 'Settings'}</h3>
+                                <button onClick={() => setSettingsModal(false)}><X size={20} /></button>
                             </div>
+                            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                                <div>
+                                    <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: 5, color: '#aaa' }}>{t.galleryPath || 'Gallery Path'}</label>
+                                    <input
+                                        type="text"
+                                        value={settingsData.galleryPath}
+                                        onChange={(e) => setSettingsData({ ...settingsData, galleryPath: e.target.value })}
+                                        className="modal-input"
+                                    />
+                                </div>
 
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                                <input
-                                    type="checkbox"
-                                    checked={settingsData.autoPlay}
-                                    onChange={(e) => setSettingsData({ ...settingsData, autoPlay: e.target.checked })}
-                                    id="autoplay-checkbox"
-                                />
-                                <label htmlFor="autoplay-checkbox" style={{ color: '#ccc', cursor: 'pointer' }}>{t.autoPlay || 'Auto Play Videos'}</label>
-                            </div>
+                                <div>
+                                    <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: 5, color: '#aaa' }}>{t.browserPath || 'Browser Path'}</label>
+                                    <input
+                                        type="text"
+                                        value={settingsData.browserPath}
+                                        onChange={(e) => setSettingsData({ ...settingsData, browserPath: e.target.value })}
+                                        className="modal-input"
+                                        placeholder="default"
+                                    />
+                                </div>
 
-                            <div>
-                                <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: 5, color: '#aaa' }}>{t.language || 'Language'}</label>
-                                <select
-                                    value={settingsData.language}
-                                    onChange={(e) => setSettingsData({ ...settingsData, language: e.target.value })}
-                                    style={{ width: '100%', padding: '10px', borderRadius: 4, border: '1px solid #333', background: '#1a1a1a', color: '#fff' }}
-                                >
-                                    <option value="en">English</option>
-                                    <option value="tr">Türkçe</option>
-                                </select>
-                            </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={settingsData.autoPlay}
+                                        onChange={(e) => setSettingsData({ ...settingsData, autoPlay: e.target.checked })}
+                                        id="autoplay-checkbox"
+                                    />
+                                    <label htmlFor="autoplay-checkbox" style={{ color: '#ccc', cursor: 'pointer' }}>{t.autoPlay || 'Auto Play Videos'}</label>
+                                </div>
 
-                            <div>
-                                <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: 5, color: '#aaa' }}>{t.theme || 'Theme'}</label>
-                                <div style={{ display: 'flex', gap: 10 }}>
-                                    <button
-                                        className={`btn ${settingsData.theme === 'system' ? 'btn-primary' : 'btn-grey'}`}
-                                        onClick={() => setSettingsData({ ...settingsData, theme: 'system' })}
-                                        style={{ flex: 1 }}
+                                <div>
+                                    <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: 5, color: '#aaa' }}>{t.language || 'Language'}</label>
+                                    <select
+                                        value={settingsData.language}
+                                        onChange={(e) => setSettingsData({ ...settingsData, language: e.target.value })}
+                                        style={{ width: '100%', padding: '10px', borderRadius: 4, border: '1px solid #333', background: '#1a1a1a', color: '#fff' }}
                                     >
-                                        {t.themeSystem || 'System'}
-                                    </button>
-                                    <button
-                                        className={`btn ${settingsData.theme === 'dark' ? 'btn-primary' : 'btn-grey'}`}
-                                        onClick={() => setSettingsData({ ...settingsData, theme: 'dark' })}
-                                        style={{ flex: 1 }}
-                                    >
-                                        {t.themeDark || 'Dark'}
-                                    </button>
-                                    <button
-                                        className={`btn ${settingsData.theme === 'light' ? 'btn-primary' : 'btn-grey'}`}
-                                        onClick={() => setSettingsData({ ...settingsData, theme: 'light' })}
-                                        style={{ flex: 1 }}
-                                    >
-                                        {t.themeLight || 'Light'}
-                                    </button>
+                                        <option value="en">English</option>
+                                        <option value="tr">Türkçe</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: 5, color: '#aaa' }}>{t.theme || 'Theme'}</label>
+                                    <div style={{ display: 'flex', gap: 10 }}>
+                                        <button
+                                            className={`btn ${settingsData.theme === 'system' ? 'btn-primary' : 'btn-grey'}`}
+                                            onClick={() => setSettingsData({ ...settingsData, theme: 'system' })}
+                                            style={{ flex: 1 }}
+                                        >
+                                            {t.themeSystem || 'System'}
+                                        </button>
+                                        <button
+                                            className={`btn ${settingsData.theme === 'dark' ? 'btn-primary' : 'btn-grey'}`}
+                                            onClick={() => setSettingsData({ ...settingsData, theme: 'dark' })}
+                                            style={{ flex: 1 }}
+                                        >
+                                            {t.themeDark || 'Dark'}
+                                        </button>
+                                        <button
+                                            className={`btn ${settingsData.theme === 'light' ? 'btn-primary' : 'btn-grey'}`}
+                                            onClick={() => setSettingsData({ ...settingsData, theme: 'light' })}
+                                            style={{ flex: 1 }}
+                                        >
+                                            {t.themeLight || 'Light'}
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                        <div className="modal-footer">
-                            <button className="btn btn-primary" onClick={saveSettings}><Save size={16} /> {t.save || 'Save'}</button>
-                            <button className="btn btn-grey" onClick={() => setSettingsModal(false)}>{t.cancel || 'Cancel'}</button>
+                            <div className="modal-footer">
+                                <button className="btn btn-primary" onClick={saveSettings}><Save size={16} /> {t.save || 'Save'}</button>
+                                <button className="btn btn-grey" onClick={() => setSettingsModal(false)}>{t.cancel || 'Cancel'}</button>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )
+            }
 
 
-            {toast && (
-                <div className="toast-notification">
-                    <CheckCircle size={20} color="#46d369" />
-                    <span>{toast}</span>
-                </div>
-            )}
+            {
+                toast && (
+                    <div className="toast-notification">
+                        <CheckCircle size={20} color="#46d369" />
+                        <span>{toast}</span>
+                    </div>
+                )
+            }
 
             <div className="footer">
                 Developed by <a href="https://github.com/aytackayin" target="_blank" rel="noopener noreferrer">Aytac KAYIN</a>
             </div>
 
-            {showEditor && (editImageItem || selectedMedia) && (
-                <ImageEditor
-                    item={editImageItem || selectedMedia}
-                    t={t}
-                    onClose={() => { setShowEditor(false); setEditImageItem(null); }}
-                    onSave={handleSaveEditedImage}
-                />
-            )}
+            {
+                showEditor && (editImageItem || selectedMedia) && (
+                    <ImageEditor
+                        item={editImageItem || selectedMedia}
+                        t={t}
+                        onClose={() => { setShowEditor(false); setEditImageItem(null); }}
+                        onSave={handleSaveEditedImage}
+                    />
+                )
+            }
 
-            {showVideoEditor && (editVideoItem || selectedMedia) && (
-                <VideoEditor
-                    key={(editVideoItem || selectedMedia).path}
-                    item={editVideoItem || selectedMedia}
-                    t={t}
-                    refreshKey={refreshKey}
-                    onClose={() => {
-                        setShowVideoEditor(false);
-                        setEditVideoItem(null);
-                        setSelectedMediaIndex(-1);
-                    }}
-                    onSave={handleSaveEditedVideo}
-                />
-            )}
-        </div>
+            {
+                showVideoEditor && (editVideoItem || selectedMedia) && (
+                    <VideoEditor
+                        key={(editVideoItem || selectedMedia).path}
+                        item={editVideoItem || selectedMedia}
+                        t={t}
+                        refreshKey={refreshKey}
+                        onClose={() => {
+                            setShowVideoEditor(false);
+                            setEditVideoItem(null);
+                            setSelectedMediaIndex(-1);
+                        }}
+                        onSave={handleSaveEditedVideo}
+                    />
+                )
+            }
+        </div >
     );
 }
 export default App;
