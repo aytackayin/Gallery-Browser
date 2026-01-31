@@ -698,7 +698,7 @@ const VideoEditor = ({ item, t, onSave, onClose }) => {
                                         />
                                     ))}
                                     <div style={{ position: 'absolute', top: -25, left: 0, background: '#e50914', fontSize: '0.75rem', color: 'white', padding: '2px 6px', borderRadius: '4px', whiteSpace: 'nowrap' }}>
-                                        {Math.round(selectedClip.crop.w)}% x {Math.round(selectedClip.crop.h)}%
+                                        {Math.round((selectedClip.crop.w / 100) * (videoRef.current?.videoWidth || 0))}px x {Math.round((selectedClip.crop.h / 100) * (videoRef.current?.videoHeight || 0))}px
                                     </div>
                                 </div>
                             )}

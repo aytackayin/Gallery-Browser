@@ -563,6 +563,16 @@ app.post('/api/process-video', async (req, res) => {
         const videoLabels = [];
         const audioLabels = [];
 
+        // Proje baz boyutunu ilk klibin (crop edilmişse o boyut, edilmemişse orijinal boyut) üzerinden belirle
+        // Not: ffmpeg-probe veya frontend'den gelen cropPixels'i kullanabiliriz.
+        // Ama en garantisi kliplerin kendi içindeki crop oranlarını kullanmak.
+
+        const first = clips[0];
+        // Proje boyutunu belirlemek için ffprobe ile ilk girişi alalım (Eğer frontend cropPixels göndermemişse)
+        // Ama biz zaten cropPixels gönderiyoruz.
+        const targetW = first.cropPixels?.w || 1920;
+        const targetH = first.cropPixels?.h || 1080;
+
         clips.forEach((clip, i) => {
             const inputIdx = uniquePaths.indexOf(clip.path);
             const vLabel = `v${i}`;
@@ -583,7 +593,8 @@ app.post('/api/process-video', async (req, res) => {
                 `trim=start=${clip.start}:duration=${clip.duration},setpts=PTS-STARTPTS`,
                 `crop=w=${cw}:h=${ch}:x=${cx}:y=${cy}`,
                 `eq=brightness=${b}:contrast=${c}:saturation=${s}:gamma=${g}`,
-                `scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p`
+                // Tüm klipleri projenin (ilk klibin) boyutuna uydur (padding eklemeden, gerekirse esneterek veya crop yaparak)
+                `scale=${targetW}:${targetH}:force_original_aspect_ratio=increase,crop=${targetW}:${targetH},setsar=1,format=yuv420p`
             ];
 
             if (clip.rotate) {
