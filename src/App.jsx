@@ -688,6 +688,44 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
         setSelectedClipId(null);
     };
 
+    const setAspectRatio = (ratio) => {
+        const clip = getSelectedClip();
+        if (!clip) return;
+
+        // Videonun veya resmin gerçek boyutlarını alalım
+        let sourceW = 1920;
+        let sourceH = 1080;
+
+        if (videoRef.current && videoRef.current.videoWidth) {
+            sourceW = videoRef.current.videoWidth;
+            sourceH = videoRef.current.videoHeight;
+        }
+
+        const sourceRatio = sourceW / sourceH;
+        let newW = 100;
+        let newH = 100;
+
+        if (ratio !== 'free') {
+            // k = Hedef Oran / Kaynak Oran
+            const k = ratio / sourceRatio;
+
+            if (k > 1) {
+                // Hedef oran videodan daha genişse: Genişlik %100, Yükseklik kısalır
+                newW = 100;
+                newH = 100 / k;
+            } else {
+                // Hedef oran videodan daha darsa: Yükseklik %100, Genişlik kısalır
+                newH = 100;
+                newW = 100 * k;
+            }
+        }
+
+        const newX = (100 - newW) / 2;
+        const newY = (100 - newH) / 2;
+
+        updateClip(clip.id, { crop: { x: newX, y: newY, w: newW, h: newH } });
+    };
+
     const selectedClip = getSelectedClip();
 
     const packClips = () => {
@@ -1008,6 +1046,17 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5 }}>
                                     <button className="action-btn" onClick={() => updateClip(selectedClipId, { rotate: (selectedClip.rotate + 90) % 360 })}><RotateCw size={14} style={{ marginRight: 10 }} /> Rotate</button>
                                     <button className={`action-btn ${selectedClip.flipH ? 'active' : ''}`} onClick={() => updateClip(selectedClipId, { flipH: !selectedClip.flipH })}><Maximize2 size={14} style={{ transform: 'rotate(90deg)', marginRight: 10 }} /> Flip H</button>
+                                </div>
+                                <div style={{ marginTop: 10 }}>
+                                    <label style={{ fontSize: '0.75rem', color: '#888', marginBottom: 8, display: 'block' }}>Aspect Ratio</label>
+                                    <div className="ratio-presets" style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                                        <button className="action-btn" style={{ padding: '2px 8px', fontSize: '0.7rem' }} onClick={() => setAspectRatio('free')}>{t.free || 'Free'}</button>
+                                        <button className="action-btn" style={{ padding: '2px 8px', fontSize: '0.7rem' }} onClick={() => setAspectRatio(1)}>1:1</button>
+                                        <button className="action-btn" style={{ padding: '2px 8px', fontSize: '0.7rem' }} onClick={() => setAspectRatio(16 / 9)}>16:9</button>
+                                        <button className="action-btn" style={{ padding: '2px 8px', fontSize: '0.7rem' }} onClick={() => setAspectRatio(9 / 16)}>9:16</button>
+                                        <button className="action-btn" style={{ padding: '2px 8px', fontSize: '0.7rem' }} onClick={() => setAspectRatio(4 / 3)}>4:3</button>
+                                        <button className="action-btn" style={{ padding: '2px 8px', fontSize: '0.7rem' }} onClick={() => setAspectRatio(21 / 9)}>21:9</button>
+                                    </div>
                                 </div>
                             </div>
                         ) : (
