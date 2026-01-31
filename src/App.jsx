@@ -291,7 +291,17 @@ const ImageEditor = ({ item, t, onSave, onClose }) => {
     );
 };
 
-const VideoEditor = ({ item, t, onSave, onClose }) => {
+const formatTime = (seconds) => {
+    try {
+        if (!seconds || !isFinite(seconds) || seconds < 0) return "00:00:00";
+        const date = new Date(seconds * 1000);
+        return date.toISOString().substr(11, 8);
+    } catch (e) {
+        return "00:00:00";
+    }
+};
+
+const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) => {
     const videoRef = useRef(null);
     const containerRef = useRef(null);
     const [duration, setDuration] = useState(0);
@@ -328,10 +338,11 @@ const VideoEditor = ({ item, t, onSave, onClose }) => {
     const [saveAsName, setSaveAsName] = useState(item.name.replace(/\.[^/.]+$/, ""));
     const [saveAsExt, setSaveAsExt] = useState(item.name.split('.').pop() || 'mp4');
 
-    const [refreshKey] = useState(Date.now());
+    // Use a unique key for the editor to prevent socket/conflict with viewer
+    const [localRefreshKey] = useState(Date.now());
     const videoUrl = useMemo(() =>
-        `http://localhost:3001/media/${encodeURIComponent(item.path)}?t=${refreshKey}`,
-        [item.path, refreshKey]
+        `http://localhost:3001/media/${encodeURIComponent(item.path)}?t=${localRefreshKey}`,
+        [item.path, localRefreshKey]
     );
 
     const getSelectedClip = () => {
@@ -380,19 +391,33 @@ const VideoEditor = ({ item, t, onSave, onClose }) => {
     }, [tracks]); // Re-calc when tracks change
 
     useEffect(() => {
+        const video = videoRef.current;
+        if (!video) return;
+        video.load();
+        // Fallback: If duration isn't set after 3s, try to kick it
+        const timer = setTimeout(() => {
+            if (!duration && video.readyState < 1) {
+                video.src = video.src; // Re-assign src to kickstart
+                video.load();
+            }
+        }, 3000);
+        return () => clearTimeout(timer);
+    }, [videoUrl]);
+
+    useEffect(() => {
         window.addEventListener('resize', updateVideoRect);
         return () => window.removeEventListener('resize', updateVideoRect);
     }, []);
 
     const onMetadata = (e) => {
-        const d = e.target.duration;
+        let d = e.target.duration;
+        if (!isFinite(d) || d <= 0) return;
         setDuration(d);
-        // Initially set main video duration if it's 0
         setTracks(prev => prev.map(t => ({
             ...t,
-            clips: t.clips.map(c => c.id === 'clip-0' && c.duration === 0 ? { ...c, duration: d } : c)
+            clips: t.clips.map(c => c.id === 'clip-0' && (c.duration === 0 || !isFinite(c.duration)) ? { ...c, duration: d } : c)
         })));
-        updateVideoRect();
+        setTimeout(updateVideoRect, 100);
     };
 
     const togglePlay = () => {
@@ -659,16 +684,47 @@ const VideoEditor = ({ item, t, onSave, onClose }) => {
                     {/* Right: Viewer */}
                     <div className="editor-main-area" style={{ display: 'flex', flexDirection: 'column', background: '#050505', borderRadius: 8, overflow: 'hidden' }}>
                         <div className="video-viewport" ref={containerRef} style={{ position: 'relative', flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            {(!duration || duration === -1) && (
+                                <div style={{ position: 'absolute', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+                                    {duration === -1 ? (
+                                        <span style={{ color: 'var(--netflix-red)', fontSize: '0.8rem' }}>Error loading media. Try again.</span>
+                                    ) : (
+                                        <>
+                                            <div className="spinner-small" style={{ width: 40, height: 40 }} />
+                                            <span style={{ color: '#888', fontSize: '0.8rem' }}>Loading media...</span>
+                                        </>
+                                    )}
+                                </div>
+                            )}
                             <video
                                 ref={videoRef}
                                 src={videoUrl}
-                                onLoadedMetadata={onMetadata}
-                                onLoadedData={updateVideoRect}
+                                preload="auto"
+                                autoPlay={true}
+                                muted={true}
+                                onLoadedMetadata={(e) => {
+                                    onMetadata(e);
+                                    if (videoRef.current) videoRef.current.pause();
+                                }}
+                                onDurationChange={onMetadata}
+                                onLoadedData={(e) => {
+                                    updateVideoRect();
+                                    if (videoRef.current && videoRef.current.duration) {
+                                        setDuration(videoRef.current.duration);
+                                    }
+                                }}
                                 onCanPlay={() => {
                                     updateVideoRect();
-                                    if (videoRef.current && selectedClip) videoRef.current.volume = selectedClip.volume / 100;
+                                    if (videoRef.current) {
+                                        videoRef.current.muted = false;
+                                        if (selectedClip) videoRef.current.volume = selectedClip.volume / 100;
+                                    }
                                 }}
                                 onTimeUpdate={handleTimeUpdate}
+                                onError={(e) => {
+                                    console.error("Video Editor Error:", e);
+                                    setDuration(-1);
+                                }}
                                 playsInline
                                 style={{
                                     position: 'absolute',
@@ -748,7 +804,7 @@ const VideoEditor = ({ item, t, onSave, onClose }) => {
                                 <button className="action-btn" onClick={packClips} title="Pack Clips (Remove Gaps)"><Droplet size={14} /></button>
                             </div>
                             <div style={{ flex: 1, textAlign: 'center', fontSize: '0.85rem', color: '#888', fontFamily: 'monospace' }}>
-                                {new Date(currentTime * 1000).toISOString().substr(11, 8)} / {new Date(duration * 1000).toISOString().substr(11, 8)}
+                                {formatTime(currentTime)} / {formatTime(duration)}
                             </div>
                         </div>
 
@@ -779,8 +835,8 @@ const VideoEditor = ({ item, t, onSave, onClose }) => {
                                                 }}
                                                 style={{
                                                     position: 'absolute',
-                                                    left: `${(clip.offset / (duration || 1)) * 100}%`,
-                                                    width: `${(clip.duration / (duration || 1)) * 100}%`,
+                                                    left: `${(clip.offset / (Math.max(0.1, duration))) * 100}%`,
+                                                    width: `${(clip.duration / (Math.max(0.1, duration))) * 100}%`,
                                                     height: '100%',
                                                     background: clip.id === selectedClipId ? 'rgba(229, 9, 20, 0.4)' : 'rgba(229, 9, 20, 0.1)',
                                                     border: clip.id === selectedClipId ? '1px solid #e50914' : '1px solid #333',
@@ -977,6 +1033,8 @@ function App() {
     const [toast, setToast] = useState(null); // { message: string, type: 'success' | 'error' }
     const [showEditor, setShowEditor] = useState(false);
     const [showVideoEditor, setShowVideoEditor] = useState(false);
+    const [editVideoItem, setEditVideoItem] = useState(null); // Standalone edit item
+    const [editImageItem, setEditImageItem] = useState(null); // Standalone edit item
     const [refreshKey, setRefreshKey] = useState(Date.now());
 
     // ... (Existing states remain)
@@ -1103,12 +1161,13 @@ function App() {
 
 
     useEffect(() => {
-        if (selectedMediaIndex !== -1 || confirmDelete || editModal || moveModal || showEditor) {
+        if (selectedMediaIndex !== -1 || confirmDelete || editModal || moveModal || showEditor || showVideoEditor) {
             document.body.style.overflow = 'hidden';
+            if (videoRef.current) videoRef.current.pause();
         } else {
             document.body.style.overflow = 'auto';
         }
-    }, [selectedMediaIndex, confirmDelete, editModal, moveModal, showEditor]);
+    }, [selectedMediaIndex, confirmDelete, editModal, moveModal, showEditor, showVideoEditor]);
 
     const fetchItems = async (path) => {
         setLoading(true);
@@ -1388,15 +1447,19 @@ function App() {
 
     const handleSaveEditedImage = async (dataUrl) => {
         try {
+            const currentItem = editImageItem || selectedMedia;
+            if (!currentItem) return;
+
             const res = await fetch('/api/save-image', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ path: selectedMedia.path, imageData: dataUrl })
+                body: JSON.stringify({ path: currentItem.path, imageData: dataUrl })
             });
             const data = await res.json();
             if (data.success) {
                 setRefreshKey(Date.now());
                 setShowEditor(false);
+                setEditImageItem(null);
                 setToast(t.imageSaved || 'Image saved successfully');
                 setTimeout(() => setToast(null), 3000);
             } else {
@@ -1409,11 +1472,14 @@ function App() {
 
     const handleSaveEditedVideo = async (timeline, options = {}) => {
         try {
+            const currentItem = editVideoItem || selectedMedia;
+            if (!currentItem) return;
+
             const res = await fetch('/api/process-video', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    path: selectedMedia.path,
+                    path: currentItem.path,
                     timeline,
                     newPath: options.newName
                 })
@@ -1422,6 +1488,8 @@ function App() {
             if (data.success) {
                 setRefreshKey(Date.now());
                 setShowVideoEditor(false);
+                setEditVideoItem(null);
+                setSelectedMediaIndex(-1); // Safety
                 setToast(t.videoSaved || 'Video processed successfully');
                 setTimeout(() => {
                     setToast(null);
@@ -1688,11 +1756,12 @@ function App() {
                                             {(item.type.startsWith('image/') || item.type.startsWith('video/')) && (
                                                 <button className="action-btn edit-image-btn" data-tooltip={item.type.startsWith('image/') ? (t.editImage || 'Edit Image') : (t.editVideo || 'Edit Video')} onClick={(e) => {
                                                     e.stopPropagation();
-                                                    const idx = sortedMediaOnly.findIndex(m => m.path === item.path);
-                                                    if (idx !== -1) {
-                                                        setSelectedMediaIndex(idx);
-                                                        if (item.type.startsWith('image/')) setShowEditor(true);
-                                                        else setShowVideoEditor(true);
+                                                    if (item.type.startsWith('image/')) {
+                                                        setEditImageItem(item);
+                                                        setShowEditor(true);
+                                                    } else {
+                                                        setEditVideoItem(item);
+                                                        setShowVideoEditor(true);
                                                     }
                                                 }} style={{ color: '#46d369' }}>
                                                     <Scissors size={14} />
@@ -1842,7 +1911,7 @@ function App() {
                 </div>
             )}
 
-            {selectedMedia && (
+            {selectedMedia && !showVideoEditor && !showEditor && (
                 <div className="viewer" onClick={() => resetAndClose()} onContextMenu={(e) => { e.preventDefault(); if (zoomMode && !hasMoved) { setZoomMode(false); setZoomScale(1); } }}>
                     <div className="viewer-controls">
                         <div className="viewer-controls-inner">
@@ -1855,11 +1924,10 @@ function App() {
                             <button className="control-btn" data-tooltip={t.delete || 'Delete'} onClick={(e) => { e.stopPropagation(); setConfirmDelete(selectedMedia); }} style={{ color: '#e50914' }}>
                                 <Trash2 size={18} />
                             </button>
-                            {(selectedMedia.type.startsWith('image/') || selectedMedia.type.startsWith('video/')) && (
-                                <button className="control-btn" data-tooltip={selectedMedia.type.startsWith('image/') ? (t.editImage || 'Edit Image') : (t.editVideo || 'Edit Video')} onClick={(e) => {
+                            {selectedMedia.type.startsWith('image/') && (
+                                <button className="control-btn" data-tooltip={t.editImage || 'Edit Image'} onClick={(e) => {
                                     e.stopPropagation();
-                                    if (selectedMedia.type.startsWith('image/')) setShowEditor(true);
-                                    else setShowVideoEditor(true);
+                                    setShowEditor(true);
                                 }} style={{ color: '#46d369' }}>
                                     <Scissors size={18} />
                                 </button>
@@ -1907,12 +1975,18 @@ function App() {
                                 controls={true}
                                 autoPlay={autoPlaySetting}
                                 style={{
+                                    display: (showVideoEditor || showEditor) ? 'none' : 'block',
                                     transform: `scale(${zoomScale})`,
                                     transformOrigin: `${zoomOrigin.x}% ${zoomOrigin.y}%`,
                                     transition: (zoomScale === 1 || isPanning) ? 'none' : 'transform 0.3s',
                                     pointerEvents: zoomMode ? 'none' : 'auto'
                                 }}
                                 draggable="false"
+                                onPlay={() => setIsPlaying(true)}
+                                onPause={() => setIsPlaying(false)}
+                                onLoadedMetadata={() => {
+                                    if (videoRef.current) videoRef.current.volume = 1;
+                                }}
                             />
                         )}
                     </div>
@@ -2018,20 +2092,26 @@ function App() {
                 Developed by <a href="https://github.com/aytackayin" target="_blank" rel="noopener noreferrer">Aytac KAYIN</a>
             </div>
 
-            {showEditor && selectedMedia && (
+            {showEditor && (editImageItem || selectedMedia) && (
                 <ImageEditor
-                    item={selectedMedia}
+                    item={editImageItem || selectedMedia}
                     t={t}
-                    onClose={() => setShowEditor(false)}
+                    onClose={() => { setShowEditor(false); setEditImageItem(null); }}
                     onSave={handleSaveEditedImage}
                 />
             )}
 
-            {showVideoEditor && selectedMedia && (
+            {showVideoEditor && (editVideoItem || selectedMedia) && (
                 <VideoEditor
-                    item={selectedMedia}
+                    key={(editVideoItem || selectedMedia).path}
+                    item={editVideoItem || selectedMedia}
                     t={t}
-                    onClose={() => setShowVideoEditor(false)}
+                    refreshKey={refreshKey}
+                    onClose={() => {
+                        setShowVideoEditor(false);
+                        setEditVideoItem(null);
+                        setSelectedMediaIndex(-1);
+                    }}
                     onSave={handleSaveEditedVideo}
                 />
             )}

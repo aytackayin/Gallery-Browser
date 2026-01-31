@@ -462,10 +462,23 @@ app.post('/api/batch-move', (req, res) => {
     res.json({ success: true, moved, conflicts, failed });
 });
 
-app.use('/media', (req, res) => {
-    const filePath = path.join(rootGalleryPath, decodeURIComponent(req.path));
-    if (fs.existsSync(filePath)) res.sendFile(filePath);
-    else res.status(404).send("Bulunamadı");
+app.get('/media/*', (req, res) => {
+    try {
+        const itemRelPath = decodeURIComponent(req.params[0]);
+        const filePath = path.join(rootGalleryPath, itemRelPath);
+
+        if (fs.existsSync(filePath)) {
+            res.sendFile(filePath, {
+                acceptRanges: true,
+                lastModified: true,
+                dotfiles: 'deny'
+            });
+        } else {
+            res.status(404).end();
+        }
+    } catch (e) {
+        res.status(500).end();
+    }
 });
 
 // Settings API
