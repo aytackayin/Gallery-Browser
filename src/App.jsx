@@ -508,11 +508,20 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
 
     // Final unmount cleanup
     useEffect(() => {
+        const handleKeyDown = (e) => {
+            if (e.key === 'Delete' || e.key === 'Backspace') {
+                // Don't trigger if typing in an input
+                if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
+                handleDelete();
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
         return () => {
+            window.removeEventListener('keydown', handleKeyDown);
             Object.values(audioPlayers.current).forEach(p => p.pause());
             audioPlayers.current = {};
         };
-    }, []);
+    }, [selectedClipId]); // Re-bind when selectedClipId changes to have fresh closure if needed, but handleDelete uses state
 
     const handleTimeUpdate = (e) => {
         setCurrentTime(e.target.currentTime);
@@ -549,7 +558,7 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
     };
 
     const handleDelete = () => {
-        if (selectedClipId === 'clip-0') return; // Don't delete main for now
+        if (!selectedClipId) return;
         setTracks(prev => prev.map(track => ({
             ...track,
             clips: track.clips.filter(c => c.id !== selectedClipId)
