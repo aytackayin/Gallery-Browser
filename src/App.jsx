@@ -175,7 +175,7 @@ const ImageEditor = ({ item, t, onSave, onClose }) => {
                     <h3>{t.editImage || 'Edit Image'} - {item.name}</h3>
                     <div style={{ display: 'flex', gap: 10 }}>
                         <button className="btn btn-grey" onClick={resetFilters}>{t.reset || 'Reset'}</button>
-                        <button className="btn btn-primary" onClick={handleSave}><Save size={16} /> {t.save || 'Save'}</button>
+                        <button className="btn btn-primary" onClick={handleSave}><Save size={16} style={{ marginRight: 10 }} /> {t.save || 'Save'}</button>
                         <button className="btn btn-grey" onClick={onClose}><X size={20} /></button>
                     </div>
                 </div>
@@ -254,7 +254,7 @@ const ImageEditor = ({ item, t, onSave, onClose }) => {
                                         <RotateCw size={16} />
                                     </button>
                                     <button className="action-btn" style={{ flex: 1 }} onClick={() => cropperRef.current?.cropper.scaleX(cropperRef.current?.cropper.getData().scaleX === 1 ? -1 : 1)} title={t.flip || 'Flip'}>
-                                        <Maximize2 size={16} style={{ transform: 'rotate(90deg)' }} />
+                                        <Maximize2 size={16} style={{ transform: 'rotate(90deg)', marginRight: 10 }} />
                                         <span>{t.flip || 'Flip'}</span>
                                     </button>
                                 </div>
@@ -951,12 +951,12 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
                         <h3 style={{ margin: 0 }}>{t.editVideo || 'Pro Video Editor'}</h3>
                     </div>
                     <div style={{ display: 'flex', gap: 10 }}>
-                        <button className="btn" onClick={() => setShowSaveAs(true)} disabled={isProcessing} style={{ background: '#333', color: 'white' }}>
-                            <Plus size={16} /> {t.saveAs || 'Save As...'}
-                        </button>
                         <button className="btn btn-primary" onClick={() => handleSave()} disabled={isProcessing}>
-                            {isProcessing ? <div className="spinner-small" /> : <Save size={16} />}
+                            {isProcessing ? <div className="spinner-small" /> : <Save size={16} style={{ marginRight: 10 }} />}
                             {t.save || 'Export'}
+                        </button>
+                        <button className="btn" onClick={() => setShowSaveAs(true)} disabled={isProcessing} style={{ background: '#46d369', color: 'white' }}>
+                            <Plus size={16} style={{ marginRight: 10 }} /> {t.saveAs || 'Save As...'}
                         </button>
                         <button className="btn btn-grey" onClick={onClose} disabled={isProcessing}><X size={20} /></button>
                     </div>
@@ -1006,8 +1006,8 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
                                         }} />
                                 </div>
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5 }}>
-                                    <button className="action-btn" onClick={() => updateClip(selectedClipId, { rotate: (selectedClip.rotate + 90) % 360 })}><RotateCw size={14} /> Rotate</button>
-                                    <button className={`action-btn ${selectedClip.flipH ? 'active' : ''}`} onClick={() => updateClip(selectedClipId, { flipH: !selectedClip.flipH })}><Maximize2 size={14} style={{ transform: 'rotate(90deg)' }} /> Flip H</button>
+                                    <button className="action-btn" onClick={() => updateClip(selectedClipId, { rotate: (selectedClip.rotate + 90) % 360 })}><RotateCw size={14} style={{ marginRight: 10 }} /> Rotate</button>
+                                    <button className={`action-btn ${selectedClip.flipH ? 'active' : ''}`} onClick={() => updateClip(selectedClipId, { flipH: !selectedClip.flipH })}><Maximize2 size={14} style={{ transform: 'rotate(90deg)', marginRight: 10 }} /> Flip H</button>
                                 </div>
                             </div>
                         ) : (
@@ -1141,7 +1141,7 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
                             )}
 
                             {/* Viewer Controls */}
-                            <div style={{ position: 'absolute', bottom: 10, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 15, background: 'rgba(0,0,0,0.5)', padding: '5px 15px', borderRadius: 20 }}>
+                            <div style={{ position: 'absolute', bottom: -5, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 15, background: 'rgba(0,0,0,0.5)', padding: '5px 15px', borderRadius: 20 }}>
                                 <button className="action-btn" onClick={() => videoRef.current.currentTime -= 0.1}><ChevronLeft size={20} /></button>
                                 <button className="action-btn" onClick={togglePlay}>
                                     {isPlaying ? <Pause size={24} fill="white" /> : <Play size={24} fill="white" />}
@@ -2341,7 +2341,7 @@ function App() {
                                 />
                             </div>
                             <div className="modal-footer">
-                                <button className="btn btn-primary" onClick={handleSaveEdit}><Save size={16} /> {t.save || 'Save'}</button>
+                                <button className="btn btn-primary" onClick={handleSaveEdit}><Save size={16} style={{ marginRight: 10 }} /> {t.save || 'Save'}</button>
                             </div>
                         </div>
                     </div>
@@ -2566,7 +2566,7 @@ function App() {
                                 </div>
                             </div>
                             <div className="modal-footer">
-                                <button className="btn btn-primary" onClick={saveSettings}><Save size={16} /> {t.save || 'Save'}</button>
+                                <button className="btn btn-primary" onClick={saveSettings}><Save size={16} style={{ marginRight: 10 }} /> {t.save || 'Save'}</button>
                                 <button className="btn btn-grey" onClick={() => setSettingsModal(false)}>{t.cancel || 'Cancel'}</button>
                             </div>
                         </div>

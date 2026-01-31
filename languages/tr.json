@@ -68,5 +68,8 @@
     "volume": "Ses Seviyesi",
     "layers": "Katmanlar",
     "transform": "Dönüştür",
-    "colorFilters": "Renk ve Filtreler"
+    "colorFilters": "Renk ve Filtreler",
+    "saveAs": "Farklı Kaydet...",
+    "fileName": "Dosya Adı",
+    "format": "Format"
 }

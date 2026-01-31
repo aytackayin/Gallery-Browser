@@ -68,5 +68,8 @@
     "volume": "Volume",
     "layers": "Layers",
     "transform": "Transform",
-    "colorFilters": "Color & Filters"
+    "colorFilters": "Color & Filters",
+    "saveAs": "Save As...",
+    "fileName": "File Name",
+    "format": "Format"
 }

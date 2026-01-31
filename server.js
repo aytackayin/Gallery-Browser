@@ -617,7 +617,7 @@ app.post('/api/process-video', async (req, res) => {
             const outLabel = `vclip_${vClipCounter}`;
             const isImage = clip.type === 'image' || clip.path.match(/\.(jpg|jpeg|png|webp|bmp)$/i);
 
-            const b = (clip.filters.brightness || 100) / 100 - 1;
+            const bRatio = (clip.filters.brightness || 100) / 100;
             const cVal = (clip.filters.contrast || 100) / 100;
             const s = (clip.filters.saturation || 100) / 100;
             const g = (clip.filters.gamma || 1.0);
@@ -640,7 +640,12 @@ app.post('/api/process-video', async (req, res) => {
             vFilters.push(`crop=w=${cw}:h=${ch}:x=${cx}:y=${cy}`);
 
             vFilters.push(`scale=${targetW}:${targetH}:force_original_aspect_ratio=increase,crop=${targetW}:${targetH},setsar=1,format=yuv420p`);
-            vFilters.push(`eq=brightness=${b}:contrast=${cVal}:saturation=${s}:gamma=${g}`);
+
+            // Multiplicative brightness matching CSS filter
+            if (bRatio !== 1) {
+                vFilters.push(`lutyuv=y=val*${bRatio}`);
+            }
+            vFilters.push(`eq=brightness=0:contrast=${cVal}:saturation=${s}:gamma=${g}`);
 
             if (clip.rotate) {
                 if (clip.rotate === 90) vFilters.push('transpose=1');
