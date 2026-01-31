@@ -909,3 +909,16 @@ select:focus {
 .editor-overlay {
   background: rgba(0, 0, 0, 0.9) !important;
 }
+
+/* Highlight Border for Last Active Item */
+.highlight-border {
+    border: 1px solid #46d369 !important;
+    box-shadow: 0 0 8px rgba(70, 211, 105, 0.4) !important;
+    animation: pulseBorder 2s infinite;
+}
+
+@keyframes pulseBorder {
+    0% { box-shadow: 0 0 8px rgba(70, 211, 105, 0.4); }
+    50% { box-shadow: 0 0 15px rgba(70, 211, 105, 0.7); }
+    100% { box-shadow: 0 0 8px rgba(70, 211, 105, 0.4); }
+}

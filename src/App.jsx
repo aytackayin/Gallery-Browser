@@ -380,6 +380,9 @@ function App() {
     // Batch Selection State
     const [selectedPaths, setSelectedPaths] = useState(new Set());
     const [lastSelectedPath, setLastSelectedPath] = useState(null); // Shift+Click için
+    const [lastActivePath, setLastActivePath] = useState(null); // Geri dönüldüğünde hatırlanacak item
+    const itemRefs = useRef({});
+
 
     // Settings State
     const [settingsModal, setSettingsModal] = useState(false);
@@ -504,6 +507,14 @@ function App() {
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [selectedMediaIndex, zoomMode, items, confirmDelete, editModal, moveModal]);
 
+    // Scroll to last active item
+    useEffect(() => {
+        if (lastActivePath && itemRefs.current[lastActivePath]) {
+            itemRefs.current[lastActivePath].scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    }, [lastActivePath, items]);
+
+
     useEffect(() => {
         if (selectedMediaIndex !== -1 || confirmDelete || editModal || moveModal || showEditor) {
             document.body.style.overflow = 'hidden';
@@ -520,6 +531,18 @@ function App() {
             const response = await fetch(`/api/scan?path=${encodeURIComponent(path)}`);
             const data = await response.json();
             setItems(data.items || []);
+
+            // Back Navigation Logic
+            // If going up (currentPath starts with newPath), highlight the folder we came from
+            const newPath = data.currentPath || '.';
+            if (currentPath && currentPath !== '.' && currentPath.startsWith(newPath) && currentPath !== newPath) {
+                const found = (data.items || []).find(i => i.type === 'folder' && (currentPath === i.path || currentPath.startsWith(i.path + '/') || currentPath.startsWith(i.path + '\\')));
+                if (found) setLastActivePath(found.path);
+                else setLastActivePath(null);
+            } else if (newPath !== currentPath) {
+                setLastActivePath(null);
+            }
+
             setCurrentPath(data.currentPath || '.');
             setAutoPlaySetting(!!data.autoPlay);
             if (data.language) setLanguage(data.language);
@@ -794,6 +817,7 @@ function App() {
     };
 
     const resetAndClose = () => {
+        if (selectedMedia) setLastActivePath(selectedMedia.path);
         setZoomMode(false);
         setZoomScale(1);
         setHasMoved(false);
@@ -953,7 +977,12 @@ function App() {
                             const isSelected = selectedPaths.has(item.path);
 
                             return (
-                                <div key={item.path} className={`media-card ${isSelected ? 'selected' : ''} ${isFolder ? 'is-folder' : ''}`} onClick={() => isFolder ? fetchItems(item.path) : openMedia(mediaIdx)}>
+                                <div
+                                    key={item.path}
+                                    ref={el => itemRefs.current[item.path] = el}
+                                    className={`media-card ${isSelected ? 'selected' : ''} ${isFolder ? 'is-folder' : ''} ${lastActivePath === item.path ? 'highlight-border' : ''}`}
+                                    onClick={() => isFolder ? fetchItems(item.path) : openMedia(mediaIdx)}
+                                >
 
                                     <div className="selection-overlay" onClick={e => e.stopPropagation()} style={{
                                         position: 'absolute', top: 10, right: 10, zIndex: 20
