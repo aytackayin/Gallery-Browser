@@ -1102,6 +1102,7 @@ function App() {
         fetch('/api/settings').then(res => res.json()).then(data => {
             setSettingsData(data);
             setTheme(data.theme || 'system');
+            setAutoPlaySetting(!!data.autoPlay);
         }).catch(() => { });
 
         const handleScroll = () => {
@@ -1161,9 +1162,13 @@ function App() {
 
 
     useEffect(() => {
-        if (selectedMediaIndex !== -1 || confirmDelete || editModal || moveModal || showEditor || showVideoEditor) {
+        const anyOverlay = selectedMediaIndex !== -1 || confirmDelete || editModal || moveModal || showEditor || showVideoEditor;
+        const modalOverlay = confirmDelete || editModal || moveModal || showEditor || showVideoEditor;
+
+        if (anyOverlay) {
             document.body.style.overflow = 'hidden';
-            if (videoRef.current) videoRef.current.pause();
+            // Pause the background video ONLY if a modal is open ON TOP of it
+            if (modalOverlay && videoRef.current) videoRef.current.pause();
         } else {
             document.body.style.overflow = 'auto';
         }
@@ -1308,6 +1313,7 @@ function App() {
             const data = await res.json();
             if (data.success) {
                 setTheme(settingsData.theme);
+                setAutoPlaySetting(settingsData.autoPlay);
                 setSettingsModal(false);
                 setToast(t.restartRequired || 'Restart required for some changes');
                 setTimeout(() => setToast(null), 3000);
