@@ -763,7 +763,7 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
     const handleTimelineClick = (e) => {
         if (!timelineDuration || !videoRef.current) return;
         const rect = e.currentTarget.getBoundingClientRect();
-        const offsetX = (e.clientX - rect.left) + e.currentTarget.scrollLeft - 60;
+        const offsetX = (e.clientX - rect.left) + e.currentTarget.scrollLeft - 80;
         if (offsetX < 0) return;
 
         const newTime = Math.max(0, Math.min(timelineDuration, offsetX / zoomLevel));
@@ -1263,8 +1263,8 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
                                         }
                                     }}>
                                         <div className="thumb-wrapper">
-                                            {pi.isDirectory ? (
-                                                <Folder size={40} color="var(--netflix-red)" opacity={0.6} />
+                                            {pi.isDirectory || pi.type === 'folder' ? (
+                                                <img src="/svg/folder.svg" alt="Folder" style={{ width: '40%', height: '40%', objectFit: 'contain' }} />
                                             ) : (
                                                 <img
                                                     src={`http://localhost:3001/api/thumb?path=${encodeURIComponent(pi.path)}&t=${localRefreshKey}`}
@@ -1278,9 +1278,9 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
                                                 />
                                             )}
                                         </div>
-                                        <div className="item-footer">
-                                            {pi.isDirectory ? <Folder size={12} color="var(--netflix-red)" /> : (pi.type?.startsWith('image/') ? <ImageIcon size={12} color="#0071eb" /> : <VideoIcon size={12} color="#46d369" />)}
-                                            <span title={pi.name}>{pi.name}</span>
+                                        <div className="item-footer" style={(pi.isDirectory || pi.type === 'folder') ? { justifyContent: 'center', textAlign: 'center' } : {}}>
+                                            {(!pi.isDirectory && pi.type !== 'folder') && (pi.type?.startsWith('image/') ? <ImageIcon size={12} color="#0071eb" /> : <VideoIcon size={12} color="#46d369" />)}
+                                            <span title={pi.name} style={(pi.isDirectory || pi.type === 'folder') ? { textAlign: 'center' } : {}}>{pi.name}</span>
                                         </div>
                                     </div>
                                 ))}
