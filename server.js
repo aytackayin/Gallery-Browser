@@ -125,7 +125,7 @@ const getAllItems = (dir, baseDir, allFiles = []) => {
             const relPath = path.relative(baseDir, res).replace(/\\/g, '/');
             const isDir = file.isDirectory();
             const type = isDir ? 'folder' : (mime.lookup(file.name) || 'unknown');
-            if (isDir || type.startsWith('image/') || type.startsWith('video/')) {
+            if (isDir || type.startsWith('image/') || type.startsWith('video/') || type.startsWith('audio/')) {
                 allFiles.push({ name: file.name, path: relPath, type });
             }
             if (isDir) getAllItems(res, baseDir, allFiles);
@@ -153,7 +153,7 @@ app.get('/api/scan', (req, res) => {
                 const relPath = path.relative(rootGalleryPath, fullPath).replace(/\\/g, '/');
                 return { name: item.name, path: relPath, type: item.isDirectory() ? 'folder' : (mime.lookup(item.name) || 'unknown') };
             })
-            .filter(item => item.type === 'folder' || item.type.startsWith('image/') || item.type.startsWith('video/'))
+            .filter(item => item.type === 'folder' || item.type.startsWith('image/') || item.type.startsWith('video/') || item.type.startsWith('audio/'))
             .sort((a, b) => (b.type === 'folder' ? 1 : -1) - (a.type === 'folder' ? 1 : -1) || a.name.localeCompare(b.name));
         res.json({
             currentPath: subPath,
@@ -575,10 +575,6 @@ app.post('/api/process-video', async (req, res) => {
             });
         }
 
-        const filterComplex = [];
-        const videoLabels = [];
-        const audioLabels = [];
-
         // Proje baz boyutunu ilk klibin (crop edilmişse o boyut, edilmemişse orijinal boyut) üzerinden belirle
         // Not: ffmpeg-probe veya frontend'den gelen cropPixels'i kullanabiliriz.
         // Ama en garantisi kliplerin kendi içindeki crop oranlarını kullanmak.
@@ -589,64 +585,81 @@ app.post('/api/process-video', async (req, res) => {
         const targetW = first.cropPixels?.w || 1920;
         const targetH = first.cropPixels?.h || 1080;
 
-        clips.forEach((clip, i) => {
-            const inputIdx = uniquePaths.indexOf(clip.path);
-            const vLabel = `v${i}`;
-            const aLabel = `a${i}`;
+        const filterComplex = [];
+        const videoLabels = [];
+        const audioStreams = []; // For mixing
 
-            const b = (clip.filters.brightness || 100) / 100 - 1;
-            const c = (clip.filters.contrast || 100) / 100;
-            const s = (clip.filters.saturation || 100) / 100;
-            const g = (clip.filters.gamma || 1.0);
+        // 1. Process Tracks
+        timeline.tracks.forEach(track => {
+            track.clips.filter(c => c.duration > 0.05).forEach((clip, i) => {
+                const inputIdx = uniquePaths.indexOf(clip.path);
+                const clipIdx = `${track.id}_${i}`;
 
-            // Ensure even numbers for crop to avoid YUV420p errors
-            const cw = `trunc(iw*${clip.crop.w / 100}/2)*2`;
-            const ch = `trunc(ih*${clip.crop.h / 100}/2)*2`;
-            const cx = `trunc(iw*${clip.crop.x / 100}/2)*2`;
-            const cy = `trunc(ih*${clip.crop.y / 100}/2)*2`;
+                const b = (clip.filters.brightness || 100) / 100 - 1;
+                const c = (clip.filters.contrast || 100) / 100;
+                const s = (clip.filters.saturation || 100) / 100;
+                const g = (clip.filters.gamma || 1.0);
 
-            let vFilters = [
-                `trim=start=${clip.start}:duration=${clip.duration},setpts=PTS-STARTPTS`,
-                `crop=w=${cw}:h=${ch}:x=${cx}:y=${cy}`,
-                `eq=brightness=${b}:contrast=${c}:saturation=${s}:gamma=${g}`,
-                // Tüm klipleri projenin (ilk klibin) boyutuna uydur (padding eklemeden, gerekirse esneterek veya crop yaparak)
-                `scale=${targetW}:${targetH}:force_original_aspect_ratio=increase,crop=${targetW}:${targetH},setsar=1,format=yuv420p`
-            ];
+                const cw = `trunc(iw*${clip.crop.w / 100}/2)*2`;
+                const ch = `trunc(ih*${clip.crop.h / 100}/2)*2`;
+                const cx = `trunc(iw*${clip.crop.x / 100}/2)*2`;
+                const cy = `trunc(ih*${clip.crop.y / 100}/2)*2`;
 
-            if (clip.rotate) {
-                if (clip.rotate === 90) vFilters.push('transpose=1');
-                else if (clip.rotate === 180) vFilters.push('transpose=1,transpose=1');
-                else if (clip.rotate === 270) vFilters.push('transpose=2');
-            }
-            if (clip.flipH) vFilters.push('hflip');
-            if (clip.flipV) vFilters.push('vflip');
+                if (track.type === 'video') {
+                    const vLabel = `v${clipIdx}`;
+                    const aLabel = `a${clipIdx}`;
 
-            filterComplex.push({ inputs: `${inputIdx}:v`, filter: vFilters.join(','), outputs: vLabel });
-            videoLabels.push(vLabel);
+                    let vFilters = [
+                        `trim=start=${clip.start}:duration=${clip.duration},setpts=PTS-STARTPTS`,
+                        `crop=w=${cw}:h=${ch}:x=${cx}:y=${cy}`,
+                        `eq=brightness=${b}:contrast=${c}:saturation=${s}:gamma=${g}`,
+                        `scale=${targetW}:${targetH}:force_original_aspect_ratio=increase,crop=${targetW}:${targetH},setsar=1,format=yuv420p`
+                    ];
+                    if (clip.rotate) {
+                        if (clip.rotate === 90) vFilters.push('transpose=1');
+                        else if (clip.rotate === 180) vFilters.push('transpose=1,transpose=1');
+                        else if (clip.rotate === 270) vFilters.push('transpose=2');
+                    }
+                    if (clip.flipH) vFilters.push('hflip');
+                    if (clip.flipV) vFilters.push('vflip');
 
-            if (hasAudioMap[clip.path]) {
-                filterComplex.push({
-                    inputs: `${inputIdx}:a`,
-                    filter: `atrim=start=${clip.start}:duration=${clip.duration},asetpts=PTS-STARTPTS,volume=${(clip.volume || 100) / 100}`,
-                    outputs: aLabel
-                });
-                audioLabels.push(aLabel);
-            }
+                    filterComplex.push({ inputs: `${inputIdx}:v`, filter: vFilters.join(','), outputs: vLabel });
+                    videoLabels.push(vLabel);
+
+                    if (hasAudioMap[clip.path]) {
+                        const delay = Math.max(0, Math.round(clip.offset * 1000));
+                        filterComplex.push({
+                            inputs: `${inputIdx}:a`,
+                            filter: `atrim=start=${clip.start}:duration=${clip.duration},asetpts=PTS-STARTPTS,volume=${(clip.volume || 100) / 100},adelay=${delay}|${delay}`,
+                            outputs: aLabel
+                        });
+                        audioStreams.push(aLabel);
+                    }
+                } else if (track.type === 'audio') {
+                    const aLabel = `exta${clipIdx}`;
+                    const delay = Math.max(0, Math.round(clip.offset * 1000));
+                    filterComplex.push({
+                        inputs: `${inputIdx}:a`,
+                        filter: `atrim=start=${clip.start}:duration=${clip.duration},asetpts=PTS-STARTPTS,volume=${(clip.volume || 100) / 100},adelay=${delay}|${delay}`,
+                        outputs: aLabel
+                    });
+                    audioStreams.push(aLabel);
+                }
+            });
         });
 
         let finalVideoLabel = videoLabels[0];
-        let finalAudioLabel = audioLabels[0] || null;
-
         if (videoLabels.length > 1) {
             filterComplex.push({ inputs: videoLabels, filter: `concat=n=${videoLabels.length}:v=1:a=0`, outputs: 'vf' });
             finalVideoLabel = 'vf';
         }
 
-        if (audioLabels.length > 1) {
-            filterComplex.push({ inputs: audioLabels, filter: `concat=n=${audioLabels.length}:v=0:a=1`, outputs: 'af' });
+        let finalAudioLabel = null;
+        if (audioStreams.length > 1) {
+            filterComplex.push({ inputs: audioStreams, filter: `amix=inputs=${audioStreams.length}:normalize=0`, outputs: 'af' });
             finalAudioLabel = 'af';
-        } else if (audioLabels.length === 1) {
-            finalAudioLabel = audioLabels[0];
+        } else if (audioStreams.length === 1) {
+            finalAudioLabel = audioStreams[0];
         }
 
         const outputs = [finalVideoLabel];

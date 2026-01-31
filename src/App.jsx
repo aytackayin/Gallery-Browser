@@ -303,6 +303,7 @@ const formatTime = (seconds) => {
 
 const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) => {
     const videoRef = useRef(null);
+    const audioPlayers = useRef({}); // New: Background sync players
     const containerRef = useRef(null);
     const [duration, setDuration] = useState(0);
     const [currentTime, setCurrentTime] = useState(0);
@@ -337,6 +338,9 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
     const [showSaveAs, setShowSaveAs] = useState(false);
     const [saveAsName, setSaveAsName] = useState(item.name.replace(/\.[^/.]+$/, ""));
     const [saveAsExt, setSaveAsExt] = useState(item.name.split('.').pop() || 'mp4');
+    const [showPicker, setShowPicker] = useState(false);
+    const [pickerItems, setPickerItems] = useState([]);
+    const [pickerPath, setPickerPath] = useState('.');
 
     // Use a unique key for the editor to prevent socket/conflict with viewer
     const [localRefreshKey] = useState(Date.now());
@@ -421,9 +425,81 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
     };
 
     const togglePlay = () => {
-        if (videoRef.current.paused) { videoRef.current.play(); setIsPlaying(true); }
-        else { videoRef.current.pause(); setIsPlaying(false); }
+        if (videoRef.current.paused) {
+            videoRef.current.play();
+            setIsPlaying(true);
+        } else {
+            videoRef.current.pause();
+            setIsPlaying(false);
+        }
     };
+
+    // Background Audio Sync Effect
+    useEffect(() => {
+        const audioClips = tracks.flatMap(tr => tr.clips.filter(c => c.type === 'audio' || tr.id === 'a1'));
+
+        // Ensure players exist
+        audioClips.forEach(clip => {
+            if (!audioPlayers.current[clip.id]) {
+                const player = new Audio(`http://localhost:3001/media/${encodeURIComponent(clip.path)}`);
+                player.volume = (clip.volume || 100) / 100;
+                audioPlayers.current[clip.id] = player;
+            } else {
+                audioPlayers.current[clip.id].volume = (clip.volume || 100) / 100;
+            }
+        });
+
+        // Cleanup
+        Object.keys(audioPlayers.current).forEach(id => {
+            if (!audioClips.find(c => c.id === id)) {
+                audioPlayers.current[id].pause();
+                delete audioPlayers.current[id];
+            }
+        });
+    }, [tracks]);
+
+    // Constant Sync Effect
+    useEffect(() => {
+        const audioClips = tracks.flatMap(tr => tr.clips.filter(c => c.type === 'audio' || tr.id === 'a1'));
+
+        audioClips.forEach(clip => {
+            const player = audioPlayers.current[clip.id];
+            if (!player) return;
+
+            const relTime = currentTime - clip.offset;
+            const isInside = relTime >= 0 && relTime < clip.duration;
+
+            if (isInside) {
+                const targetTime = clip.start + relTime;
+                if (Math.abs(player.currentTime - targetTime) > 0.15) {
+                    player.currentTime = targetTime;
+                }
+                if (isPlaying && player.paused) {
+                    player.play().catch(() => { });
+                } else if (!isPlaying && !player.paused) {
+                    player.pause();
+                }
+            } else {
+                if (!player.paused) {
+                    player.pause();
+                    player.currentTime = clip.start;
+                }
+            }
+        });
+
+        // Also cleanup on unmount
+        return () => {
+            // We don't want to stop everything on every currentTime update
+        };
+    }, [currentTime, isPlaying, tracks]);
+
+    // Final unmount cleanup
+    useEffect(() => {
+        return () => {
+            Object.values(audioPlayers.current).forEach(p => p.pause());
+            audioPlayers.current = {};
+        };
+    }, []);
 
     const handleTimeUpdate = (e) => {
         setCurrentTime(e.target.currentTime);
@@ -482,6 +558,44 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
                 });
             return { ...track, clips: newClips };
         }));
+    };
+
+    const fetchPickerItems = async (path) => {
+        try {
+            const res = await fetch(`/api/scan?path=${encodeURIComponent(path)}`);
+            const data = await res.json();
+            setPickerItems(data.items || []);
+            setPickerPath(data.currentPath || path);
+        } catch (e) { }
+    };
+
+    const addAudioTrack = (audioItem) => {
+        const newClip = {
+            id: `audio-${Date.now()}`,
+            path: audioItem.path,
+            name: audioItem.name,
+            start: 0,
+            duration: 10, // Default 10s or fetch actual duration? For now 10s until metadata
+            offset: currentTime,
+            filters: { brightness: 100, contrast: 100, saturation: 100, gamma: 1.0 },
+            crop: { x: 0, y: 0, w: 100, h: 100 },
+            rotate: 0, flipH: false, flipV: false, volume: 100,
+            type: 'audio'
+        };
+
+        // Try to get duration from an invisible audio element
+        const tempAudio = new Audio(`http://localhost:3001/media/${encodeURIComponent(audioItem.path)}`);
+        tempAudio.onloadedmetadata = () => {
+            newClip.duration = tempAudio.duration;
+            setTracks(prev => prev.map(t => t.id === 'a1' ? { ...t, clips: [...t.clips, newClip] } : t));
+            setSelectedClipId(newClip.id);
+        };
+        tempAudio.onerror = () => {
+            setTracks(prev => prev.map(t => t.id === 'a1' ? { ...t, clips: [...t.clips, newClip] } : t));
+            setSelectedClipId(newClip.id);
+        };
+
+        setShowPicker(false);
     };
 
     const handleSave = async (options = {}) => {
@@ -802,6 +916,7 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
                                 <button className={`action-btn ${activeTool === 'split' ? 'active' : ''}`} onClick={handleSplit} title="Split at Scrubber"><Scissors size={14} /></button>
                                 <button className={`action-btn ${activeTool === 'delete' ? 'active' : ''}`} onClick={handleDelete} title="Delete Selected Clip"><Trash size={14} /></button>
                                 <button className="action-btn" onClick={packClips} title="Pack Clips (Remove Gaps)"><Droplet size={14} /></button>
+                                <button className="action-btn" onClick={() => { setShowPicker(true); fetchPickerItems(pickerPath); }} title="Add Audio File" style={{ color: '#46d369' }}><Plus size={14} /> Audio</button>
                             </div>
                             <div style={{ flex: 1, textAlign: 'center', fontSize: '0.85rem', color: '#888', fontFamily: 'monospace' }}>
                                 {formatTime(currentTime)} / {formatTime(duration)}
@@ -838,8 +953,8 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
                                                     left: `${(clip.offset / (Math.max(0.1, duration))) * 100}%`,
                                                     width: `${(clip.duration / (Math.max(0.1, duration))) * 100}%`,
                                                     height: '100%',
-                                                    background: clip.id === selectedClipId ? 'rgba(229, 9, 20, 0.4)' : 'rgba(229, 9, 20, 0.1)',
-                                                    border: clip.id === selectedClipId ? '1px solid #e50914' : '1px solid #333',
+                                                    background: clip.id === selectedClipId ? 'rgba(229, 9, 20, 0.4)' : (track.type === 'audio' ? 'rgba(0, 113, 235, 0.2)' : 'rgba(229, 9, 20, 0.1)'),
+                                                    border: clip.id === selectedClipId ? '1px solid #e50914' : (track.type === 'audio' ? '1px solid #0071eb' : '1px solid #333'),
                                                     borderRadius: 4,
                                                     padding: '2px 5px',
                                                     fontSize: '0.7rem',
@@ -926,6 +1041,38 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
                     </div>
                 )}
             </div>
+
+            {showPicker && (
+                <div className="modal-overlay" style={{ zIndex: 8000 }}>
+                    <div className="modal" style={{ maxWidth: 500 }}>
+                        <div className="modal-header">
+                            <h3>Select Audio File</h3>
+                            <button className="btn btn-grey" onClick={() => setShowPicker(false)}><X size={20} /></button>
+                        </div>
+                        <div style={{ padding: 15 }}>
+                            <div style={{ display: 'flex', gap: 5, marginBottom: 10 }}>
+                                <button className="btn btn-grey" onClick={() => fetchPickerItems(pickerPath.split('/').slice(0, -1).join('/') || '.')}>..</button>
+                                <span style={{ fontSize: '0.8rem', color: '#888' }}>{pickerPath}</span>
+                            </div>
+                            <div style={{ maxHeight: 300, overflowY: 'auto', background: '#0a0a0a', borderRadius: 4 }}>
+                                {pickerItems
+                                    .filter(pi => pi.type === 'folder' || (pi.type && (pi.type.startsWith('audio/') || pi.type.startsWith('video/'))))
+                                    .map(pi => (
+                                        <div key={pi.path}
+                                            onClick={() => pi.type === 'folder' ? fetchPickerItems(pi.path) : (pi.type && (pi.type.startsWith('audio/') || pi.type.startsWith('video/'))) ? addAudioTrack(pi) : null}
+                                            style={{ padding: '8px 12px', borderBottom: '1px solid #1a1a1a', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10 }}>
+                                            {pi.type === 'folder' ? <Folder size={14} color="#ff8c00" /> : <Volume2 size={14} color="#0071eb" />}
+                                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                <span style={{ fontSize: '0.9rem' }}>{pi.name}</span>
+                                                <span style={{ fontSize: '0.7rem', color: '#666' }}>{pi.type}</span>
+                                            </div>
+                                        </div>
+                                    ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
