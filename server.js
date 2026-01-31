@@ -216,6 +216,7 @@ app.get('/api/info', async (req, res) => {
                             metadata.resolution = `${videoStream.width}x${videoStream.height}`;
                             if (videoStream.duration || data.format.duration) {
                                 const dur = parseFloat(videoStream.duration || data.format.duration);
+                                metadata.durationSeconds = dur;
                                 const min = Math.floor(dur / 60);
                                 const sec = Math.floor(dur % 60);
                                 metadata.duration = `${min}:${sec.toString().padStart(2, '0')}`;

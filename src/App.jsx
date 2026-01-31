@@ -713,16 +713,32 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
         } catch (e) { }
     };
 
-    const addMediaToTrack = (mediaItem, trackId) => {
+    const addMediaToTrack = async (mediaItem, trackId) => {
         if (mediaItem.isDirectory || mediaItem.type === 'folder') return;
         const isImage = mediaItem.type?.startsWith('image/') || mediaItem.path.match(/\.(jpg|jpeg|png|webp|bmp)$/i);
+
+        let actualDuration = 10;
+        if (isImage) {
+            actualDuration = 5;
+        } else {
+            try {
+                const res = await fetch(`/api/info?path=${encodeURIComponent(mediaItem.path)}`);
+                const info = await res.json();
+                if (info && info.durationSeconds) {
+                    actualDuration = info.durationSeconds;
+                }
+            } catch (e) {
+                console.error("Duration fetch failed:", e);
+            }
+        }
+
         const newClip = {
             id: `clip-${Date.now()}`,
             path: mediaItem.path,
             name: mediaItem.name,
             type: isImage ? 'image' : (trackId.startsWith('v') ? 'video' : 'audio'),
             start: 0,
-            duration: isImage ? 5 : (mediaItem.duration || 10),
+            duration: actualDuration,
             offset: currentTime,
             filters: { brightness: 100, contrast: 100, saturation: 100, gamma: 1.0 },
             crop: { x: 0, y: 0, w: 100, h: 100 },
