@@ -29,17 +29,20 @@ public class GalleryTrayApp : ApplicationContext
         // Çevirileri Oku
         string trayOpenText = "Open Gallery";
         string trayExitText = "Exit";
+        string trayRestartText = "Restart";
         try {
             string langFilePath = Path.Combine(appPath, "languages", language + ".json");
             if (File.Exists(langFilePath)) {
                 string json = File.ReadAllText(langFilePath);
                 trayOpenText = GetJsonValue(json, "trayOpen") ?? trayOpenText;
                 trayExitText = GetJsonValue(json, "trayExit") ?? trayExitText;
+                trayRestartText = GetJsonValue(json, "trayRestart") ?? trayRestartText;
             }
         } catch { }
         
         ContextMenu trayMenu = new ContextMenu();
         trayMenu.MenuItems.Add(trayOpenText, OnOpen);
+        trayMenu.MenuItems.Add(trayRestartText, OnRestart);
         trayMenu.MenuItems.Add("-");
         trayMenu.MenuItems.Add(trayExitText, OnExit);
 
@@ -108,7 +111,13 @@ public class GalleryTrayApp : ApplicationContext
         Process.Start("http://localhost:3000");
     }
 
-    private void OnExit(object sender, EventArgs e)
+    private void OnRestart(object sender, EventArgs e)
+    {
+        KillServer();
+        StartServer();
+    }
+
+    private void KillServer()
     {
         if (npmProcess != null && !npmProcess.HasExited) {
             try { npmProcess.Kill(); } catch { }
@@ -117,7 +126,15 @@ public class GalleryTrayApp : ApplicationContext
             FileName = "taskkill", Arguments = "/F /IM node.exe /T",
             CreateNoWindow = true, UseShellExecute = false
         };
-        Process.Start(killNode);
+        try { 
+            Process p = Process.Start(killNode);
+            if (p != null) p.WaitForExit();
+        } catch { }
+    }
+
+    private void OnExit(object sender, EventArgs e)
+    {
+        KillServer();
         trayIcon.Visible = false;
         Application.Exit();
     }

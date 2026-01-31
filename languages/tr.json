@@ -1,6 +1,7 @@
 {
     "trayOpen": "Galeriyi Aç",
     "trayExit": "Kapat",
+    "trayRestart": "Yeniden Başlat",
     "searchPlaceholder": "Dosya, klasör veya not ara...",
     "searchResults": "Arama Sonuçları",
     "searchTitle": "\"{q}\" için sonuçlar",

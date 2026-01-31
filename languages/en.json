@@ -1,6 +1,7 @@
 {
     "trayOpen": "Open Gallery",
     "trayExit": "Exit",
+    "trayRestart": "Restart",
     "searchPlaceholder": "Search files, folders or notes...",
     "searchResults": "Search Results",
     "searchTitle": "Results for \"{q}\"",
