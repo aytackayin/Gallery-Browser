@@ -45,6 +45,7 @@ Gallery Browser, yerel medya koleksiyonunuzu (resim ve video) Modern bir arayüz
 - **Dinamik Önizleme:** Gama ve Keskinlik filtreleri için SVG tabanlı canlı önizleme sistemi geliştirildi.
 - **Profesyonel Boyutlandırma:** Özel çözünürlük girişi, en-boy oranı kilitleme ve popüler oran taslakları (16:9, 9:16 vb.) eklendi.
 - **Hızlı Erişim:** Galeri kartlarına doğrudan düzenleme butonu eklenerek kullanıcı deneyimi iyileştirildi.
+- **Tarayıcı Yapılandırması:** Ayarlar menüsüne özel tarayıcı yolu (BrowserPath) desteği eklendi.
 - **Performans & Stabilite:** Resim yükleme titremeleri giderildi, sunucu yükleme sınırı 50MB'a çıkarıldı ve kayıt sonrası anlık yenileme sağlandı.
 
 ---

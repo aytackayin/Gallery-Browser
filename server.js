@@ -23,6 +23,7 @@ const getConfigs = () => {
     let rootPath = process.cwd();
     let autoPlay = false;
     let language = 'en';
+    let browserPath = 'default';
     let translations = {};
     try {
         const configPath = path.join(process.cwd(), 'config.ini');
@@ -37,6 +38,9 @@ const getConfigs = () => {
             const aPlay = lines.find(l => l.trim().startsWith('AutoPlay='));
             if (aPlay) autoPlay = aPlay.split('=')[1].trim() === '1';
 
+            const bPath = lines.find(l => l.trim().startsWith('BrowserPath='));
+            if (bPath) browserPath = bPath.split('=')[1].trim().replace(/^["']|["']$/g, '');
+
             const lang = lines.find(l => l.trim().startsWith('Language='));
             if (lang) language = lang.split('=')[1].trim().toLowerCase();
         }
@@ -46,7 +50,7 @@ const getConfigs = () => {
             translations = JSON.parse(fs.readFileSync(langPath, 'utf8'));
         }
     } catch (e) { }
-    return { rootPath: path.resolve(rootPath), autoPlay, language, translations };
+    return { rootPath: path.resolve(rootPath), autoPlay, language, browserPath, translations };
 };
 
 const settings = getConfigs();
@@ -423,6 +427,7 @@ app.get('/api/settings', (req, res) => {
         const configPath = path.join(process.cwd(), 'config.ini');
         let settings = {
             galleryPath: process.cwd(),
+            browserPath: 'default',
             autoPlay: false,
             language: 'en',
             theme: 'system'
@@ -441,6 +446,9 @@ app.get('/api/settings', (req, res) => {
             const lang = lines.find(l => l.trim().startsWith('Language='));
             if (lang) settings.language = lang.split('=')[1].trim().toLowerCase();
 
+            const bPath = lines.find(l => l.trim().startsWith('BrowserPath='));
+            if (bPath) settings.browserPath = bPath.split('=')[1].trim().replace(/^["']|["']$/g, '');
+
             const theme = lines.find(l => l.trim().startsWith('Theme='));
             if (theme) settings.theme = theme.split('=')[1].trim().toLowerCase();
         }
@@ -454,10 +462,10 @@ app.get('/api/settings', (req, res) => {
 app.post('/api/settings', (req, res) => {
     try {
         const configPath = path.join(process.cwd(), 'config.ini');
-        const { galleryPath, autoPlay, language, theme } = req.body;
+        const { galleryPath, browserPath, autoPlay, language, theme } = req.body;
 
         const content = `[Settings]
-BrowserPath=default
+BrowserPath=${browserPath || 'default'}
 GalleryPath=${galleryPath || 'I:\\\\'}
 
 ; AutoPlay? (1=Yes, 0=No)

@@ -45,6 +45,7 @@ Gallery Browser is a fast and stylish media gallery application that allows you 
 - **Dynamic Preview:** Developed an SVG-based real-time preview system for Gamma and Sharpen filters.
 - **Professional Resizing:** Integrated custom resolution input, aspect ratio locking, and popular ratio presets (16:9, 9:16, etc.).
 - **Quick Access:** Added a direct "Edit Image" button to gallery cards for improved user experience.
+- **Browser Configuration:** Added support for custom browser paths in the settings menu.
 - **Performance & Stability:** Fixed image loading flickering, increased server payload limit to 50MB, and ensured instant refresh after saving.
 
 ---

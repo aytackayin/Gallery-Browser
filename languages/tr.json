@@ -35,6 +35,7 @@
     "batchDeleteConfirm": "{count} öğeyi silmek istediğinize emin misiniz?",
     "settings": "Ayarlar",
     "galleryPath": "Galeri Yolu",
+    "browserPath": "Tarayıcı Yolu (Browser Path)",
     "autoPlay": "Videoları Otomatik Oynat",
     "language": "Dil",
     "theme": "Tema",

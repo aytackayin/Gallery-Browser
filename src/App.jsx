@@ -383,7 +383,7 @@ function App() {
 
     // Settings State
     const [settingsModal, setSettingsModal] = useState(false);
-    const [settingsData, setSettingsData] = useState({ galleryPath: '', autoPlay: false, language: 'en', theme: 'system' });
+    const [settingsData, setSettingsData] = useState({ galleryPath: '', browserPath: 'default', autoPlay: false, language: 'en', theme: 'system' });
     const [theme, setTheme] = useState('system');
     const [toast, setToast] = useState(null); // { message: string, type: 'success' | 'error' }
     const [showEditor, setShowEditor] = useState(false);
@@ -1201,6 +1201,17 @@ function App() {
                                     value={settingsData.galleryPath}
                                     onChange={(e) => setSettingsData({ ...settingsData, galleryPath: e.target.value })}
                                     className="modal-input"
+                                />
+                            </div>
+
+                            <div>
+                                <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: 5, color: '#aaa' }}>{t.browserPath || 'Browser Path'}</label>
+                                <input
+                                    type="text"
+                                    value={settingsData.browserPath}
+                                    onChange={(e) => setSettingsData({ ...settingsData, browserPath: e.target.value })}
+                                    className="modal-input"
+                                    placeholder="default"
                                 />
                             </div>
 
