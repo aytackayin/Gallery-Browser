@@ -1033,14 +1033,41 @@ function App() {
                                                 alt={item.name}
                                                 onError={(e) => { e.target.onerror = null; e.target.src = getMediaUrl(item.path); }}
                                             />
-                                            <div className="play-overlay"><Play fill="white" size={30} /></div>
+                                            {item.type.startsWith('video/') && (
+                                                <div className="play-overlay" style={{
+                                                    position: 'absolute',
+                                                    top: 0,
+                                                    left: 0,
+                                                    width: '100%',
+                                                    height: '100%',
+                                                    opacity: 0.8,
+                                                    display: 'flex',
+                                                    justifyContent: 'center',
+                                                    alignItems: 'center',
+                                                    background: 'rgba(0,0,0,0.1)', // Hafif bir karartma tüm alanı kaplasın
+                                                    zIndex: 5
+                                                }}>
+                                                    <div style={{
+                                                        background: 'rgba(0,0,0,0.4)',
+                                                        borderRadius: '50%',
+                                                        padding: '10px',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        boxShadow: '0 4px 6px rgba(0,0,0,0.3)'
+                                                    }}>
+                                                        <Play fill="white" size={40} />
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
+
                                     )}
 
                                     <div className="media-info">
                                         <div className="media-name">{item.name}</div>
                                         <div className="item-actions">
-                                            {item.type.startsWith('video/') ? <VideoIcon size={14} color="#e50914" /> : item.type.startsWith('image/') ? <ImageIcon size={14} color="#0071eb" /> : <Folder size={14} color="#ff8c00" />}
+
                                             <button className="action-btn info-btn" data-tooltip={t.editInfoRename || 'Edit Info & Rename'} onClick={(e) => { e.stopPropagation(); openEditModal(item); }} style={{ color: '#0071eb' }}><Info size={14} /></button>
                                             {item.type.startsWith('image/') && (
                                                 <button className="action-btn edit-image-btn" data-tooltip={t.editImage || 'Edit Image'} onClick={(e) => {
