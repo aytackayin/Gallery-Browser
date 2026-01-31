@@ -58,5 +58,15 @@
     "height": "Height",
     "free": "Free",
     "lock": "Lock",
-    "flip": "Flip"
+    "flip": "Flip",
+    "editVideo": "Video Editor",
+    "videoSaved": "Video processed successfully",
+    "processing": "Processing...",
+    "trim": "Trim (Time)",
+    "crop": "Crop (Area)",
+    "audioControls": "Audio Controls",
+    "volume": "Volume",
+    "layers": "Layers",
+    "transform": "Transform",
+    "colorFilters": "Color & Filters"
 }

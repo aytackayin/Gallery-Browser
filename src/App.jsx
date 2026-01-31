@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import { Folder, X, Play, ChevronRight, Home, ChevronLeft, Image as ImageIcon, Video as VideoIcon, Search, Trash2, Info, Save, FolderInput, ChevronDown, Settings, CheckCircle, Scissors, RotateCw, Sun, Contrast, Lock, Unlock, Maximize2 } from 'lucide-react';
+import { useState, useEffect, useRef, useMemo } from 'react';
+import { Folder, X, Play, Pause, ChevronRight, Home, ChevronLeft, Image as ImageIcon, Video as VideoIcon, Search, Trash2, Info, Save, FolderInput, ChevronDown, Settings, CheckCircle, Scissors, RotateCw, Sun, Contrast, Lock, Unlock, Maximize2, Volume2, Plus, Trash, Droplet } from 'lucide-react';
 import Cropper from "react-cropper";
 import "cropperjs/dist/cropper.css";
 
@@ -291,6 +291,520 @@ const ImageEditor = ({ item, t, onSave, onClose }) => {
     );
 };
 
+const VideoEditor = ({ item, t, onSave, onClose }) => {
+    const videoRef = useRef(null);
+    const containerRef = useRef(null);
+    const [duration, setDuration] = useState(0);
+    const [currentTime, setCurrentTime] = useState(0);
+    const [isPlaying, setIsPlaying] = useState(false);
+    const [isProcessing, setIsProcessing] = useState(false);
+
+    // Multi-track state
+    // Each clip: { id, path, name, start, duration, offset, type, filters, crop }
+    const [tracks, setTracks] = useState([
+        {
+            id: 'v1', type: 'video', clips: [
+                {
+                    id: 'clip-0',
+                    path: item.path,
+                    name: item.name,
+                    start: 0, // Source start
+                    duration: 0, // Will be set on metadata
+                    offset: 0, // Timeline position
+                    filters: { brightness: 100, contrast: 100, saturation: 100, gamma: 1.0 },
+                    crop: { x: 0, y: 0, w: 100, h: 100 },
+                    rotate: 0, flipH: false, flipV: false, volume: 100
+                }
+            ]
+        },
+        { id: 'a1', type: 'audio', clips: [] }
+    ]);
+
+    const [selectedClipId, setSelectedClipId] = useState('clip-0');
+    const [activeTool, setActiveTool] = useState('select'); // select, split, delete
+    const [isDragging, setIsDragging] = useState(null);
+    const [videoRect, setVideoRect] = useState({ top: 0, left: 0, width: 0, height: 0 });
+
+    const [refreshKey] = useState(Date.now());
+    const videoUrl = useMemo(() =>
+        `http://localhost:3001/media/${encodeURIComponent(item.path)}?t=${refreshKey}`,
+        [item.path, refreshKey]
+    );
+
+    const getSelectedClip = () => {
+        for (const track of tracks) {
+            const clip = track.clips.find(c => c.id === selectedClipId);
+            if (clip) return clip;
+        }
+        return null;
+    };
+
+    const updateClip = (clipId, updates) => {
+        setTracks(prev => prev.map(track => ({
+            ...track,
+            clips: track.clips.map(c => c.id === clipId ? { ...c, ...updates } : c)
+        })));
+    };
+
+    const updateVideoRect = () => {
+        const video = videoRef.current;
+        const container = containerRef.current;
+        if (!video || !container || !video.videoWidth) return;
+
+        // Safety margin for handles (40px each side)
+        const margin = 80;
+        const cw = Math.max(100, container.clientWidth - margin);
+        const ch = Math.max(100, container.clientHeight - margin);
+        const vr = video.videoWidth / video.videoHeight;
+        const cr = cw / ch;
+
+        let rw, rh, rl, rt;
+        if (vr > cr) {
+            rw = cw; rh = cw / vr;
+            rl = (container.clientWidth - rw) / 2;
+            rt = (container.clientHeight - rh) / 2;
+        } else {
+            rh = ch; rw = ch * vr;
+            rt = (container.clientHeight - rh) / 2;
+            rl = (container.clientWidth - rw) / 2;
+        }
+        setVideoRect({ left: rl, top: rt, width: rw, height: rh });
+    };
+
+    useEffect(() => {
+        const timer = setTimeout(updateVideoRect, 100);
+        return () => clearTimeout(timer);
+    }, [tracks]); // Re-calc when tracks change
+
+    useEffect(() => {
+        window.addEventListener('resize', updateVideoRect);
+        return () => window.removeEventListener('resize', updateVideoRect);
+    }, []);
+
+    const onMetadata = (e) => {
+        const d = e.target.duration;
+        setDuration(d);
+        // Initially set main video duration if it's 0
+        setTracks(prev => prev.map(t => ({
+            ...t,
+            clips: t.clips.map(c => c.id === 'clip-0' && c.duration === 0 ? { ...c, duration: d } : c)
+        })));
+        updateVideoRect();
+    };
+
+    const togglePlay = () => {
+        if (videoRef.current.paused) { videoRef.current.play(); setIsPlaying(true); }
+        else { videoRef.current.pause(); setIsPlaying(false); }
+    };
+
+    const handleTimeUpdate = (e) => {
+        setCurrentTime(e.target.currentTime);
+        // Track-based playback logic: handle clip transitions
+    };
+
+    const handleSplit = () => {
+        const clip = getSelectedClip();
+        if (!clip) return;
+
+        const splitPoint = currentTime - clip.offset;
+        if (splitPoint <= 0 || splitPoint >= clip.duration) return;
+
+        const newClipId = `clip-${Date.now()}`;
+        const secondPart = {
+            ...clip,
+            id: newClipId,
+            start: clip.start + splitPoint,
+            duration: clip.duration - splitPoint,
+            offset: currentTime
+        };
+
+        setTracks(prev => prev.map(track => {
+            if (track.clips.some(c => c.id === clip.id)) {
+                const index = track.clips.findIndex(c => c.id === clip.id);
+                const updatedClips = [...track.clips];
+                updatedClips[index] = { ...clip, duration: splitPoint };
+                updatedClips.splice(index + 1, 0, secondPart);
+                return { ...track, clips: updatedClips };
+            }
+            return track;
+        }));
+        setSelectedClipId(newClipId);
+    };
+
+    const handleDelete = () => {
+        if (selectedClipId === 'clip-0') return; // Don't delete main for now
+        setTracks(prev => prev.map(track => ({
+            ...track,
+            clips: track.clips.filter(c => c.id !== selectedClipId)
+        })));
+        setSelectedClipId(null);
+    };
+
+    const selectedClip = getSelectedClip();
+
+    const packClips = () => {
+        setTracks(prev => prev.map(track => {
+            let currentOffset = 0;
+            const newClips = track.clips
+                .sort((a, b) => a.offset - b.offset)
+                .map(c => {
+                    const updated = { ...c, offset: currentOffset };
+                    currentOffset += c.duration;
+                    return updated;
+                });
+            return { ...track, clips: newClips };
+        }));
+    };
+
+    const handleSave = async () => {
+        let currentTracks = tracks;
+        const videoTrack = tracks.find(t => t.id === 'v1');
+        if (videoTrack && videoTrack.clips.length > 0) {
+            let offset = 0;
+            const packedClips = [...videoTrack.clips].sort((a, b) => a.offset - b.offset).map(c => {
+                const updated = { ...c, offset };
+                offset += c.duration;
+                return updated;
+            });
+            currentTracks = tracks.map(t => t.id === 'v1' ? { ...t, clips: packedClips } : t);
+            setTracks(currentTracks);
+        }
+
+        setIsProcessing(true);
+        const video = videoRef.current;
+        const nw = video.videoWidth || 1920;
+        const nh = video.videoHeight || 1080;
+
+        const timelineData = {
+            tracks: currentTracks.map(t => ({
+                id: t.id,
+                type: t.type,
+                clips: t.clips.map(c => {
+                    const relX = c.crop.x / 100;
+                    const relY = c.crop.y / 100;
+                    const relW = c.crop.w / 100;
+                    const relH = c.crop.h / 100;
+
+                    return {
+                        ...c,
+                        cropPixels: {
+                            x: Math.round(relX * nw),
+                            y: Math.round(relY * nh),
+                            w: Math.round(relW * nw),
+                            h: Math.round(relH * nh)
+                        }
+                    };
+                })
+            }))
+        };
+        onSave(timelineData);
+    };
+
+    const handleTimelineClick = (e) => {
+        if (!duration || !videoRef.current) return;
+        const rect = e.currentTarget.getBoundingClientRect();
+        const offsetX = e.clientX - rect.left - 60;
+        const totalWidth = rect.width - 60;
+        if (offsetX < 0) return;
+
+        const percentage = Math.max(0, Math.min(1, offsetX / totalWidth));
+        const newTime = percentage * duration;
+
+        // Force update video and local state
+        videoRef.current.currentTime = newTime;
+        setCurrentTime(newTime);
+
+        // Ensure it doesn't snap back by updating scrubber position state immediately if needed
+    };
+
+    const handleMouseMove = (e) => {
+        if (!isDragging) return;
+
+        if (isDragging.type === 'crop') {
+            if (!videoRect.width) return;
+            const rect = containerRef.current.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left - videoRect.left;
+            const mouseY = e.clientY - rect.top - videoRect.top;
+            const px = (mouseX / videoRect.width) * 100;
+            const py = (mouseY / videoRect.height) * 100;
+
+            if (isDragging.mode === 'move') {
+                updateClip(selectedClipId, {
+                    crop: {
+                        ...selectedClip.crop,
+                        x: Math.max(0, Math.min(100 - (selectedClip.crop.w || 0), px - (selectedClip.crop.w || 0) / 2)),
+                        y: Math.max(0, Math.min(100 - (selectedClip.crop.h || 0), py - (selectedClip.crop.h || 0) / 2))
+                    }
+                });
+            } else if (isDragging.mode === 'resize') {
+                const { pos } = isDragging;
+                let { x, y, w, h } = selectedClip.crop;
+                if (pos.includes('e')) w = Math.max(5, Math.min(100 - x, px - x));
+                if (pos.includes('s')) h = Math.max(5, Math.min(100 - y, py - y));
+                if (pos.includes('w')) {
+                    const newX = Math.max(0, Math.min(x + w - 5, px));
+                    w = x + w - newX; x = newX;
+                }
+                if (pos.includes('n')) {
+                    const newY = Math.max(0, Math.min(y + h - 5, py));
+                    h = y + h - newY; y = newY;
+                }
+                updateClip(selectedClipId, { crop: { x, y, w, h } });
+            }
+        }
+        else if (isDragging.type === 'clip') {
+            const rect = isDragging.containerRect;
+            const totalWidth = rect.width - 60;
+            const deltaX = e.clientX - isDragging.startX;
+            const deltaSeconds = (deltaX / totalWidth) * duration;
+            let newOffset = Math.max(0, isDragging.startOffset + deltaSeconds);
+
+            const track = tracks.find(t => t.clips.some(c => c.id === isDragging.id));
+            if (track) {
+                const others = track.clips.filter(c => c.id !== isDragging.id);
+                for (const other of others) {
+                    const otherEnd = other.offset + other.duration;
+                    if (Math.abs(newOffset - otherEnd) < (0.5 / totalWidth) * duration * 20) {
+                        newOffset = otherEnd; break;
+                    }
+                    if (Math.abs((newOffset + selectedClip.duration) - other.offset) < (0.5 / totalWidth) * duration * 20) {
+                        newOffset = other.offset - selectedClip.duration; break;
+                    }
+                }
+            }
+            updateClip(isDragging.id, { offset: newOffset });
+        }
+    };
+
+    const handleMouseUp = () => setIsDragging(null);
+
+    return (
+        <div className="modal-overlay editor-overlay" style={{ zIndex: 7000 }}>
+            <div className="modal editor-modal video-editor-modal" style={{ height: '95vh', width: '98vw' }}
+                onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onClick={e => e.stopPropagation()}>
+
+                <div className="modal-header">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 15 }}>
+                        <Scissors size={20} color="var(--netflix-red)" />
+                        <h3 style={{ margin: 0 }}>{t.editVideo || 'Pro Video Editor'}</h3>
+                    </div>
+                    <div style={{ display: 'flex', gap: 10 }}>
+                        <button className="btn btn-primary" onClick={handleSave} disabled={isProcessing}>
+                            {isProcessing ? <div className="spinner-small" /> : <Save size={16} />}
+                            {t.save || 'Export'}
+                        </button>
+                        <button className="btn btn-grey" onClick={onClose} disabled={isProcessing}><X size={20} /></button>
+                    </div>
+                </div>
+
+                <div className="editor-grid" style={{ display: 'grid', gridTemplateColumns: '300px minmax(0, 1fr)', gridTemplateRows: 'minmax(0, 1fr) 250px', gap: 10, flex: 1, overflow: 'hidden', padding: 10, height: 'calc(100% - 60px)' }}>
+
+                    {/* Left: properties */}
+                    <div className="editor-sidebar sidebar-group" style={{ overflowY: 'auto' }}>
+                        <label style={{ fontSize: '0.9rem', marginBottom: 15, display: 'block' }}>CLIP PROPERTIES</label>
+                        {selectedClip ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 15 }}>
+                                <div className="control-item">
+                                    <label>Brightness</label>
+                                    <input type="range" min="0" max="200" value={selectedClip.filters.brightness}
+                                        onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, brightness: e.target.value } })} />
+                                </div>
+                                <div className="control-item">
+                                    <label>Contrast</label>
+                                    <input type="range" min="0" max="200" value={selectedClip.filters.contrast}
+                                        onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, contrast: e.target.value } })} />
+                                </div>
+                                <div className="control-item">
+                                    <label>Saturation</label>
+                                    <input type="range" min="0" max="200" value={selectedClip.filters.saturation}
+                                        onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, saturation: e.target.value } })} />
+                                </div>
+                                <div className="control-item">
+                                    <label>Volume</label>
+                                    <input type="range" min="0" max="200" value={selectedClip.volume}
+                                        onChange={e => updateClip(selectedClipId, { volume: e.target.value })} />
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5 }}>
+                                    <button className="action-btn" onClick={() => updateClip(selectedClipId, { rotate: (selectedClip.rotate + 90) % 360 })}><RotateCw size={14} /> Rotate</button>
+                                    <button className={`action-btn ${selectedClip.flipH ? 'active' : ''}`} onClick={() => updateClip(selectedClipId, { flipH: !selectedClip.flipH })}><Maximize2 size={14} style={{ transform: 'rotate(90deg)' }} /> Flip H</button>
+                                </div>
+                            </div>
+                        ) : (
+                            <p style={{ color: '#666', fontSize: '0.8rem' }}>Select a clip to edit properties</p>
+                        )}
+                    </div>
+
+                    {/* Right: Viewer */}
+                    <div className="editor-main-area" style={{ display: 'flex', flexDirection: 'column', background: '#050505', borderRadius: 8, overflow: 'hidden' }}>
+                        <div className="video-viewport" ref={containerRef} style={{ position: 'relative', flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <video
+                                ref={videoRef}
+                                src={videoUrl}
+                                onLoadedMetadata={onMetadata}
+                                onLoadedData={updateVideoRect}
+                                onCanPlay={updateVideoRect}
+                                onTimeUpdate={handleTimeUpdate}
+                                playsInline
+                                muted
+                                style={{
+                                    position: 'absolute',
+                                    width: videoRect.width ? `${videoRect.width}px` : '100%',
+                                    height: videoRect.height ? `${videoRect.height}px` : '100%',
+                                    objectFit: 'contain',
+                                    zIndex: 1,
+                                    backgroundColor: '#000',
+                                    display: 'block',
+                                    filter: selectedClip ? `brightness(${selectedClip.filters.brightness}%) contrast(${selectedClip.filters.contrast}%) saturate(${selectedClip.filters.saturation}%)` : 'none',
+                                    transform: selectedClip ? `rotate(${selectedClip.rotate}deg) scaleX(${selectedClip.flipH ? -1 : 1}) scaleY(${selectedClip.flipV ? -1 : 1})` : 'none'
+                                }}
+                            />
+
+                            {/* Crop Overlay (Only when selected and active) */}
+                            {selectedClip && (
+                                <div
+                                    style={{
+                                        position: 'absolute',
+                                        left: `${videoRect.left + (selectedClip.crop.x / 100) * videoRect.width}px`,
+                                        top: `${videoRect.top + (selectedClip.crop.y / 100) * videoRect.height}px`,
+                                        width: `${(selectedClip.crop.w / 100) * videoRect.width}px`,
+                                        height: `${(selectedClip.crop.h / 100) * videoRect.height}px`,
+                                        border: '2px dashed #e50914',
+                                        boxShadow: '0 0 0 9999px rgba(0,0,0,0.6)',
+                                        zIndex: 100,
+                                        cursor: isDragging?.type === 'crop' && isDragging.mode === 'move' ? 'grabbing' : 'move'
+                                    }}
+                                    onMouseDown={(e) => { e.stopPropagation(); setIsDragging({ type: 'crop', mode: 'move' }); }}
+                                >
+                                    {/* Resize Handles (4 corners) */}
+                                    {['nw', 'ne', 'sw', 'se'].map(pos => (
+                                        <div
+                                            key={pos}
+                                            style={{
+                                                position: 'absolute',
+                                                width: 16, height: 16,
+                                                background: '#e50914',
+                                                borderRadius: '50%',
+                                                cursor: `${pos}-resize`,
+                                                zIndex: 110,
+                                                ...(pos === 'nw' && { top: -8, left: -8 }),
+                                                ...(pos === 'ne' && { top: -8, right: -8 }),
+                                                ...(pos === 'sw' && { bottom: -8, left: -8 }),
+                                                ...(pos === 'se' && { bottom: -8, right: -8 }),
+                                            }}
+                                            onMouseDown={(e) => {
+                                                e.stopPropagation();
+                                                setIsDragging({ type: 'crop', mode: 'resize', pos });
+                                            }}
+                                        />
+                                    ))}
+                                    <div style={{ position: 'absolute', top: -25, left: 0, background: '#e50914', fontSize: '0.75rem', color: 'white', padding: '2px 6px', borderRadius: '4px', whiteSpace: 'nowrap' }}>
+                                        {Math.round(selectedClip.crop.w)}% x {Math.round(selectedClip.crop.h)}%
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Viewer Controls */}
+                            <div style={{ position: 'absolute', bottom: 10, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 15, background: 'rgba(0,0,0,0.5)', padding: '5px 15px', borderRadius: 20 }}>
+                                <button className="action-btn" onClick={() => videoRef.current.currentTime -= 0.1}><ChevronLeft size={20} /></button>
+                                <button className="action-btn" onClick={togglePlay}>
+                                    {isPlaying ? <Pause size={24} fill="white" /> : <Play size={24} fill="white" />}
+                                </button>
+                                <button className="action-btn" onClick={() => videoRef.current.currentTime += 0.1}><ChevronRight size={20} /></button>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Bottom: Timeline */}
+                    <div style={{ gridColumn: '1 / -1', background: '#111', borderRadius: 8, display: 'flex', flexDirection: 'column' }}>
+                        <div style={{ padding: '5px 10px', display: 'flex', gap: 10, borderBottom: '1px solid #222', alignItems: 'center' }}>
+                            <div className="btn-group">
+                                <button className={`action-btn ${activeTool === 'select' ? 'active' : ''}`} onClick={() => setActiveTool('select')} title="Selection Tool"><Search size={14} /></button>
+                                <button className={`action-btn ${activeTool === 'split' ? 'active' : ''}`} onClick={handleSplit} title="Split at Scrubber"><Scissors size={14} /></button>
+                                <button className={`action-btn ${activeTool === 'delete' ? 'active' : ''}`} onClick={handleDelete} title="Delete Selected Clip"><Trash size={14} /></button>
+                                <button className="action-btn" onClick={packClips} title="Pack Clips (Remove Gaps)"><Droplet size={14} /></button>
+                            </div>
+                            <div style={{ flex: 1, textAlign: 'center', fontSize: '0.85rem', color: '#888', fontFamily: 'monospace' }}>
+                                {new Date(currentTime * 1000).toISOString().substr(11, 8)} / {new Date(duration * 1000).toISOString().substr(11, 8)}
+                            </div>
+                        </div>
+
+                        <div className="timeline-tracks"
+                            onClick={handleTimelineClick}
+                            style={{ flex: 1, overflowY: 'auto', position: 'relative', padding: '10px 0', cursor: 'pointer' }}>
+                            {tracks.map(track => (
+                                <div key={track.id} style={{ display: 'grid', gridTemplateColumns: '60px 1fr', gap: 5, marginBottom: 5, minHeight: 40, borderBottom: '1px solid #1a1a1a' }}>
+                                    <div style={{ color: '#555', fontSize: '0.7rem', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0a0a0a' }}>
+                                        {track.id.toUpperCase()}
+                                    </div>
+                                    <div style={{ position: 'relative', background: '#080808' }}>
+                                        {track.clips.map(clip => (
+                                            <div
+                                                key={clip.id}
+                                                className={`clip-item ${clip.id === selectedClipId ? 'selected' : ''}`}
+                                                onClick={(e) => { e.stopPropagation(); setSelectedClipId(clip.id); }}
+                                                onMouseDown={(e) => {
+                                                    e.stopPropagation();
+                                                    setSelectedClipId(clip.id);
+                                                    setIsDragging({
+                                                        type: 'clip',
+                                                        id: clip.id,
+                                                        startX: e.clientX,
+                                                        startOffset: clip.offset,
+                                                        containerRect: e.currentTarget.closest('.timeline-tracks').getBoundingClientRect()
+                                                    });
+                                                }}
+                                                style={{
+                                                    position: 'absolute',
+                                                    left: `${(clip.offset / (duration || 1)) * 100}%`,
+                                                    width: `${(clip.duration / (duration || 1)) * 100}%`,
+                                                    height: '100%',
+                                                    background: clip.id === selectedClipId ? 'rgba(229, 9, 20, 0.4)' : 'rgba(229, 9, 20, 0.1)',
+                                                    border: clip.id === selectedClipId ? '1px solid #e50914' : '1px solid #333',
+                                                    borderRadius: 4,
+                                                    padding: '2px 5px',
+                                                    fontSize: '0.7rem',
+                                                    color: '#eee',
+                                                    cursor: isDragging?.id === clip.id ? 'grabbing' : 'grab',
+                                                    overflow: 'hidden',
+                                                    whiteSpace: 'nowrap',
+                                                    zIndex: isDragging?.id === clip.id ? 10 : 5,
+                                                    userSelect: 'none',
+                                                    transition: isDragging ? 'none' : 'all 0.1s'
+                                                }}
+                                            >
+                                                {clip.name}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            ))}
+
+                            {/* Playhead / Scrubber */}
+                            <div
+                                style={{
+                                    position: 'absolute',
+                                    top: 0,
+                                    bottom: 0,
+                                    left: `calc(60px + ${(currentTime / (duration || 1)) * 100}%)`,
+                                    marginLeft: `-${(currentTime / (duration || 1)) * 60}px`,
+                                    width: 2,
+                                    background: '#e50914',
+                                    zIndex: 20,
+                                    pointerEvents: 'none',
+                                    transition: 'none'
+                                }}
+                            >
+                                <div style={{ position: 'absolute', top: -10, left: -4, width: 10, height: 10, background: '#e50914', clipPath: 'polygon(50% 100%, 0 0, 100% 0)' }} />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+
 const FolderNode = ({ name, path, level = 0, onSelect, selectedPath, expandedFolders, toggleExpand }) => {
     const isExpanded = expandedFolders[path];
     const [children, setChildren] = useState([]);
@@ -391,6 +905,7 @@ function App() {
     const [theme, setTheme] = useState('system');
     const [toast, setToast] = useState(null); // { message: string, type: 'success' | 'error' }
     const [showEditor, setShowEditor] = useState(false);
+    const [showVideoEditor, setShowVideoEditor] = useState(false);
     const [refreshKey, setRefreshKey] = useState(Date.now());
 
     // ... (Existing states remain)
@@ -821,6 +1336,27 @@ function App() {
         }
     };
 
+    const handleSaveEditedVideo = async (timeline) => {
+        try {
+            const res = await fetch('/api/process-video', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ path: selectedMedia.path, timeline })
+            });
+            const data = await res.json();
+            if (data.success) {
+                setRefreshKey(Date.now());
+                setShowVideoEditor(false);
+                setToast(t.videoSaved || 'Video processed successfully');
+                setTimeout(() => setToast(null), 3000);
+            } else {
+                alert(data.error || 'Error processing video: ' + data.error);
+            }
+        } catch (e) {
+            alert('Error processing video: ' + e.message);
+        }
+    };
+
     const sortedMediaOnly = items.filter(i => i.type !== 'folder');
     const selectedMedia = selectedMediaIndex >= 0 ? sortedMediaOnly[selectedMediaIndex] : null;
 
@@ -1071,13 +1607,14 @@ function App() {
                                         <div className="item-actions" onClick={e => e.stopPropagation()}>
 
                                             <button className="action-btn info-btn" data-tooltip={t.editInfoRename || 'Edit Info & Rename'} onClick={(e) => { e.stopPropagation(); openEditModal(item); }} style={{ color: '#0071eb' }}><Info size={14} /></button>
-                                            {item.type.startsWith('image/') && (
-                                                <button className="action-btn edit-image-btn" data-tooltip={t.editImage || 'Edit Image'} onClick={(e) => {
+                                            {(item.type.startsWith('image/') || item.type.startsWith('video/')) && (
+                                                <button className="action-btn edit-image-btn" data-tooltip={item.type.startsWith('image/') ? (t.editImage || 'Edit Image') : (t.editVideo || 'Edit Video')} onClick={(e) => {
                                                     e.stopPropagation();
                                                     const idx = sortedMediaOnly.findIndex(m => m.path === item.path);
                                                     if (idx !== -1) {
                                                         setSelectedMediaIndex(idx);
-                                                        setShowEditor(true);
+                                                        if (item.type.startsWith('image/')) setShowEditor(true);
+                                                        else setShowVideoEditor(true);
                                                     }
                                                 }} style={{ color: '#46d369' }}>
                                                     <Scissors size={14} />
@@ -1240,8 +1777,12 @@ function App() {
                             <button className="control-btn" data-tooltip={t.delete || 'Delete'} onClick={(e) => { e.stopPropagation(); setConfirmDelete(selectedMedia); }} style={{ color: '#e50914' }}>
                                 <Trash2 size={18} />
                             </button>
-                            {selectedMedia.type.startsWith('image/') && (
-                                <button className="control-btn" data-tooltip={t.editImage || 'Edit Image'} onClick={(e) => { e.stopPropagation(); setShowEditor(true); }} style={{ color: '#46d369' }}>
+                            {(selectedMedia.type.startsWith('image/') || selectedMedia.type.startsWith('video/')) && (
+                                <button className="control-btn" data-tooltip={selectedMedia.type.startsWith('image/') ? (t.editImage || 'Edit Image') : (t.editVideo || 'Edit Video')} onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (selectedMedia.type.startsWith('image/')) setShowEditor(true);
+                                    else setShowVideoEditor(true);
+                                }} style={{ color: '#46d369' }}>
                                     <Scissors size={18} />
                                 </button>
                             )}
@@ -1405,6 +1946,15 @@ function App() {
                     t={t}
                     onClose={() => setShowEditor(false)}
                     onSave={handleSaveEditedImage}
+                />
+            )}
+
+            {showVideoEditor && selectedMedia && (
+                <VideoEditor
+                    item={selectedMedia}
+                    t={t}
+                    onClose={() => setShowVideoEditor(false)}
+                    onSave={handleSaveEditedVideo}
                 />
             )}
         </div>

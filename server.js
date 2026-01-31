@@ -532,4 +532,124 @@ Theme=${theme || 'system'}
     }
 });
 
+app.post('/api/process-video', async (req, res) => {
+    const { timeline } = req.body;
+    if (!timeline || !timeline.tracks) return res.status(400).json({ error: "Eksik timeline verisi" });
+
+    try {
+        let clips = timeline.tracks.flatMap(t => t.clips).filter(c => c.duration > 0.05);
+        if (clips.length === 0) return res.status(400).json({ error: "İşlenecek geçerli bir klip yok (Süre çok kısa olabilir)" });
+
+        const uniquePaths = [...new Set(clips.map(c => c.path))];
+        const command = ffmpeg();
+        uniquePaths.forEach(p => command.input(path.join(rootGalleryPath, p)));
+
+        const firstClip = clips[0];
+        const targetPath = path.join(rootGalleryPath, firstClip.path);
+        const tempPath = targetPath + '.tmp.mp4';
+
+        // Check for audio streams in all inputs
+        const hasAudioMap = {};
+        for (const p of uniquePaths) {
+            hasAudioMap[p] = await new Promise(resolve => {
+                ffmpeg.ffprobe(path.join(rootGalleryPath, p), (err, metadata) => {
+                    if (err) resolve(false);
+                    else resolve(metadata.streams.some(s => s.codec_type === 'audio'));
+                });
+            });
+        }
+
+        const filterComplex = [];
+        const videoLabels = [];
+        const audioLabels = [];
+
+        clips.forEach((clip, i) => {
+            const inputIdx = uniquePaths.indexOf(clip.path);
+            const vLabel = `v${i}`;
+            const aLabel = `a${i}`;
+
+            const b = (clip.filters.brightness || 100) / 100 - 1;
+            const c = (clip.filters.contrast || 100) / 100;
+            const s = (clip.filters.saturation || 100) / 100;
+            const g = (clip.filters.gamma || 1.0);
+
+            // Ensure even numbers for crop to avoid YUV420p errors
+            const cw = `trunc(iw*${clip.crop.w / 100}/2)*2`;
+            const ch = `trunc(ih*${clip.crop.h / 100}/2)*2`;
+            const cx = `trunc(iw*${clip.crop.x / 100}/2)*2`;
+            const cy = `trunc(ih*${clip.crop.y / 100}/2)*2`;
+
+            let vFilters = [
+                `trim=start=${clip.start}:duration=${clip.duration},setpts=PTS-STARTPTS`,
+                `crop=w=${cw}:h=${ch}:x=${cx}:y=${cy}`,
+                `eq=brightness=${b}:contrast=${c}:saturation=${s}:gamma=${g}`,
+                `scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p`
+            ];
+
+            if (clip.rotate) {
+                if (clip.rotate === 90) vFilters.push('transpose=1');
+                else if (clip.rotate === 180) vFilters.push('transpose=1,transpose=1');
+                else if (clip.rotate === 270) vFilters.push('transpose=2');
+            }
+            if (clip.flipH) vFilters.push('hflip');
+            if (clip.flipV) vFilters.push('vflip');
+
+            filterComplex.push({ inputs: `${inputIdx}:v`, filter: vFilters.join(','), outputs: vLabel });
+            videoLabels.push(vLabel);
+
+            if (hasAudioMap[clip.path]) {
+                filterComplex.push({
+                    inputs: `${inputIdx}:a`,
+                    filter: `atrim=start=${clip.start}:duration=${clip.duration},asetpts=PTS-STARTPTS,volume=${(clip.volume || 100) / 100}`,
+                    outputs: aLabel
+                });
+                audioLabels.push(aLabel);
+            }
+        });
+
+        let finalVideoLabel = videoLabels[0];
+        let finalAudioLabel = audioLabels[0] || null;
+
+        if (videoLabels.length > 1) {
+            filterComplex.push({ inputs: videoLabels, filter: `concat=n=${videoLabels.length}:v=1:a=0`, outputs: 'vf' });
+            finalVideoLabel = 'vf';
+        }
+
+        if (audioLabels.length > 1) {
+            filterComplex.push({ inputs: audioLabels, filter: `concat=n=${audioLabels.length}:v=0:a=1`, outputs: 'af' });
+            finalAudioLabel = 'af';
+        } else if (audioLabels.length === 1) {
+            finalAudioLabel = audioLabels[0];
+        }
+
+        const outputs = [finalVideoLabel];
+        if (finalAudioLabel) outputs.push(finalAudioLabel);
+
+        command
+            .complexFilter(filterComplex, outputs)
+            .on('start', cmd => console.log('FFmpeg command:', cmd))
+            .on('error', (err) => {
+                console.error('FFmpeg error:', err);
+                if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+                res.status(500).json({ error: err.message });
+            })
+            .on('end', () => {
+                try {
+                    if (fs.existsSync(targetPath)) fs.unlinkSync(targetPath);
+                    fs.renameSync(tempPath, targetPath);
+                    const thumbPath = getThumbPath(firstClip.path);
+                    if (fs.existsSync(thumbPath)) fs.unlinkSync(thumbPath);
+                    res.json({ success: true, message: "Video başarıyla işlendi" });
+                } catch (e) {
+                    res.status(500).json({ error: e.message });
+                }
+            })
+            .save(tempPath);
+
+    } catch (e) {
+        console.error('Server error:', e);
+        res.status(500).json({ error: e.message });
+    }
+});
+
 app.listen(PORT, () => console.log(`Sunucu çalışıyor.`));

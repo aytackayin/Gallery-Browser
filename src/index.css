@@ -937,3 +937,232 @@ select:focus {
     box-shadow: 0 0 8px rgba(70, 211, 105, 0.4);
   }
 }
+
+/* Professional Video Editor Layout */
+.video-editor-modal {
+  width: 95vw !important;
+  max-width: 1300px !important;
+  height: 90vh !important;
+  display: flex !important;
+  flex-direction: column !important;
+  background: #0a0a0a !important;
+  border: 1px solid #222 !important;
+}
+
+.editor-grid {
+  padding: 20px;
+}
+
+.video-viewport {
+  background: #000;
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 1);
+  border: 1px solid #333;
+}
+
+.sidebar-group {
+  background: #151515;
+  padding: 15px;
+  border-radius: 10px;
+  border: 1px solid #222;
+}
+
+.sidebar-group label {
+  color: #eee;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.layer-item {
+  transition: 0.2s;
+  cursor: pointer;
+}
+
+.layer-item:hover {
+  background: #252525 !important;
+}
+
+.layer-item.active {
+  box-shadow: 0 0 10px rgba(229, 9, 20, 0.3);
+}
+
+/* Dual Thumb Range Slider */
+.range-slider-container {
+  overflow: hidden;
+}
+
+.range-thumb {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  appearance: none;
+  background: none;
+  pointer-events: none;
+  margin: 0;
+  z-index: 10;
+}
+
+.range-thumb::-webkit-slider-thumb {
+  appearance: none;
+  width: 12px;
+  height: 100%;
+  background: var(--netflix-red);
+  cursor: ew-resize;
+  pointer-events: auto;
+  border-radius: 2px;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.range-in::-webkit-slider-thumb {
+  transform: translateX(-50%);
+}
+
+.range-out::-webkit-slider-thumb {
+  transform: translateX(50%);
+}
+
+.range-thumb:focus {
+  outline: none;
+}
+
+.av-timeline {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+/* Crop Box Tweaks */
+.crop-box {
+  background: rgba(229, 9, 20, 0.05) !important;
+}
+
+.crop-label {
+  pointer-events: none;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+}
+
+.resize-handle {
+  width: 12px !important;
+  height: 12px !important;
+  border: 2px solid white !important;
+}
+
+.resize-handle.br {
+  right: -6px !important;
+  bottom: -6px !important;
+}
+
+.spinner-small {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  display: inline-block;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.action-btn.active {
+  background: var(--netflix-red) !important;
+  color: white !important;
+}
+
+/* Professional Video Editor Styles */
+.video-editor-modal .editor-grid {
+  background: #000;
+  border-radius: 12px;
+  border: 1px solid #222;
+}
+
+.timeline-tracks {
+  position: relative;
+  user-select: none;
+  scrollbar-width: thin;
+  scrollbar-color: #333 #000;
+}
+
+.timeline-tracks::-webkit-scrollbar {
+  height: 6px;
+}
+
+.timeline-tracks::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 10px;
+}
+
+.timeline-track-label {
+  border-right: 1px solid #222;
+  color: #666;
+  font-weight: bold;
+}
+
+.clip-item {
+  transition: opacity 0.2s, transform 0.1s;
+}
+
+.clip-item:hover {
+  filter: brightness(1.2);
+}
+
+.clip-item.selected {
+  outline: 2px solid var(--netflix-red);
+  z-index: 10;
+}
+
+.btn-group {
+  display: flex;
+  background: #111;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #222;
+}
+
+.btn-group .action-btn {
+  border-radius: 0;
+  border: none;
+  background: transparent;
+  padding: 8px 12px;
+  color: #aaa;
+}
+
+.btn-group .action-btn:not(:last-child) {
+  border-right: 1px solid #222;
+}
+
+.btn-group .action-btn:hover {
+  background: #222;
+  color: #fff;
+}
+
+.btn-group .action-btn.active {
+  background: var(--netflix-red) !important;
+  color: #fff !important;
+}
+
+.sidebar-group label {
+  color: #888;
+  letter-spacing: 0.5px;
+}
+
+.control-item label {
+  font-size: 0.75rem;
+  color: #aaa;
+}
+
+/* Playhead handle marker */
+.playhead-marker {
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 10px solid var(--netflix-red);
+  position: absolute;
+  top: 0;
+  left: -5px;
+}

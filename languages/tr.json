@@ -58,5 +58,15 @@
     "height": "Yükseklik",
     "free": "Serbest",
     "lock": "Kilit",
-    "flip": "Çevir"
+    "flip": "Çevir",
+    "editVideo": "Video Düzenleyici",
+    "videoSaved": "Video başarıyla işlendi",
+    "processing": "İşleniyor...",
+    "trim": "Kırp (Zaman)",
+    "crop": "Kırp (Alan)",
+    "audioControls": "Ses Ayarları",
+    "volume": "Ses Seviyesi",
+    "layers": "Katmanlar",
+    "transform": "Dönüştür",
+    "colorFilters": "Renk ve Filtreler"
 }
