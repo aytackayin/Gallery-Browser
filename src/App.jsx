@@ -324,6 +324,9 @@ const VideoEditor = ({ item, t, onSave, onClose }) => {
     const [activeTool, setActiveTool] = useState('select'); // select, split, delete
     const [isDragging, setIsDragging] = useState(null);
     const [videoRect, setVideoRect] = useState({ top: 0, left: 0, width: 0, height: 0 });
+    const [showSaveAs, setShowSaveAs] = useState(false);
+    const [saveAsName, setSaveAsName] = useState(item.name.replace(/\.[^/.]+$/, ""));
+    const [saveAsExt, setSaveAsExt] = useState(item.name.split('.').pop() || 'mp4');
 
     const [refreshKey] = useState(Date.now());
     const videoUrl = useMemo(() =>
@@ -456,7 +459,7 @@ const VideoEditor = ({ item, t, onSave, onClose }) => {
         }));
     };
 
-    const handleSave = async () => {
+    const handleSave = async (options = {}) => {
         let currentTracks = tracks;
         const videoTrack = tracks.find(t => t.id === 'v1');
         if (videoTrack && videoTrack.clips.length > 0) {
@@ -497,7 +500,7 @@ const VideoEditor = ({ item, t, onSave, onClose }) => {
                 })
             }))
         };
-        onSave(timelineData);
+        onSave(timelineData, options);
     };
 
     const handleTimelineClick = (e) => {
@@ -589,7 +592,10 @@ const VideoEditor = ({ item, t, onSave, onClose }) => {
                         <h3 style={{ margin: 0 }}>{t.editVideo || 'Pro Video Editor'}</h3>
                     </div>
                     <div style={{ display: 'flex', gap: 10 }}>
-                        <button className="btn btn-primary" onClick={handleSave} disabled={isProcessing}>
+                        <button className="btn" onClick={() => setShowSaveAs(true)} disabled={isProcessing} style={{ background: '#333', color: 'white' }}>
+                            <Plus size={16} /> {t.saveAs || 'Save As...'}
+                        </button>
+                        <button className="btn btn-primary" onClick={() => handleSave()} disabled={isProcessing}>
                             {isProcessing ? <div className="spinner-small" /> : <Save size={16} />}
                             {t.save || 'Export'}
                         </button>
@@ -605,24 +611,40 @@ const VideoEditor = ({ item, t, onSave, onClose }) => {
                         {selectedClip ? (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 15 }}>
                                 <div className="control-item">
-                                    <label>Brightness</label>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                        <label>Brightness</label>
+                                        <span style={{ fontSize: '0.75rem', color: 'var(--netflix-red)' }}>{selectedClip.filters.brightness}%</span>
+                                    </div>
                                     <input type="range" min="0" max="200" value={selectedClip.filters.brightness}
                                         onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, brightness: e.target.value } })} />
                                 </div>
                                 <div className="control-item">
-                                    <label>Contrast</label>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                        <label>Contrast</label>
+                                        <span style={{ fontSize: '0.75rem', color: 'var(--netflix-red)' }}>{selectedClip.filters.contrast}%</span>
+                                    </div>
                                     <input type="range" min="0" max="200" value={selectedClip.filters.contrast}
                                         onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, contrast: e.target.value } })} />
                                 </div>
                                 <div className="control-item">
-                                    <label>Saturation</label>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                        <label>Saturation</label>
+                                        <span style={{ fontSize: '0.75rem', color: 'var(--netflix-red)' }}>{selectedClip.filters.saturation}%</span>
+                                    </div>
                                     <input type="range" min="0" max="200" value={selectedClip.filters.saturation}
                                         onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, saturation: e.target.value } })} />
                                 </div>
                                 <div className="control-item">
-                                    <label>Volume</label>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                        <label>Volume</label>
+                                        <span style={{ fontSize: '0.75rem', color: 'var(--netflix-red)' }}>{selectedClip.volume}%</span>
+                                    </div>
                                     <input type="range" min="0" max="200" value={selectedClip.volume}
-                                        onChange={e => updateClip(selectedClipId, { volume: e.target.value })} />
+                                        onChange={e => {
+                                            const vol = e.target.value;
+                                            updateClip(selectedClipId, { volume: vol });
+                                            if (videoRef.current) videoRef.current.volume = vol / 100;
+                                        }} />
                                 </div>
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5 }}>
                                     <button className="action-btn" onClick={() => updateClip(selectedClipId, { rotate: (selectedClip.rotate + 90) % 360 })}><RotateCw size={14} /> Rotate</button>
@@ -642,10 +664,12 @@ const VideoEditor = ({ item, t, onSave, onClose }) => {
                                 src={videoUrl}
                                 onLoadedMetadata={onMetadata}
                                 onLoadedData={updateVideoRect}
-                                onCanPlay={updateVideoRect}
+                                onCanPlay={() => {
+                                    updateVideoRect();
+                                    if (videoRef.current && selectedClip) videoRef.current.volume = selectedClip.volume / 100;
+                                }}
                                 onTimeUpdate={handleTimeUpdate}
                                 playsInline
-                                muted
                                 style={{
                                     position: 'absolute',
                                     width: videoRect.width ? `${videoRect.width}px` : '100%',
@@ -799,10 +823,57 @@ const VideoEditor = ({ item, t, onSave, onClose }) => {
                         </div>
                     </div>
                 </div>
+
+                {/* Save As Modal */}
+                {showSaveAs && (
+                    <div className="modal-overlay" style={{ zIndex: 8000 }}>
+                        <div className="modal" style={{ maxWidth: 400 }}>
+                            <div className="modal-header" style={{ marginBottom: 15 }}>
+                                <h3 style={{ margin: 0 }}>{t.saveAs || 'Save As...'}</h3>
+                                <button onClick={() => setShowSaveAs(false)} style={{ background: 'none', border: 'none', color: '#666', cursor: 'pointer' }}><X size={20} /></button>
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 15 }}>
+                                <div className="control-item">
+                                    <label style={{ display: 'block', marginBottom: 5, fontSize: '0.9rem', color: '#aaa' }}>{t.fileName || 'File Name'}</label>
+                                    <input
+                                        className="modal-input"
+                                        value={saveAsName}
+                                        onChange={e => setSaveAsName(e.target.value)}
+                                        style={{ width: '100%', boxSizing: 'border-box' }}
+                                    />
+                                </div>
+                                <div className="control-item">
+                                    <label style={{ display: 'block', marginBottom: 5, fontSize: '0.9rem', color: '#aaa' }}>{t.format || 'Format'}</label>
+                                    <select
+                                        className="modal-input"
+                                        value={saveAsExt}
+                                        onChange={e => setSaveAsExt(e.target.value)}
+                                        style={{ width: '100%', boxSizing: 'border-box' }}
+                                    >
+                                        <option value="mp4">MP4</option>
+                                        <option value="mkv">MKV</option>
+                                        <option value="mov">MOV</option>
+                                        <option value="avi">AVI</option>
+                                    </select>
+                                </div>
+                                <div className="modal-footer" style={{ marginTop: 10, display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                                    <button className="btn btn-grey" onClick={() => setShowSaveAs(false)}>{t.cancel || 'Cancel'}</button>
+                                    <button className="btn btn-primary" onClick={() => {
+                                        setShowSaveAs(false);
+                                        handleSave({ newName: `${saveAsName}.${saveAsExt}` });
+                                    }}>
+                                        {t.save || 'Save'}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );
 };
+
 
 
 const FolderNode = ({ name, path, level = 0, onSelect, selectedPath, expandedFolders, toggleExpand }) => {
@@ -1336,19 +1407,26 @@ function App() {
         }
     };
 
-    const handleSaveEditedVideo = async (timeline) => {
+    const handleSaveEditedVideo = async (timeline, options = {}) => {
         try {
             const res = await fetch('/api/process-video', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ path: selectedMedia.path, timeline })
+                body: JSON.stringify({
+                    path: selectedMedia.path,
+                    timeline,
+                    newPath: options.newName
+                })
             });
             const data = await res.json();
             if (data.success) {
                 setRefreshKey(Date.now());
                 setShowVideoEditor(false);
                 setToast(t.videoSaved || 'Video processed successfully');
-                setTimeout(() => setToast(null), 3000);
+                setTimeout(() => {
+                    setToast(null);
+                    fetchItems(currentPath);
+                }, 3000);
             } else {
                 alert(data.error || 'Error processing video: ' + data.error);
             }

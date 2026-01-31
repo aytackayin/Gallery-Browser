@@ -533,7 +533,7 @@ Theme=${theme || 'system'}
 });
 
 app.post('/api/process-video', async (req, res) => {
-    const { timeline } = req.body;
+    const { timeline, path: sourcePath, newPath } = req.body;
     if (!timeline || !timeline.tracks) return res.status(400).json({ error: "Eksik timeline verisi" });
 
     try {
@@ -545,7 +545,10 @@ app.post('/api/process-video', async (req, res) => {
         uniquePaths.forEach(p => command.input(path.join(rootGalleryPath, p)));
 
         const firstClip = clips[0];
-        const targetPath = path.join(rootGalleryPath, firstClip.path);
+        // Eğer newPath verilmişse, o klasördeki yeni ismi kullan. Yoksa orijinalin üzerine yaz.
+        const sourceDir = path.dirname(sourcePath);
+        const targetFilename = newPath || path.basename(sourcePath);
+        const targetPath = path.join(rootGalleryPath, sourceDir, targetFilename);
         const tempPath = targetPath + '.tmp.mp4';
 
         // Check for audio streams in all inputs
@@ -646,11 +649,17 @@ app.post('/api/process-video', async (req, res) => {
             })
             .on('end', () => {
                 try {
-                    if (fs.existsSync(targetPath)) fs.unlinkSync(targetPath);
+                    // Eğer üzerine yazıyorsak eskiyi sil, yoksa sadece temp'i taşı
+                    if (fs.existsSync(targetPath) && tempPath !== targetPath) {
+                        try { fs.unlinkSync(targetPath); } catch (e) { }
+                    }
                     fs.renameSync(tempPath, targetPath);
-                    const thumbPath = getThumbPath(firstClip.path);
+
+                    const finalRelPath = path.relative(rootGalleryPath, targetPath).replace(/\\/g, '/');
+                    const thumbPath = getThumbPath(finalRelPath);
                     if (fs.existsSync(thumbPath)) fs.unlinkSync(thumbPath);
-                    res.json({ success: true, message: "Video başarıyla işlendi" });
+
+                    res.json({ success: true, message: "Video başarıyla işlendi", path: finalRelPath });
                 } catch (e) {
                     res.status(500).json({ error: e.message });
                 }
