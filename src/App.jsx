@@ -341,9 +341,22 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
     const [showPicker, setShowPicker] = useState(false);
     const [pickerItems, setPickerItems] = useState([]);
     const [pickerPath, setPickerPath] = useState('.');
+    const [zoomLevel, setZoomLevel] = useState(25); // pixels per second
+    const timelineRef = useRef(null);
 
     // Use a unique key for the editor to prevent socket/conflict with viewer
     const [localRefreshKey] = useState(Date.now());
+    const timelineDuration = useMemo(() => {
+        let max = duration || 0;
+        tracks.forEach(t => {
+            t.clips.forEach(c => {
+                const end = c.offset + c.duration;
+                if (end > max) max = end;
+            });
+        });
+        return max + 10; // Extra buffer
+    }, [duration, tracks]);
+
     const videoUrl = useMemo(() =>
         `http://localhost:3001/media/${encodeURIComponent(item.path)}?t=${localRefreshKey}`,
         [item.path, localRefreshKey]
@@ -643,20 +656,15 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
     };
 
     const handleTimelineClick = (e) => {
-        if (!duration || !videoRef.current) return;
+        if (!timelineDuration || !videoRef.current) return;
         const rect = e.currentTarget.getBoundingClientRect();
-        const offsetX = e.clientX - rect.left - 60;
-        const totalWidth = rect.width - 60;
+        const offsetX = (e.clientX - rect.left) + e.currentTarget.scrollLeft - 60;
         if (offsetX < 0) return;
 
-        const percentage = Math.max(0, Math.min(1, offsetX / totalWidth));
-        const newTime = percentage * duration;
+        const newTime = Math.max(0, Math.min(timelineDuration, offsetX / zoomLevel));
 
-        // Force update video and local state
         videoRef.current.currentTime = newTime;
         setCurrentTime(newTime);
-
-        // Ensure it doesn't snap back by updating scrubber position state immediately if needed
     };
 
     const handleMouseMove = (e) => {
@@ -695,10 +703,8 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
             }
         }
         else if (isDragging.type === 'clip') {
-            const rect = isDragging.containerRect;
-            const totalWidth = rect.width - 60;
             const deltaX = e.clientX - isDragging.startX;
-            const deltaSeconds = (deltaX / totalWidth) * duration;
+            const deltaSeconds = deltaX / zoomLevel;
             let newOffset = Math.max(0, isDragging.startOffset + deltaSeconds);
 
             const track = tracks.find(t => t.clips.some(c => c.id === isDragging.id));
@@ -706,10 +712,10 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
                 const others = track.clips.filter(c => c.id !== isDragging.id);
                 for (const other of others) {
                     const otherEnd = other.offset + other.duration;
-                    if (Math.abs(newOffset - otherEnd) < (0.5 / totalWidth) * duration * 20) {
+                    if (Math.abs(newOffset - otherEnd) < (10 / zoomLevel)) {
                         newOffset = otherEnd; break;
                     }
-                    if (Math.abs((newOffset + selectedClip.duration) - other.offset) < (0.5 / totalWidth) * duration * 20) {
+                    if (Math.abs((newOffset + selectedClip.duration) - other.offset) < (10 / zoomLevel)) {
                         newOffset = other.offset - selectedClip.duration; break;
                     }
                 }
@@ -919,77 +925,87 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
                                 <button className="action-btn" onClick={() => { setShowPicker(true); fetchPickerItems(pickerPath); }} title="Add Audio File" style={{ color: '#46d369' }}><Plus size={14} /> Audio</button>
                             </div>
                             <div style={{ flex: 1, textAlign: 'center', fontSize: '0.85rem', color: '#888', fontFamily: 'monospace' }}>
-                                {formatTime(currentTime)} / {formatTime(duration)}
+                                {formatTime(currentTime)} / {formatTime(timelineDuration)}
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#222', padding: '2px 8px', borderRadius: 15 }}>
+                                <Search size={14} style={{ opacity: 0.5 }} />
+                                <input type="range" min="5" max="200" value={zoomLevel} onChange={e => setZoomLevel(parseInt(e.target.value))} style={{ width: 80, height: 4 }} />
                             </div>
                         </div>
 
                         <div className="timeline-tracks"
                             onClick={handleTimelineClick}
-                            style={{ flex: 1, overflowY: 'auto', position: 'relative', padding: '10px 0', cursor: 'pointer' }}>
-                            {tracks.map(track => (
-                                <div key={track.id} style={{ display: 'grid', gridTemplateColumns: '60px 1fr', gap: 5, marginBottom: 5, minHeight: 40, borderBottom: '1px solid #1a1a1a' }}>
-                                    <div style={{ color: '#555', fontSize: '0.7rem', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0a0a0a' }}>
-                                        {track.id.toUpperCase()}
-                                    </div>
-                                    <div style={{ position: 'relative', background: '#080808' }}>
-                                        {track.clips.map(clip => (
-                                            <div
-                                                key={clip.id}
-                                                className={`clip-item ${clip.id === selectedClipId ? 'selected' : ''}`}
-                                                onClick={(e) => { e.stopPropagation(); setSelectedClipId(clip.id); }}
-                                                onMouseDown={(e) => {
-                                                    e.stopPropagation();
-                                                    setSelectedClipId(clip.id);
-                                                    setIsDragging({
-                                                        type: 'clip',
-                                                        id: clip.id,
-                                                        startX: e.clientX,
-                                                        startOffset: clip.offset,
-                                                        containerRect: e.currentTarget.closest('.timeline-tracks').getBoundingClientRect()
-                                                    });
-                                                }}
-                                                style={{
-                                                    position: 'absolute',
-                                                    left: `${(clip.offset / (Math.max(0.1, duration))) * 100}%`,
-                                                    width: `${(clip.duration / (Math.max(0.1, duration))) * 100}%`,
-                                                    height: '100%',
-                                                    background: clip.id === selectedClipId ? 'rgba(229, 9, 20, 0.4)' : (track.type === 'audio' ? 'rgba(0, 113, 235, 0.2)' : 'rgba(229, 9, 20, 0.1)'),
-                                                    border: clip.id === selectedClipId ? '1px solid #e50914' : (track.type === 'audio' ? '1px solid #0071eb' : '1px solid #333'),
-                                                    borderRadius: 4,
-                                                    padding: '2px 5px',
-                                                    fontSize: '0.7rem',
-                                                    color: '#eee',
-                                                    cursor: isDragging?.id === clip.id ? 'grabbing' : 'grab',
-                                                    overflow: 'hidden',
-                                                    whiteSpace: 'nowrap',
-                                                    zIndex: isDragging?.id === clip.id ? 10 : 5,
-                                                    userSelect: 'none',
-                                                    transition: isDragging ? 'none' : 'all 0.1s'
-                                                }}
-                                            >
-                                                {clip.name}
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            ))}
+                            ref={timelineRef}
+                            onWheel={(e) => {
+                                if (e.ctrlKey) {
+                                    e.preventDefault();
+                                    setZoomLevel(prev => Math.max(5, Math.min(200, prev + (e.deltaY < 0 ? 5 : -5))));
+                                }
+                            }}
+                            style={{ flex: 1, overflowX: 'auto', overflowY: 'auto', position: 'relative', padding: '10px 0', cursor: 'crosshair', minHeight: 180 }}>
 
-                            {/* Playhead / Scrubber */}
-                            <div
-                                style={{
+                            <div className="timeline-content" style={{ position: 'relative', width: timelineDuration * zoomLevel + 100, height: '100%', minWidth: '100%' }}>
+                                {tracks.map(track => (
+                                    <div key={track.id} style={{ display: 'grid', gridTemplateColumns: '60px 1fr', gap: 0, marginBottom: 2, minHeight: 45, borderBottom: '1px solid #1a1a1a' }}>
+                                        <div style={{ color: '#555', fontSize: '0.7rem', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0a0a0a', borderRight: '1px solid #222', position: 'sticky', left: 0, zIndex: 20 }}>
+                                            {track.id.toUpperCase()}
+                                        </div>
+                                        <div style={{ position: 'relative', background: '#080808' }}>
+                                            {track.clips.map(clip => (
+                                                <div
+                                                    key={clip.id}
+                                                    className={`clip-item ${clip.id === selectedClipId ? 'selected' : ''}`}
+                                                    onClick={(e) => { e.stopPropagation(); setSelectedClipId(clip.id); }}
+                                                    onMouseDown={(e) => {
+                                                        e.stopPropagation();
+                                                        setSelectedClipId(clip.id);
+                                                        setIsDragging({
+                                                            type: 'clip',
+                                                            id: clip.id,
+                                                            startX: e.clientX,
+                                                            startOffset: clip.offset
+                                                        });
+                                                    }}
+                                                    style={{
+                                                        position: 'absolute',
+                                                        left: clip.offset * zoomLevel,
+                                                        width: clip.duration * zoomLevel,
+                                                        height: '100%',
+                                                        background: clip.id === selectedClipId ? 'rgba(229, 9, 20, 0.4)' : (track.type === 'audio' ? 'rgba(0, 113, 235, 0.2)' : 'rgba(229, 9, 20, 0.1)'),
+                                                        border: clip.id === selectedClipId ? '1px solid #e50914' : (track.type === 'audio' ? '1px solid #0071eb' : '1px solid #333'),
+                                                        borderRadius: 4,
+                                                        padding: '4px 8px',
+                                                        fontSize: '0.75rem',
+                                                        color: '#eee',
+                                                        cursor: isDragging?.id === clip.id ? 'grabbing' : 'grab',
+                                                        overflow: 'hidden',
+                                                        whiteSpace: 'nowrap',
+                                                        zIndex: isDragging?.id === clip.id ? 10 : 5,
+                                                        userSelect: 'none',
+                                                        transition: isDragging ? 'none' : 'left 0.1s, width 0.1s'
+                                                    }}
+                                                >
+                                                    <div style={{ fontWeight: 'bold', marginBottom: 2 }}>{clip.name}</div>
+                                                    <div style={{ fontSize: '0.65rem', opacity: 0.6 }}>{clip.duration.toFixed(1)}s</div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                ))}
+
+                                {/* Scrubber / Playhead */}
+                                <div style={{
                                     position: 'absolute',
                                     top: 0,
                                     bottom: 0,
-                                    left: `calc(60px + ${(currentTime / (duration || 1)) * 100}%)`,
-                                    marginLeft: `-${(currentTime / (duration || 1)) * 60}px`,
+                                    left: 60 + (currentTime * zoomLevel),
                                     width: 2,
                                     background: '#e50914',
-                                    zIndex: 20,
-                                    pointerEvents: 'none',
-                                    transition: 'none'
-                                }}
-                            >
-                                <div style={{ position: 'absolute', top: -10, left: -4, width: 10, height: 10, background: '#e50914', clipPath: 'polygon(50% 100%, 0 0, 100% 0)' }} />
+                                    zIndex: 100,
+                                    pointerEvents: 'none'
+                                }}>
+                                    <div style={{ position: 'absolute', top: 0, left: -5, width: 12, height: 12, background: '#e50914', borderRadius: '0 0 50% 50%' }} />
+                                </div>
                             </div>
                         </div>
                     </div>
