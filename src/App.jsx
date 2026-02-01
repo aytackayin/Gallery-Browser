@@ -529,16 +529,6 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
             return Math.max(current, newDur);
         });
 
-        setTracks(prev => prev.map(t => ({
-            ...t,
-            clips: t.clips.map(c => {
-                if (c.id === 'clip-0') {
-                    const currentClpDur = c.duration || 0;
-                    return newDur > currentClpDur ? { ...c, duration: newDur } : c;
-                }
-                return c;
-            })
-        })));
         setTimeout(updateVideoRect, 100);
     };
 
@@ -551,6 +541,11 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                 const info = await res.json();
                 if (info && info.durationSeconds) {
                     syncDuration(info.durationSeconds);
+                    // Also update initial clip duration if it's missing
+                    setTracks(prev => prev.map(t => ({
+                        ...t,
+                        clips: t.clips.map(c => (c.id === 'clip-0' && (!c.duration || c.duration === 0)) ? { ...c, duration: info.durationSeconds } : c)
+                    })));
                 }
             } catch (e) {
                 console.error("API duration fetch failed:", e);
@@ -563,10 +558,20 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
         const video = e.target;
         syncDuration(video.duration);
 
-        // Save source dimensions to clip if missing (required for independent resizing)
-        // CRITICAL FIX: Only update if the active clip is actually a video!
-        if (activeVClip && activeVClip.type === 'video' && (!activeVClip.sourceWidth || activeVClip.sourceWidth !== video.videoWidth)) {
-            updateClip(activeVClip.id, { sourceWidth: video.videoWidth, sourceHeight: video.videoHeight });
+        // Save source dimensions and duration to clip if missing
+        if (activeVClip && activeVClip.type === 'video') {
+            const updates = {};
+            if (!activeVClip.sourceWidth || activeVClip.sourceWidth !== video.videoWidth) {
+                updates.sourceWidth = video.videoWidth;
+                updates.sourceHeight = video.videoHeight;
+            }
+            // Sadece süre hiç yoksa (0 ise) otomatik güncelle, kullanıcı trim yaptıysa dokunma
+            if (!activeVClip.duration || activeVClip.duration === 0) {
+                updates.duration = video.duration;
+            }
+            if (Object.keys(updates).length > 0) {
+                updateClip(activeVClip.id, updates);
+            }
         }
 
         // Set canvas to video size initially if it's the first load
