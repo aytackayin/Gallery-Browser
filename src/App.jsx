@@ -1653,24 +1653,45 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                         <div className="timeline-tracks"
                             onMouseDown={handleTimelineClick}
                             ref={timelineRef}
-                            style={{ flex: 1, overflowX: 'auto', overflowY: 'auto', position: 'relative', padding: '10px 0', cursor: 'crosshair', minHeight: 180 }}>
+                            style={{ flex: 1, overflowX: 'auto', overflowY: 'auto', position: 'relative', background: '#0a0a0a', cursor: 'crosshair', minHeight: 180 }}>
 
-                            <div className="timeline-content" style={{ position: 'relative', width: Math.max(2000, (timelineDuration * zoomLevel) + 2000), minHeight: '100%', minWidth: '100%', display: 'flex', flexDirection: 'column' }}>
+                            <div className="timeline-content" style={{
+                                position: 'relative',
+                                width: Math.max(2000, (timelineDuration * zoomLevel) + 2000),
+                                minHeight: '100%',
+                                minWidth: '100%',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                background: '#000'
+                            }}>
+                                {/* Sol Sütun Maskesi (Başlıklar arasından sızıntıyı önler) */}
+                                <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 80, background: '#0a0a0a', zIndex: 850, borderRight: '2px solid #333', pointerEvents: 'none' }} />
+
                                 {/* Time Ruler */}
                                 <div
                                     onMouseDown={handleTimelineClick}
-                                    style={{ height: 25, position: 'sticky', top: 0, left: 0, zIndex: 30, background: '#111', borderBottom: '1px solid #333', display: 'flex', cursor: 'pointer' }}>
-                                    <div style={{ width: 80, flexShrink: 0, background: '#0a0a0a' }} />
-                                    <div style={{ position: 'relative', flex: 1 }}>
+                                    style={{
+                                        height: 30,
+                                        position: 'sticky',
+                                        top: 0,
+                                        left: 0,
+                                        zIndex: 1000,
+                                        background: '#0a0a0a',
+                                        borderBottom: '2px solid #333',
+                                        display: 'flex',
+                                        cursor: 'pointer'
+                                    }}>
+                                    <div style={{ width: 80, flexShrink: 0, background: '#050505', borderRight: '2px solid #333', position: 'sticky', left: 0, zIndex: 1001 }} />
+                                    <div style={{ position: 'relative', flex: 1, height: '100%', background: '#0a0a0a' }}>
                                         {Array.from({ length: Math.ceil(timelineDuration / 5) + 2 }).map((_, i) => (
                                             <div key={i} style={{ position: 'absolute', left: (i * 5) * zoomLevel, borderLeft: '1px solid #444', height: i % 2 === 0 ? 15 : 8, paddingLeft: 3 }}>
-                                                {i % 2 === 0 && <span style={{ fontSize: '0.6rem', color: '#666' }}>{formatTime(i * 5)}</span>}
+                                                {i % 2 === 0 && <span style={{ fontSize: '0.6rem', color: '#888' }}>{formatTime(i * 5)}</span>}
                                             </div>
                                         ))}
                                     </div>
                                 </div>
                                 {tracks.map((track, idx) => (
-                                    <div key={track.id} style={{ display: 'grid', gridTemplateColumns: '80px 1fr', gap: 0, marginBottom: 2, minHeight: 35, borderBottom: '1px solid #1a1a1a' }}>
+                                    <div key={track.id} style={{ display: 'grid', gridTemplateColumns: '80px 1fr', gap: 0, marginBottom: 0, minHeight: 45, borderBottom: '1px solid #222', background: '#000', position: 'relative' }}>
                                         <div
                                             className={`track-header ${dragTrackIndex === idx ? 'dragging' : ''}`}
                                             draggable
@@ -1678,7 +1699,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                             onDragOver={(e) => handleDragOver(e, idx)}
                                             onDragEnd={handleDrop}
                                             onMouseDown={(e) => e.stopPropagation()} // Timeline click'i engeller
-                                            style={{ color: '#555', fontSize: '0.7rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#0a0a0a', borderRight: '1px solid #222', position: 'sticky', left: 0, zIndex: 20, padding: '0 5px', cursor: 'grab' }}
+                                            style={{ color: '#eee', fontSize: '0.7rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#0a0a0a', borderRight: '2px solid #333', position: 'sticky', left: 0, zIndex: 900, padding: '0 5px', cursor: 'grab', height: '100%', boxSizing: 'border-box' }}
                                         >
                                             <div style={{ display: 'flex', alignItems: 'center', gap: 4, pointerEvents: 'none' }}>
                                                 <Layers size={12} style={{ opacity: 0.3 }} />
@@ -1728,7 +1749,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                                         cursor: isDragging?.id === clip.id ? 'grabbing' : 'grab',
                                                         overflow: 'hidden',
                                                         whiteSpace: 'nowrap',
-                                                        zIndex: isDragging?.id === clip.id ? 10 : 5,
+                                                        zIndex: isDragging?.id === clip.id ? 150 : 100,
                                                         pointerEvents: isDragging?.id === clip.id ? 'none' : 'auto',
                                                         userSelect: 'none',
                                                         transition: isDragging ? 'none' : 'left 0.1s, width 0.1s',
@@ -1763,16 +1784,17 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                     onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragging({ type: 'playhead' }); }}
                                     style={{
                                         position: 'absolute',
-                                        top: 0,
+                                        top: 30, // Ruler altında (zIndex 9000 olduğu için altında kalacak)
                                         bottom: 0,
                                         left: 80 + (currentTime * zoomLevel) - 1,
                                         width: 12,
                                         marginLeft: -5,
-                                        zIndex: 100,
-                                        cursor: 'ew-resize'
+                                        zIndex: 800, // Klinkerden (100) üstte, Ruler (1000) ve Headerden (900) altta
+                                        cursor: 'ew-resize',
+                                        pointerEvents: 'auto'
                                     }}>
                                     <div style={{ position: 'absolute', top: 0, bottom: 0, left: 5, width: 2, background: '#e50914' }} />
-                                    <div style={{ position: 'absolute', top: 25, left: 0, width: 12, height: 12, background: '#e50914', borderRadius: '0 0 50% 50%' }} />
+                                    <div style={{ position: 'absolute', top: 0, left: 0, width: 12, height: 12, background: '#e50914', borderRadius: '0 0 50% 50%' }} />
                                 </div>
                             </div>
                         </div>
