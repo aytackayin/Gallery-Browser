@@ -520,6 +520,22 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
         return () => window.removeEventListener('resize', updateVideoRect);
     }, []);
 
+    // Global Dragging Listeners to prevent "stuck" dragging
+    useEffect(() => {
+        if (!isDragging) return;
+
+        const globalMouseMove = (e) => handleMouseMove(e);
+        const globalMouseUp = (e) => handleMouseUp(e);
+
+        window.addEventListener('mousemove', globalMouseMove);
+        window.addEventListener('mouseup', globalMouseUp);
+
+        return () => {
+            window.removeEventListener('mousemove', globalMouseMove);
+            window.removeEventListener('mouseup', globalMouseUp);
+        };
+    }, [isDragging]);
+
     // Kararlı Süre Güncelleyici (Daima en uzun süreyi baz alır, Firefox tıkanmasını önler)
     const syncDuration = (newDur) => {
         if (!isFinite(newDur) || newDur <= 0) return;
@@ -903,15 +919,24 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
     };
 
     const handleTimelineClick = (e) => {
-        if (!timelineDuration || !videoRef.current) return;
-        const rect = e.currentTarget.getBoundingClientRect();
-        const offsetX = (e.clientX - rect.left) + e.currentTarget.scrollLeft - 80;
-        if (offsetX < 0) return;
+        if (!timelineDuration || !videoRef.current || !timelineRef.current) return;
+        if (e.button !== 0) return; // Sadece sol tık
+
+        // Eğer bir butona, klibe veya layer başlığına tıklandıysa zaman çizgisini oynatma
+        if (e.target.closest('.track-header') || e.target.closest('.clip-item') || e.target.closest('button')) {
+            return;
+        }
+
+        e.preventDefault();
+        const rect = timelineRef.current.getBoundingClientRect();
+        const offsetX = (e.clientX - rect.left) + timelineRef.current.scrollLeft - 80;
+        if (offsetX < -10) return;
 
         const newTime = Math.max(0, Math.min(timelineDuration, offsetX / zoomLevel));
-
-        videoRef.current.currentTime = newTime;
         setCurrentTime(newTime);
+        if (videoRef.current) videoRef.current.currentTime = newTime;
+
+        setIsDragging({ type: 'playhead' });
     };
 
     const handleMouseMove = (e) => {
@@ -1158,10 +1183,46 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                 }
                 updateClip(selectedClipId, { crop: { x, y, w, h } });
             }
+        } else if (isDragging.type === 'playhead') {
+            if (!timelineRef.current) return;
+            const rect = timelineRef.current.getBoundingClientRect();
+            let offsetX = (e.clientX - rect.left) + timelineRef.current.scrollLeft - 80;
+            let newTime = Math.max(0, Math.min(timelineDuration, offsetX / zoomLevel));
+
+            // Snapping for playhead
+            const snapThreshold = 10 / zoomLevel;
+            let bestSnap = null;
+            let minDelta = snapThreshold;
+
+            const snapPoints = [0];
+            tracks.forEach(t => {
+                t.clips.forEach(c => {
+                    snapPoints.push(c.offset);
+                    snapPoints.push(c.offset + c.duration);
+                });
+            });
+
+            snapPoints.forEach(sp => {
+                const delta = Math.abs(newTime - sp);
+                if (delta < minDelta) {
+                    minDelta = delta;
+                    bestSnap = sp;
+                }
+            });
+
+            if (bestSnap !== null) {
+                newTime = bestSnap;
+            }
+
+            setCurrentTime(newTime);
+            if (videoRef.current) {
+                videoRef.current.currentTime = newTime;
+            }
         }
     };
 
-    const handleMouseUp = () => {
+    const handleMouseUp = (e) => {
+        if (e) e.preventDefault();
         setIsDragging(null);
         setSnapLines([]);
     };
@@ -1549,7 +1610,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                         </div>
 
                         <div className="timeline-tracks"
-                            onClick={handleTimelineClick}
+                            onMouseDown={handleTimelineClick}
                             ref={timelineRef}
                             onWheel={(e) => {
                                 if (e.shiftKey) return; // Yatay kaydırma için Shift'e izin ver
@@ -1561,7 +1622,9 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
 
                             <div className="timeline-content" style={{ position: 'relative', width: Math.max(2000, (timelineDuration * zoomLevel) + 2000), minHeight: '100%', minWidth: '100%', display: 'flex', flexDirection: 'column' }}>
                                 {/* Time Ruler */}
-                                <div style={{ height: 25, position: 'sticky', top: 0, left: 0, zIndex: 30, background: '#111', borderBottom: '1px solid #333', display: 'flex' }}>
+                                <div
+                                    onMouseDown={handleTimelineClick}
+                                    style={{ height: 25, position: 'sticky', top: 0, left: 0, zIndex: 30, background: '#111', borderBottom: '1px solid #333', display: 'flex', cursor: 'pointer' }}>
                                     <div style={{ width: 80, flexShrink: 0, background: '#0a0a0a' }} />
                                     <div style={{ position: 'relative', flex: 1 }}>
                                         {Array.from({ length: Math.ceil(timelineDuration / 5) + 2 }).map((_, i) => (
@@ -1579,7 +1642,8 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                             onDragStart={() => handleDragStart(idx)}
                                             onDragOver={(e) => handleDragOver(e, idx)}
                                             onDragEnd={handleDrop}
-                                            style={{ color: '#555', fontSize: '0.7rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#0a0a0a', borderRight: '1px solid #222', position: 'sticky', left: 0, zIndex: 20, padding: '0 5px' }}
+                                            onMouseDown={(e) => e.stopPropagation()} // Timeline click'i engeller
+                                            style={{ color: '#555', fontSize: '0.7rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#0a0a0a', borderRight: '1px solid #222', position: 'sticky', left: 0, zIndex: 20, padding: '0 5px', cursor: 'grab' }}
                                         >
                                             <div style={{ display: 'flex', alignItems: 'center', gap: 4, pointerEvents: 'none' }}>
                                                 <Layers size={12} style={{ opacity: 0.3 }} />
@@ -1660,18 +1724,20 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                     </div>
                                 ))}
 
-                                {/* Scrubber / Playhead */}
-                                <div style={{
-                                    position: 'absolute',
-                                    top: 0,
-                                    bottom: 0,
-                                    left: 80 + (currentTime * zoomLevel) - 1,
-                                    width: 2,
-                                    background: '#e50914',
-                                    zIndex: 100,
-                                    pointerEvents: 'none'
-                                }}>
-                                    <div style={{ position: 'absolute', top: 25, left: -5, width: 12, height: 12, background: '#e50914', borderRadius: '0 0 50% 50%' }} />
+                                <div
+                                    onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragging({ type: 'playhead' }); }}
+                                    style={{
+                                        position: 'absolute',
+                                        top: 0,
+                                        bottom: 0,
+                                        left: 80 + (currentTime * zoomLevel) - 1,
+                                        width: 12,
+                                        marginLeft: -5,
+                                        zIndex: 100,
+                                        cursor: 'ew-resize'
+                                    }}>
+                                    <div style={{ position: 'absolute', top: 0, bottom: 0, left: 5, width: 2, background: '#e50914' }} />
+                                    <div style={{ position: 'absolute', top: 25, left: 0, width: 12, height: 12, background: '#e50914', borderRadius: '0 0 50% 50%' }} />
                                 </div>
                             </div>
                         </div>
