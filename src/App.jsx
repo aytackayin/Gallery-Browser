@@ -1490,6 +1490,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
 
                                             {activeVClip && activeVClip.type === 'image' && (
                                                 <img
+                                                    draggable={false}
                                                     ref={imageRef}
                                                     key={`img-${activeVClip.id}`}
                                                     src={`http://localhost:3001/media/${encodeURIComponent(activeVClip.path)}`}
