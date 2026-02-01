@@ -312,6 +312,9 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
 
     // Multi-track state
     // Each clip: { id, path, name, start, duration, offset, type, filters, crop }
+    // Mod: Initialize with item.durationSeconds if available to prevent 0-start flicker
+    const initialDuration = (item && item.durationSeconds) ? item.durationSeconds : 0;
+
     const [tracks, setTracks] = useState([
         {
             id: 'v1', type: 'video', clips: [
@@ -320,9 +323,9 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
                     path: item.path,
                     name: item.name,
                     type: 'video',
-                    start: 0, // Source start
-                    duration: 0, // Will be set on metadata
-                    offset: 0, // Timeline position
+                    start: 0,
+                    duration: initialDuration,
+                    offset: 0,
                     filters: { brightness: 100, contrast: 100, saturation: 100, gamma: 1.0 },
                     crop: { x: 0, y: 0, w: 100, h: 100 },
                     rotate: 0, flipH: false, flipV: false, volume: 100
@@ -331,6 +334,17 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
         },
         { id: 'a1', type: 'audio', clips: [] }
     ]);
+
+    // Use initialDuration to avoid state conflict
+    useEffect(() => {
+        if (initialDuration > 0) {
+            setDuration(prev => Math.max(prev, initialDuration));
+            setTracks(prev => prev.map(t => ({
+                ...t,
+                clips: t.clips.map(c => (c.id === 'clip-0' && c.duration < initialDuration) ? { ...c, duration: initialDuration } : c)
+            })));
+        }
+    }, [initialDuration]);
 
     const [selectedClipId, setSelectedClipId] = useState('clip-0');
     const [activeTool, setActiveTool] = useState('select'); // select, split, delete
@@ -397,16 +411,22 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
         return `http://localhost:3001/media/${encodeURIComponent(path)}?t=${localRefreshKey}`;
     }, [activeVClip?.path, item.path, localRefreshKey]);
 
-    const timelineDuration = useMemo(() => {
+    const contentDuration = useMemo(() => {
         let max = duration || 0;
         tracks.forEach(t => {
             t.clips.forEach(c => {
-                const end = c.offset + c.duration;
+                const end = (c.offset || 0) + (c.duration || 0);
                 if (end > max) max = end;
             });
         });
-        return Math.max(0.1, max);
+        return max;
     }, [duration, tracks]);
+
+    const timelineDuration = useMemo(() => {
+        // Daima en az 10 dakika (600s) veya mevcut toplam süreden 10 dakika daha fazlasını göster
+        // Bu sayede kullanıcı ilerideki boş alanlara tıklayıp yeni klip ekleyebilir (limit sorunu çözülür)
+        return Math.max(600, contentDuration + 600);
+    }, [contentDuration]);
 
 
 
@@ -492,23 +512,26 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
         return () => window.removeEventListener('resize', updateVideoRect);
     }, []);
 
-    // Kararlı Süre Güncelleyici (Firefox'un 3sn hatasını önler)
+    // Kararlı Süre Güncelleyici (Daima en uzun süreyi baz alır, Firefox tıkanmasını önler)
     const syncDuration = (newDur) => {
         if (!isFinite(newDur) || newDur <= 0) return;
+
         setDuration(prev => {
-            // Priority: Sunucu veya daha uzun olan süre her zaman daha doğrudur
-            if (prev > 5 && newDur < prev * 0.8) return prev;
-            return newDur;
+            const current = (typeof prev === 'number') ? prev : 0;
+            return Math.max(current, newDur);
         });
+
         setTracks(prev => prev.map(t => ({
             ...t,
             clips: t.clips.map(c => {
-                if (c.id === 'clip-0' && (c.duration <= 1 || (newDur > c.duration && newDur > 5))) {
-                    return { ...c, duration: newDur };
+                if (c.id === 'clip-0') {
+                    const currentClpDur = c.duration || 0;
+                    return newDur > currentClpDur ? { ...c, duration: newDur } : c;
                 }
                 return c;
             })
         })));
+        setTimeout(updateVideoRect, 100);
     };
 
     // Hibrit Metadata: Sunucudan gerçek süreyi çek
@@ -518,13 +541,15 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
             try {
                 const res = await fetch(`/api/info?path=${encodeURIComponent(item.path)}`);
                 const info = await res.json();
-                if (info && info.durationSeconds) syncDuration(info.durationSeconds);
+                if (info && info.durationSeconds) {
+                    syncDuration(info.durationSeconds);
+                }
             } catch (e) {
                 console.error("API duration fetch failed:", e);
             }
         };
         fetchDuration();
-    }, [item.path]);
+    }, [item.path, propRefreshKey]);
 
     const onMetadata = (e) => {
         syncDuration(e.target.duration);
@@ -1186,11 +1211,11 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
 
                             {/* Viewer Controls */}
                             <div style={{ position: 'absolute', bottom: -5, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 15, background: 'rgba(0,0,0,0.5)', padding: '5px 15px', borderRadius: 20 }}>
-                                <button className="action-btn" onClick={() => videoRef.current.currentTime -= 0.1}><ChevronLeft size={20} /></button>
+                                <button className="action-btn" onClick={() => setCurrentTime(prev => Math.max(0, prev - 0.1))}><ChevronLeft size={20} /></button>
                                 <button className="action-btn" onClick={togglePlay}>
                                     {isPlaying ? <Pause size={24} fill="white" /> : <Play size={24} fill="white" />}
                                 </button>
-                                <button className="action-btn" onClick={() => videoRef.current.currentTime += 0.1}><ChevronRight size={20} /></button>
+                                <button className="action-btn" onClick={() => setCurrentTime(prev => Math.min(timelineDuration, prev + 0.1))}><ChevronRight size={20} /></button>
                             </div>
                         </div>
                     </div>
@@ -1208,8 +1233,9 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
                                 <button className="action-btn" onClick={() => addTrack('audio')} title={t.addAudioTrack || 'Add Audio Track'} style={{ color: '#46d369' }}><Plus size={14} /> {t.audioLayer || 'Audio Layer'}</button>
                             </div>
                             <div style={{ flex: 1, textAlign: 'center', fontSize: '0.85rem', color: '#888', fontFamily: 'monospace' }}>
-                                {formatTime(currentTime)} / {formatTime(timelineDuration)}
+                                {formatTime(currentTime)} / {formatTime(contentDuration)}
                             </div>
+
                             <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#222', padding: '2px 8px', borderRadius: 15 }}>
                                 <Search size={14} style={{ opacity: 0.5 }} />
                                 <input type="range" min="5" max="200" value={zoomLevel} onChange={e => setZoomLevel(parseInt(e.target.value))} style={{ width: 80, height: 4 }} />
@@ -1227,7 +1253,7 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
                             }}
                             style={{ flex: 1, overflowX: 'auto', overflowY: 'auto', position: 'relative', padding: '10px 0', cursor: 'crosshair', minHeight: 180 }}>
 
-                            <div className="timeline-content" style={{ position: 'relative', width: timelineDuration * zoomLevel + 100, minHeight: '100%', minWidth: '100%', display: 'flex', flexDirection: 'column' }}>
+                            <div className="timeline-content" style={{ position: 'relative', width: Math.max(2000, (timelineDuration * zoomLevel) + 2000), minHeight: '100%', minWidth: '100%', display: 'flex', flexDirection: 'column' }}>
                                 {/* Time Ruler */}
                                 <div style={{ height: 25, position: 'sticky', top: 0, left: 0, zIndex: 30, background: '#111', borderBottom: '1px solid #333', display: 'flex' }}>
                                     <div style={{ width: 80, flexShrink: 0, background: '#0a0a0a' }} />
@@ -1393,64 +1419,66 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
                 )}
             </div>
 
-            {pickerTarget && (
-                <div className="modal-overlay" style={{ zIndex: 8000 }}>
-                    <div className="modal" style={{ maxWidth: 500 }}>
-                        <div className="modal-header">
-                            <h3>{(t.selectMediaFor || 'Select Media for {track}').replace('{track}', pickerTarget.trackId.toUpperCase())}</h3>
-                            <button className="btn btn-grey" onClick={() => setPickerTarget(null)}><X size={20} /></button>
-                        </div>
-                        <div className="modal-body" style={{ maxHeight: 400, overflowY: 'auto', padding: 20 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 15, color: '#888', fontSize: '0.9rem' }}>
-                                <Folder size={16} /> {pickerPath}
+            {
+                pickerTarget && (
+                    <div className="modal-overlay" style={{ zIndex: 8000 }}>
+                        <div className="modal" style={{ maxWidth: 500 }}>
+                            <div className="modal-header">
+                                <h3>{(t.selectMediaFor || 'Select Media for {track}').replace('{track}', pickerTarget.trackId.toUpperCase())}</h3>
+                                <button className="btn btn-grey" onClick={() => setPickerTarget(null)}><X size={20} /></button>
                             </div>
-                            <div className="picker-list">
-                                {pickerPath !== '.' && (
-                                    <div className="picker-item" onClick={() => fetchPickerItems(pickerPath.split('/').slice(0, -1).join('/') || '.')}>
-                                        <div className="thumb-wrapper">
-                                            <CornerUpLeft size={30} color="var(--netflix-red)" />
+                            <div className="modal-body" style={{ maxHeight: 400, overflowY: 'auto', padding: 20 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 15, color: '#888', fontSize: '0.9rem' }}>
+                                    <Folder size={16} /> {pickerPath}
+                                </div>
+                                <div className="picker-list">
+                                    {pickerPath !== '.' && (
+                                        <div className="picker-item" onClick={() => fetchPickerItems(pickerPath.split('/').slice(0, -1).join('/') || '.')}>
+                                            <div className="thumb-wrapper">
+                                                <CornerUpLeft size={30} color="var(--netflix-red)" />
+                                            </div>
+                                            <div className="item-footer">
+                                                <span>{t.back || 'Back'}</span>
+                                            </div>
                                         </div>
-                                        <div className="item-footer">
-                                            <span>{t.back || 'Back'}</span>
+                                    )}
+                                    {pickerItems.map(pi => (
+                                        <div key={pi.path} className="picker-item" onClick={() => {
+                                            if (pi.isDirectory || pi.type === 'folder') {
+                                                fetchPickerItems(pi.path);
+                                            } else {
+                                                addMediaToTrack(pi, pickerTarget.trackId);
+                                            }
+                                        }}>
+                                            <div className="thumb-wrapper">
+                                                {pi.isDirectory || pi.type === 'folder' ? (
+                                                    <img src="/svg/folder.svg" alt="Folder" style={{ width: '40%', height: '40%', objectFit: 'contain' }} />
+                                                ) : (
+                                                    <img
+                                                        src={`http://localhost:3001/api/thumb?path=${encodeURIComponent(pi.path)}&t=${localRefreshKey}`}
+                                                        loading="lazy"
+                                                        alt={pi.name}
+                                                        onError={(e) => {
+                                                            e.target.onerror = null;
+                                                            e.target.style.display = 'none';
+                                                            e.target.parentNode.innerHTML = pi.type?.startsWith('image/') ? '<div class="type-icon"><svg viewBox="0 0 24 24" width="30" height="30" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg></div>' : '<div class="type-icon"><svg viewBox="0 0 24 24" width="30" height="30" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg></div>';
+                                                        }}
+                                                    />
+                                                )}
+                                            </div>
+                                            <div className="item-footer" style={(pi.isDirectory || pi.type === 'folder') ? { justifyContent: 'center', textAlign: 'center' } : {}}>
+                                                {(!pi.isDirectory && pi.type !== 'folder') && (pi.type?.startsWith('image/') ? <ImageIcon size={12} color="#0071eb" /> : <VideoIcon size={12} color="#46d369" />)}
+                                                <span title={pi.name} style={(pi.isDirectory || pi.type === 'folder') ? { textAlign: 'center' } : {}}>{pi.name}</span>
+                                            </div>
                                         </div>
-                                    </div>
-                                )}
-                                {pickerItems.map(pi => (
-                                    <div key={pi.path} className="picker-item" onClick={() => {
-                                        if (pi.isDirectory || pi.type === 'folder') {
-                                            fetchPickerItems(pi.path);
-                                        } else {
-                                            addMediaToTrack(pi, pickerTarget.trackId);
-                                        }
-                                    }}>
-                                        <div className="thumb-wrapper">
-                                            {pi.isDirectory || pi.type === 'folder' ? (
-                                                <img src="/svg/folder.svg" alt="Folder" style={{ width: '40%', height: '40%', objectFit: 'contain' }} />
-                                            ) : (
-                                                <img
-                                                    src={`http://localhost:3001/api/thumb?path=${encodeURIComponent(pi.path)}&t=${localRefreshKey}`}
-                                                    loading="lazy"
-                                                    alt={pi.name}
-                                                    onError={(e) => {
-                                                        e.target.onerror = null;
-                                                        e.target.style.display = 'none';
-                                                        e.target.parentNode.innerHTML = pi.type?.startsWith('image/') ? '<div class="type-icon"><svg viewBox="0 0 24 24" width="30" height="30" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg></div>' : '<div class="type-icon"><svg viewBox="0 0 24 24" width="30" height="30" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg></div>';
-                                                    }}
-                                                />
-                                            )}
-                                        </div>
-                                        <div className="item-footer" style={(pi.isDirectory || pi.type === 'folder') ? { justifyContent: 'center', textAlign: 'center' } : {}}>
-                                            {(!pi.isDirectory && pi.type !== 'folder') && (pi.type?.startsWith('image/') ? <ImageIcon size={12} color="#0071eb" /> : <VideoIcon size={12} color="#46d369" />)}
-                                            <span title={pi.name} style={(pi.isDirectory || pi.type === 'folder') ? { textAlign: 'center' } : {}}>{pi.name}</span>
-                                        </div>
-                                    </div>
-                                ))}
+                                    ))}
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
-            )}
-        </div>
+                )
+            }
+        </div >
     );
 };
 

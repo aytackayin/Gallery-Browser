@@ -218,13 +218,40 @@ app.get('/api/info', async (req, res) => {
                             }
                         }
 
-                        // Duration both for audio and video
-                        const totalDuration = data.format.duration || (data.streams && data.streams[0] ? data.streams[0].duration : null);
-                        if (totalDuration) {
-                            const dur = parseFloat(totalDuration);
-                            metadata.durationSeconds = dur;
-                            const min = Math.floor(dur / 60);
-                            const sec = Math.floor(dur % 60);
+                        // Duration: Take the maximum among format and all streams for robustness
+                        let maxDur = 0;
+                        if (data.format && data.format.duration) maxDur = parseFloat(data.format.duration);
+                        if (data.streams) {
+                            data.streams.forEach(s => {
+                                // 1. Standart duration alanını kontrol et
+                                if (s.duration) {
+                                    const sd = parseFloat(s.duration);
+                                    if (sd > maxDur) maxDur = sd;
+                                }
+                                // 2. Tags içindeki tüm olası duration formatlarını tara (HH:MM:SS veya saniye)
+                                Object.keys(s.tags || {}).forEach(tag => {
+                                    if (tag.toLowerCase().includes('duration')) {
+                                        const val = s.tags[tag];
+                                        if (typeof val === 'string' && val.includes(':')) {
+                                            const parts = val.split(':').reverse();
+                                            let sec = 0;
+                                            if (parts[0]) sec += parseFloat(parts[0]);
+                                            if (parts[1]) sec += parseFloat(parts[1]) * 60;
+                                            if (parts[2]) sec += parseFloat(parts[2]) * 3600;
+                                            if (sec > maxDur) maxDur = sec;
+                                        } else {
+                                            const parsed = parseFloat(val);
+                                            if (!isNaN(parsed) && parsed > maxDur) maxDur = parsed;
+                                        }
+                                    }
+                                });
+                            });
+                        }
+
+                        if (maxDur > 0 && !isNaN(maxDur)) {
+                            metadata.durationSeconds = maxDur;
+                            const min = Math.floor(maxDur / 60);
+                            const sec = Math.floor(maxDur % 60);
                             metadata.duration = `${min}:${sec.toString().padStart(2, '0')}`;
                         }
                     }
@@ -588,12 +615,27 @@ app.post('/api/process-video', async (req, res) => {
             });
         }
 
-        // Proje boyutunu belirle: Tüm klipler arasındaki max W ve max H (çift sayı yaparak)
+        // Proje boyutunu belirle: Tüm kliplerin crop sonrası efektif boyutlarının en büyüğü
         let targetW = 0;
         let targetH = 0;
-        Object.values(clipMetadata).forEach(m => {
-            if (m.w > targetW) targetW = m.w;
-            if (m.h > targetH) targetH = m.h;
+
+        clips.forEach(clip => {
+            const meta = clipMetadata[clip.id];
+            if (!meta) return;
+
+            // Efektif boyut (Crop uygulanmış hali)
+            let cw = meta.w;
+            let ch = meta.h;
+
+            if (clip.crop) {
+                const rw = (clip.crop.w || 100) / 100;
+                const rh = (clip.crop.h || 100) / 100;
+                cw = Math.round(meta.w * rw);
+                ch = Math.round(meta.h * rh);
+            }
+
+            if (cw > targetW) targetW = cw;
+            if (ch > targetH) targetH = ch;
         });
 
         // Eğer hiçbir video klibi yoksa varsayılan
