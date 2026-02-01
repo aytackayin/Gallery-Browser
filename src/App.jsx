@@ -1687,12 +1687,12 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                         ))}
                                     </div>
                                 </div>
-                                {/* Sol Sütun Koruma Katmanı (Sızıntıları önlemek için başlıkların arkasında sabit durur) */}
+                                {/* Sol Sütun Koruma Katmanı (Yükseklik dinamik: tracks.length * 45) */}
                                 <div style={{ position: 'sticky', left: 0, width: 80, height: 0, zIndex: 925, pointerEvents: 'none', overflow: 'visible' }}>
-                                    <div style={{ width: 80, height: 2000, background: '#0a0a0a', borderRight: '2px solid #333' }} />
+                                    <div style={{ width: 80, height: tracks.length * 45, background: '#151515', borderRight: '2px solid #333' }} />
                                 </div>
                                 {tracks.map((track, idx) => (
-                                    <div key={track.id} style={{ display: 'grid', gridTemplateColumns: '80px 1fr', gap: 0, marginBottom: 0, minHeight: 45, borderBottom: '1px solid #1a1a1a', background: '#000', position: 'relative' }}>
+                                    <div key={track.id} style={{ display: 'grid', gridTemplateColumns: '80px 1fr', gap: 0, marginBottom: 0, minHeight: 45, borderBottom: '1px solid #222', background: '#000', position: 'relative' }}>
                                         <div
                                             className={`track-header ${dragTrackIndex === idx ? 'dragging' : ''}`}
                                             draggable
@@ -1700,7 +1700,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                             onDragOver={(e) => handleDragOver(e, idx)}
                                             onDragEnd={handleDrop}
                                             onMouseDown={(e) => e.stopPropagation()} // Timeline click'i engeller
-                                            style={{ color: '#eee', fontSize: '0.7rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#0a0a0a', borderRight: '2px solid #333', position: 'sticky', left: 0, zIndex: 950, padding: '0 5px', cursor: 'grab', height: '100%', boxSizing: 'border-box' }}
+                                            style={{ color: '#eee', fontSize: '0.7rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#151515', borderRight: '2px solid #333', borderBottom: '1px solid #222', position: 'sticky', left: 0, zIndex: 950, padding: '0 5px', cursor: 'grab', height: '100%', boxSizing: 'border-box' }}
                                         >
                                             <div style={{ display: 'flex', alignItems: 'center', gap: 4, pointerEvents: 'none' }}>
                                                 <Layers size={12} style={{ opacity: 0.3 }} />
