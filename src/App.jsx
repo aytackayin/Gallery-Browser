@@ -1205,71 +1205,80 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                 backgroundColor: '#000',
                                 boxShadow: '0 0 20px rgba(0,0,0,0.5)'
                             }}>
-                                <video
-                                    ref={videoRef}
-                                    src={videoUrl}
-                                    preload="auto"
-                                    autoPlay={false}
-                                    muted={true}
-                                    playsInline={true}
-                                    crossOrigin="anonymous"
-                                    onLoadedMetadata={onMetadata}
-                                    onDurationChange={onMetadata}
-                                    onLoadedData={(e) => {
-                                        updateVideoRect();
-                                        if (videoRef.current?.duration && duration <= 0) syncDuration(videoRef.current.duration);
-                                    }}
-                                    onCanPlay={() => {
-                                        updateVideoRect();
-                                        if (videoRef.current) {
-                                            videoRef.current.muted = false;
-                                            if (selectedClip) videoRef.current.volume = selectedClip.volume / 100;
-                                        }
-                                    }}
-                                    onTimeUpdate={handleTimeUpdate}
-                                    onError={(e) => {
-                                        if (videoRef.current?.error?.code === 4) {
-                                            console.error("Video Codec Error:", videoRef.current?.error);
-                                            setDuration(-1);
-                                        }
-                                    }}
-                                    style={{
-                                        position: 'absolute',
-                                        left: 0, top: 0,
-                                        // Independent Sizing Logic: (Source / Canvas) * 100 -> Keeps Source fixed pixel size regardless of Canvas
-                                        width: activeVClip?.sourceWidth ? `${(activeVClip.sourceWidth / canvasSize.w) * 100}%` : '100%',
-                                        height: activeVClip?.sourceHeight ? `${(activeVClip.sourceHeight / canvasSize.h) * 100}%` : '100%',
-                                        objectFit: 'fill',
-                                        display: 'block',
-                                        opacity: (activeVClip && activeVClip.type === 'video') || (duration <= 0) ? 1 : 0,
-                                        filter: activeVClip?.filters ? `brightness(${activeVClip.filters.brightness ?? 100}%) contrast(${activeVClip.filters.contrast ?? 100}%) saturate(${activeVClip.filters.saturation ?? 100}%)` : 'none',
-                                        transform: activeVClip ? `translate(${activeVClip.transform?.x || 0}px, ${activeVClip.transform?.y || 0}px) scale(${activeVClip.transform?.scale || 1}) rotate(${activeVClip.rotate || 0}deg) scaleX(${activeVClip.flipH ? -1 : 1}) scaleY(${activeVClip.flipV ? -1 : 1})` : 'none',
-                                        clipPath: activeVClip?.crop ? `inset(${activeVClip.crop.y}% ${100 - (activeVClip.crop.x + activeVClip.crop.w)}% ${100 - (activeVClip.crop.y + activeVClip.crop.h)}% ${activeVClip.crop.x}%)` : 'none'
-                                    }}
-                                />
+                                {(() => {
+                                    // Viewport Scale Calculation for correct translate rendering
+                                    const viewScaleX = videoRect.width && canvasSize.w ? (videoRect.width / canvasSize.w) : 1;
+                                    const viewScaleY = videoRect.height && canvasSize.h ? (videoRect.height / canvasSize.h) : 1;
 
-                                {activeVClip && activeVClip.type === 'image' && (
-                                    <img
-                                        ref={imageRef}
-                                        src={`http://localhost:3001/media/${encodeURIComponent(activeVClip.path)}`}
-                                        alt="Preview"
-                                        onLoad={(e) => {
-                                            if (!activeVClip.sourceWidth) {
-                                                updateClip(activeVClip.id, { sourceWidth: e.target.naturalWidth, sourceHeight: e.target.naturalHeight });
-                                            }
-                                        }}
-                                        style={{
-                                            position: 'absolute',
-                                            left: 0, top: 0,
-                                            width: activeVClip?.sourceWidth ? `${(activeVClip.sourceWidth / canvasSize.w) * 100}%` : '100%',
-                                            height: activeVClip?.sourceHeight ? `${(activeVClip.sourceHeight / canvasSize.h) * 100}%` : '100%',
-                                            objectFit: 'fill',
-                                            filter: activeVClip?.filters ? `brightness(${activeVClip.filters.brightness ?? 100}%) contrast(${activeVClip.filters.contrast ?? 100}%) saturate(${activeVClip.filters.saturation ?? 100}%)` : 'none',
-                                            transform: activeVClip ? `translate(${activeVClip.transform?.x || 0}px, ${activeVClip.transform?.y || 0}px) scale(${activeVClip.transform?.scale || 1}) rotate(${activeVClip.rotate || 0}deg) scaleX(${activeVClip.flipH ? -1 : 1}) scaleY(${activeVClip.flipV ? -1 : 1})` : 'none',
-                                            clipPath: activeVClip?.crop ? `inset(${activeVClip.crop.y}% ${100 - (activeVClip.crop.x + activeVClip.crop.w)}% ${100 - (activeVClip.crop.y + activeVClip.crop.h)}% ${activeVClip.crop.x}%)` : 'none'
-                                        }}
-                                    />
-                                )}
+                                    return (
+                                        <>
+                                            <video
+                                                ref={videoRef}
+                                                src={videoUrl}
+                                                preload="auto"
+                                                autoPlay={false}
+                                                muted={true}
+                                                playsInline={true}
+                                                crossOrigin="anonymous"
+                                                onLoadedMetadata={onMetadata}
+                                                onDurationChange={onMetadata}
+                                                onLoadedData={(e) => {
+                                                    updateVideoRect();
+                                                    if (videoRef.current?.duration && duration <= 0) syncDuration(videoRef.current.duration);
+                                                }}
+                                                onCanPlay={() => {
+                                                    updateVideoRect();
+                                                    if (videoRef.current) {
+                                                        videoRef.current.muted = false;
+                                                        if (selectedClip) videoRef.current.volume = selectedClip.volume / 100;
+                                                    }
+                                                }}
+                                                onTimeUpdate={handleTimeUpdate}
+                                                onError={(e) => {
+                                                    if (videoRef.current?.error?.code === 4) {
+                                                        console.error("Video Codec Error:", videoRef.current?.error);
+                                                        setDuration(-1);
+                                                    }
+                                                }}
+                                                style={{
+                                                    position: 'absolute',
+                                                    left: 0, top: 0,
+                                                    width: activeVClip?.sourceWidth ? `${(activeVClip.sourceWidth / canvasSize.w) * 100}%` : '100%',
+                                                    height: activeVClip?.sourceHeight ? `${(activeVClip.sourceHeight / canvasSize.h) * 100}%` : '100%',
+                                                    objectFit: 'fill',
+                                                    display: 'block',
+                                                    opacity: (activeVClip && activeVClip.type === 'video') || (duration <= 0) ? 1 : 0,
+                                                    filter: activeVClip?.filters ? `brightness(${activeVClip.filters.brightness ?? 100}%) contrast(${activeVClip.filters.contrast ?? 100}%) saturate(${activeVClip.filters.saturation ?? 100}%)` : 'none',
+                                                    transform: activeVClip ? `translate(${(activeVClip.transform?.x || 0) * viewScaleX}px, ${(activeVClip.transform?.y || 0) * viewScaleY}px) scale(${activeVClip.transform?.scale || 1}) rotate(${activeVClip.rotate || 0}deg) scaleX(${activeVClip.flipH ? -1 : 1}) scaleY(${activeVClip.flipV ? -1 : 1})` : 'none',
+                                                    clipPath: activeVClip?.crop ? `inset(${activeVClip.crop.y}% ${100 - (activeVClip.crop.x + activeVClip.crop.w)}% ${100 - (activeVClip.crop.y + activeVClip.crop.h)}% ${activeVClip.crop.x}%)` : 'none'
+                                                }}
+                                            />
+
+                                            {activeVClip && activeVClip.type === 'image' && (
+                                                <img
+                                                    ref={imageRef}
+                                                    src={`http://localhost:3001/media/${encodeURIComponent(activeVClip.path)}`}
+                                                    alt="Preview"
+                                                    onLoad={(e) => {
+                                                        if (!activeVClip.sourceWidth) {
+                                                            updateClip(activeVClip.id, { sourceWidth: e.target.naturalWidth, sourceHeight: e.target.naturalHeight });
+                                                        }
+                                                    }}
+                                                    style={{
+                                                        position: 'absolute',
+                                                        left: 0, top: 0,
+                                                        width: activeVClip?.sourceWidth ? `${(activeVClip.sourceWidth / canvasSize.w) * 100}%` : '100%',
+                                                        height: activeVClip?.sourceHeight ? `${(activeVClip.sourceHeight / canvasSize.h) * 100}%` : '100%',
+                                                        objectFit: 'fill',
+                                                        filter: activeVClip?.filters ? `brightness(${activeVClip.filters.brightness ?? 100}%) contrast(${activeVClip.filters.contrast ?? 100}%) saturate(${activeVClip.filters.saturation ?? 100}%)` : 'none',
+                                                        transform: activeVClip ? `translate(${(activeVClip.transform?.x || 0) * viewScaleX}px, ${(activeVClip.transform?.y || 0) * viewScaleY}px) scale(${activeVClip.transform?.scale || 1}) rotate(${activeVClip.rotate || 0}deg) scaleX(${activeVClip.flipH ? -1 : 1}) scaleY(${activeVClip.flipV ? -1 : 1})` : 'none',
+                                                        clipPath: activeVClip?.crop ? `inset(${activeVClip.crop.y}% ${100 - (activeVClip.crop.x + activeVClip.crop.w)}% ${100 - (activeVClip.crop.y + activeVClip.crop.h)}% ${activeVClip.crop.x}%)` : 'none'
+                                                    }}
+                                                />
+                                            )}
+                                        </>
+                                    );
+                                })()}
                             </div>
 
                             {!activeVClip && (
