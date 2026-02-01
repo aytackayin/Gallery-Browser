@@ -377,16 +377,18 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
     const [localRefreshKey] = useState(Date.now());
 
     const activeVClip = useMemo(() => {
-        const vTracks = [...tracks].filter(t => t.type === 'video').reverse(); // Topmost first
+        const vTracks = [...tracks].filter(t => t.type === 'video').reverse();
         for (const track of vTracks) {
-            // Include clips that haven't loaded duration yet (0) if playhead is at their start
             const clip = track.clips.find(c => {
                 const end = c.offset + c.duration;
-                if (c.duration === 0) return currentTime === c.offset;
+                // Eğer süre henüz yüklenmişse (0 veya çok küçükse), yükleme aşamasında kabul et
+                if (c.duration <= 1) return currentTime >= c.offset && currentTime < c.offset + 2;
                 return currentTime >= c.offset && currentTime < end;
             });
             if (clip) return clip;
         }
+        // Fallback: Henüz video süresi oturmadıysa ve başlangıçtaysak ilk klibi göster (Boş ekranı önler)
+        if (currentTime <= 1 && vTracks.length > 0 && vTracks[0].clips.length > 0) return vTracks[0].clips[0];
         return null;
     }, [tracks, currentTime]);
 
@@ -482,17 +484,7 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
     }, [tracks]); // Re-calc when tracks change
 
     useEffect(() => {
-        const video = videoRef.current;
-        if (!video) return;
-        video.load();
-        // Fallback: If duration isn't set after 3s, try to kick it
-        const timer = setTimeout(() => {
-            if (!duration && video.readyState < 1) {
-                video.src = video.src; // Re-assign src to kickstart
-                video.load();
-            }
-        }, 3000);
-        return () => clearTimeout(timer);
+        // Firefox/Zen uyumluluğu için manuel load() kaldırıldı.
     }, [videoUrl]);
 
     useEffect(() => {
@@ -500,14 +492,42 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
         return () => window.removeEventListener('resize', updateVideoRect);
     }, []);
 
-    const onMetadata = (e) => {
-        let d = e.target.duration;
-        if (!isFinite(d) || d <= 0) return;
-        setDuration(d);
+    // Kararlı Süre Güncelleyici (Firefox'un 3sn hatasını önler)
+    const syncDuration = (newDur) => {
+        if (!isFinite(newDur) || newDur <= 0) return;
+        setDuration(prev => {
+            // Priority: Sunucu veya daha uzun olan süre her zaman daha doğrudur
+            if (prev > 5 && newDur < prev * 0.8) return prev;
+            return newDur;
+        });
         setTracks(prev => prev.map(t => ({
             ...t,
-            clips: t.clips.map(c => c.id === 'clip-0' && (c.duration === 0 || !isFinite(c.duration)) ? { ...c, duration: d } : c)
+            clips: t.clips.map(c => {
+                if (c.id === 'clip-0' && (c.duration <= 1 || (newDur > c.duration && newDur > 5))) {
+                    return { ...c, duration: newDur };
+                }
+                return c;
+            })
         })));
+    };
+
+    // Hibrit Metadata: Sunucudan gerçek süreyi çek
+    useEffect(() => {
+        if (!item.path) return;
+        const fetchDuration = async () => {
+            try {
+                const res = await fetch(`/api/info?path=${encodeURIComponent(item.path)}`);
+                const info = await res.json();
+                if (info && info.durationSeconds) syncDuration(info.durationSeconds);
+            } catch (e) {
+                console.error("API duration fetch failed:", e);
+            }
+        };
+        fetchDuration();
+    }, [item.path]);
+
+    const onMetadata = (e) => {
+        syncDuration(e.target.duration);
         setTimeout(updateVideoRect, 100);
     };
 
@@ -1059,16 +1079,13 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
                                 preload="auto"
                                 autoPlay={true}
                                 muted={true}
-                                onLoadedMetadata={(e) => {
-                                    onMetadata(e);
-                                    if (videoRef.current) videoRef.current.pause();
-                                }}
+                                playsInline={true}
+                                crossOrigin="anonymous"
+                                onLoadedMetadata={onMetadata}
                                 onDurationChange={onMetadata}
                                 onLoadedData={(e) => {
                                     updateVideoRect();
-                                    if (videoRef.current && videoRef.current.duration) {
-                                        setDuration(videoRef.current.duration);
-                                    }
+                                    if (videoRef.current?.duration && duration <= 0) syncDuration(videoRef.current.duration);
                                 }}
                                 onCanPlay={() => {
                                     updateVideoRect();
@@ -1079,10 +1096,12 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
                                 }}
                                 onTimeUpdate={handleTimeUpdate}
                                 onError={(e) => {
-                                    console.error("Video Editor Error:", e);
-                                    setDuration(-1);
+                                    // Firefox bazen abort eder ama sonra yükler, o yüzden sadece ölümcül hataları logla
+                                    if (videoRef.current?.error?.code === 4) {
+                                        console.error("Video Codec Error:", videoRef.current?.error);
+                                        setDuration(-1);
+                                    }
                                 }}
-                                playsInline
                                 style={{
                                     position: 'absolute',
                                     width: videoRect.width ? `${videoRect.width}px` : '100%',
@@ -1090,7 +1109,9 @@ const VideoEditor = ({ item, t, onSave, onClose, refreshKey: propRefreshKey }) =
                                     objectFit: 'contain',
                                     zIndex: 1,
                                     backgroundColor: '#000',
-                                    display: activeVClip && activeVClip.type === 'video' ? 'block' : 'none',
+                                    display: 'block',
+                                    // Metada beklerken veya klip aktifken görünür tut (Firefox için opacity 1 önemli)
+                                    opacity: (activeVClip && activeVClip.type === 'video') || (duration <= 0) ? 1 : 0,
                                     filter: activeVClip ? `brightness(${activeVClip.filters.brightness}%) contrast(${activeVClip.filters.contrast}%) saturate(${activeVClip.filters.saturation}%)` : 'none',
                                     transform: activeVClip ? `rotate(${activeVClip.rotate}deg) scaleX(${activeVClip.flipH ? -1 : 1}) scaleY(${activeVClip.flipV ? -1 : 1})` : 'none'
                                 }}
