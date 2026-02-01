@@ -559,7 +559,12 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
     }, [item.path, propRefreshKey]);
 
     const onMetadata = (e) => {
-        syncDuration(e.target.duration);
+        const video = e.target;
+        syncDuration(video.duration);
+        // Set canvas to video size initially if it's the first load
+        if (canvasSize.w === 1920 && canvasSize.h === 1080 && video.videoWidth && video.videoHeight) {
+            setCanvasSize({ w: video.videoWidth, h: video.videoHeight });
+        }
         setTimeout(updateVideoRect, 100);
     };
 
@@ -1135,7 +1140,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                 <div style={{ marginTop: 10 }}>
                                     <label style={{ fontSize: '0.75rem', color: '#888', marginBottom: 8, display: 'block' }}>{t?.aspectRatio || 'Aspect Ratio'}</label>
                                     <div className="ratio-presets" style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                                        <button className="action-btn" style={{ padding: '2px 8px', fontSize: '0.7rem' }} onClick={() => setAspectRatio('free')}>{t?.free || 'Free'}</button>
+
                                         <button className="action-btn" style={{ padding: '2px 8px', fontSize: '0.7rem' }} onClick={() => setAspectRatio(1)}>1:1</button>
                                         <button className="action-btn" style={{ padding: '2px 8px', fontSize: '0.7rem' }} onClick={() => setAspectRatio(16 / 9)}>16:9</button>
                                         <button className="action-btn" style={{ padding: '2px 8px', fontSize: '0.7rem' }} onClick={() => setAspectRatio(9 / 16)}>9:16</button>
