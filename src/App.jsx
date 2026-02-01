@@ -1733,6 +1733,16 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                                     onMouseDown={(e) => {
                                                         e.stopPropagation();
                                                         setSelectedClipId(clip.id);
+
+                                                        // Update Playhead position on clip click
+                                                        if (timelineRef.current) {
+                                                            const rect = timelineRef.current.getBoundingClientRect();
+                                                            const clickX = (e.clientX - rect.left) + timelineRef.current.scrollLeft - 80;
+                                                            const newTime = Math.max(0, clickX / zoomLevel);
+                                                            setCurrentTime(newTime);
+                                                            if (videoRef.current) videoRef.current.currentTime = newTime;
+                                                        }
+
                                                         setIsDragging({
                                                             type: 'clip',
                                                             id: clip.id,
