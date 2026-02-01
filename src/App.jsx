@@ -1608,8 +1608,10 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                     <label style={{ display: 'block', marginBottom: 5, fontSize: '0.9rem', color: '#aaa' }}>{t.fileName || 'File Name'}</label>
                                     <input
                                         className="modal-input"
+                                        autoFocus
                                         value={saveAsName}
                                         onChange={e => setSaveAsName(e.target.value)}
+                                        onFocus={e => e.target.select()}
                                         style={{ width: '100%', boxSizing: 'border-box' }}
                                     />
                                 </div>
