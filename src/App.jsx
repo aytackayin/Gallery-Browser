@@ -802,7 +802,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
 
     const fetchPickerItems = async (path) => {
         try {
-            const res = await fetch(`/api/scan?path=${encodeURIComponent(path)}`);
+            const res = await fetch(`/api/scan?path=${encodeURIComponent(path)}&audio=true`);
             const data = await res.json();
             setPickerItems(data.items || []);
             setPickerPath(data.currentPath || path);

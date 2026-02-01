@@ -114,7 +114,7 @@ app.get('/api/thumb', async (req, res) => {
     }
 });
 
-const getAllItems = (dir, baseDir, allFiles = []) => {
+const getAllItems = (dir, baseDir, allFiles = [], showAudio = false) => {
     try {
         const files = fs.readdirSync(dir, { withFileTypes: true });
         for (const file of files) {
@@ -125,10 +125,12 @@ const getAllItems = (dir, baseDir, allFiles = []) => {
             const relPath = path.relative(baseDir, res).replace(/\\/g, '/');
             const isDir = file.isDirectory();
             const type = isDir ? 'folder' : (mime.lookup(file.name) || 'unknown');
-            if (isDir || type.startsWith('image/') || type.startsWith('video/') || type.startsWith('audio/')) {
+            const isMedia = type.startsWith('image/') || type.startsWith('video/');
+            const isAudio = type.startsWith('audio/');
+            if (isDir || isMedia || (showAudio && isAudio)) {
                 allFiles.push({ name: file.name, path: relPath, type });
             }
-            if (isDir) getAllItems(res, baseDir, allFiles);
+            if (isDir) getAllItems(res, baseDir, allFiles, showAudio);
         }
     } catch (e) { }
     return allFiles;
@@ -137,6 +139,7 @@ const getAllItems = (dir, baseDir, allFiles = []) => {
 app.get('/api/scan', (req, res) => {
     try {
         const subPath = req.query.path || '';
+        const showAudio = req.query.audio === 'true';
         const targetPath = path.join(rootGalleryPath, subPath);
         const absolutePath = path.resolve(targetPath);
         if (!absolutePath.toLowerCase().startsWith(rootGalleryPath.toLowerCase()) || !fs.existsSync(absolutePath)) {
@@ -153,7 +156,12 @@ app.get('/api/scan', (req, res) => {
                 const relPath = path.relative(rootGalleryPath, fullPath).replace(/\\/g, '/');
                 return { name: item.name, path: relPath, type: item.isDirectory() ? 'folder' : (mime.lookup(item.name) || 'unknown') };
             })
-            .filter(item => item.type === 'folder' || item.type.startsWith('image/') || item.type.startsWith('video/') || item.type.startsWith('audio/'))
+            .filter(item => {
+                if (item.type === 'folder') return true;
+                if (item.type.startsWith('image/') || item.type.startsWith('video/')) return true;
+                if (showAudio && item.type.startsWith('audio/')) return true;
+                return false;
+            })
             .sort((a, b) => (b.type === 'folder' ? 1 : -1) - (a.type === 'folder' ? 1 : -1) || a.name.localeCompare(b.name));
         res.json({
             currentPath: subPath,
@@ -168,13 +176,13 @@ app.get('/api/scan', (req, res) => {
 app.get('/api/search', (req, res) => {
     try {
         const query = (req.query.q || '').toLowerCase();
+        const showAudio = req.query.audio === 'true';
         if (!query) return res.json({ items: [] });
-        const allItems = getAllItems(rootGalleryPath, rootGalleryPath);
+        const allItems = getAllItems(rootGalleryPath, rootGalleryPath, [], showAudio);
         const dbItems = db.prepare("SELECT path FROM item_info WHERE LOWER(info) LIKE ?").all(`%${query}%`).map(row => row.path.toLowerCase());
         const filtered = allItems.filter(item => {
             const nameMatch = item.name.toLowerCase().includes(query);
             const infoMatch = dbItems.includes(item.path.toLowerCase());
-            // ARTIK pathMatch (klasör içindekileri getirme) YOK
             return nameMatch || infoMatch;
         });
         res.json({ items: filtered });
