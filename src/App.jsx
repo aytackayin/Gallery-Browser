@@ -854,7 +854,8 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
         e.preventDefault();
         e.stopPropagation();
 
-        const delta = e.deltaY > 0 ? -0.1 : 0.1;
+        const baseDelta = e.shiftKey ? 0.01 : 0.1;
+        const delta = e.deltaY > 0 ? -baseDelta : baseDelta;
         const currentScale = activeVClip.transform?.scale || 1;
         const newScale = Math.max(0.1, Math.min(5, currentScale + delta));
 
