@@ -457,7 +457,16 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
         setTracks(prev => {
             const sameType = prev.filter(t => t.type === type);
             const newId = `${type === 'video' ? 'v' : 'a'}${sameType.length + 1}`;
-            return [...prev, { id: newId, type, clips: [] }];
+            const firstIdx = prev.findIndex(t => t.type === type);
+            const newTrack = { id: newId, type, clips: [] };
+
+            if (firstIdx === -1) {
+                return type === 'video' ? [newTrack, ...prev] : [...prev, newTrack];
+            }
+
+            const newTracks = [...prev];
+            newTracks.splice(firstIdx, 0, newTrack);
+            return newTracks;
         });
     };
 
