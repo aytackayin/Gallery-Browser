@@ -311,6 +311,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
     const [isPlaying, setIsPlaying] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
     const [canvasSize, setCanvasSize] = useState({ w: 1920, h: 1080 });
+    const [snapLines, setSnapLines] = useState([]);
     const VIDEO_WIDTH = canvasSize.w;
     const VIDEO_HEIGHT = canvasSize.h;
 
@@ -928,11 +929,61 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
             const dx = (e.clientX - isDragging.startX) * scaleFactorX;
             const dy = (e.clientY - isDragging.startY) * scaleFactorY;
 
+            let newX = isDragging.originX + dx;
+            let newY = isDragging.originY + dy;
+
+            const newSnapLines = [];
+
+            if (activeVClip) {
+                const scale = activeVClip.transform?.scale || 1;
+                // Use sourceWidth/Height if available, else fallback to canvas size (though all clips should have source dimensions now)
+                const clipW = (activeVClip.sourceWidth || canvasSize.w) * scale;
+                const clipH = (activeVClip.sourceHeight || canvasSize.h) * scale;
+
+                const snapThreshold = 40; // Logical pixels
+
+                // Snap X
+                // Left
+                if (Math.abs(newX) < snapThreshold) {
+                    newX = 0;
+                    newSnapLines.push({ type: 'vertical', pos: 0 });
+                }
+                // Right
+                else if (Math.abs((newX + clipW) - canvasSize.w) < snapThreshold) {
+                    newX = canvasSize.w - clipW;
+                    newSnapLines.push({ type: 'vertical', pos: 100 });
+                }
+                // Center
+                if (Math.abs((newX + clipW / 2) - (canvasSize.w / 2)) < snapThreshold) {
+                    newX = (canvasSize.w / 2) - (clipW / 2);
+                    newSnapLines.push({ type: 'vertical', pos: 50 });
+                }
+
+                // Snap Y
+                // Top
+                if (Math.abs(newY) < snapThreshold) {
+                    newY = 0;
+                    newSnapLines.push({ type: 'horizontal', pos: 0 });
+                }
+                // Bottom
+                else if (Math.abs((newY + clipH) - canvasSize.h) < snapThreshold) {
+                    newY = canvasSize.h - clipH;
+                    newSnapLines.push({ type: 'horizontal', pos: 100 });
+                }
+                // Center
+                if (Math.abs((newY + clipH / 2) - (canvasSize.h / 2)) < snapThreshold) {
+                    newY = (canvasSize.h / 2) - (clipH / 2);
+                    newSnapLines.push({ type: 'horizontal', pos: 50 });
+                }
+            }
+
+            setSnapLines(newSnapLines);
+
             updateClip(selectedClipId, {
                 transform: {
                     ...(activeVClip.transform || { scale: 1 }),
-                    x: isDragging.originX + dx,
-                    y: isDragging.originY + dy
+                    x: newX,
+                    y: newY
                 }
             });
             return;
@@ -1073,7 +1124,10 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
         }
     };
 
-    const handleMouseUp = () => setIsDragging(null);
+    const handleMouseUp = () => {
+        setIsDragging(null);
+        setSnapLines([]);
+    };
 
     return (
         <div className="modal-overlay editor-overlay" style={{ zIndex: 7000 }}>
@@ -1279,6 +1333,28 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                         </>
                                     );
                                 })()}
+
+                                {/* Snap Lines Overlay */}
+                                {snapLines.map((line, i) => (
+                                    <div key={i} style={{
+                                        position: 'absolute',
+                                        zIndex: 10,
+                                        pointerEvents: 'none',
+                                        ...(line.type === 'vertical' ? {
+                                            top: 0, bottom: 0,
+                                            left: `${line.pos}%`,
+                                            width: 0,
+                                            borderLeft: '1px dotted red',
+                                            transform: 'translateX(-50%)'
+                                        } : {
+                                            left: 0, right: 0,
+                                            top: `${line.pos}%`,
+                                            height: 0,
+                                            borderTop: '1px dotted red',
+                                            transform: 'translateY(-50%)'
+                                        })
+                                    }} />
+                                ))}
                             </div>
 
                             {!activeVClip && (
