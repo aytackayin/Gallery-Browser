@@ -1664,14 +1664,11 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                 flexDirection: 'column',
                                 background: '#000'
                             }}>
-                                {/* Sol Sütun Maskesi (Başlıklar arasından sızıntıyı önler) */}
-                                <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 80, background: '#0a0a0a', zIndex: 850, borderRight: '2px solid #333', pointerEvents: 'none' }} />
-
                                 {/* Time Ruler */}
                                 <div
                                     onMouseDown={handleTimelineClick}
                                     style={{
-                                        height: 30,
+                                        height: 32,
                                         position: 'sticky',
                                         top: 0,
                                         left: 0,
@@ -1690,8 +1687,12 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                         ))}
                                     </div>
                                 </div>
+                                {/* Sol Sütun Koruma Katmanı (Sızıntıları önlemek için başlıkların arkasında sabit durur) */}
+                                <div style={{ position: 'sticky', left: 0, width: 80, height: 0, zIndex: 925, pointerEvents: 'none', overflow: 'visible' }}>
+                                    <div style={{ width: 80, height: 2000, background: '#0a0a0a', borderRight: '2px solid #333' }} />
+                                </div>
                                 {tracks.map((track, idx) => (
-                                    <div key={track.id} style={{ display: 'grid', gridTemplateColumns: '80px 1fr', gap: 0, marginBottom: 0, minHeight: 45, borderBottom: '1px solid #222', background: '#000', position: 'relative' }}>
+                                    <div key={track.id} style={{ display: 'grid', gridTemplateColumns: '80px 1fr', gap: 0, marginBottom: 0, minHeight: 45, borderBottom: '1px solid #1a1a1a', background: '#000', position: 'relative' }}>
                                         <div
                                             className={`track-header ${dragTrackIndex === idx ? 'dragging' : ''}`}
                                             draggable
@@ -1699,7 +1700,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                             onDragOver={(e) => handleDragOver(e, idx)}
                                             onDragEnd={handleDrop}
                                             onMouseDown={(e) => e.stopPropagation()} // Timeline click'i engeller
-                                            style={{ color: '#eee', fontSize: '0.7rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#0a0a0a', borderRight: '2px solid #333', position: 'sticky', left: 0, zIndex: 900, padding: '0 5px', cursor: 'grab', height: '100%', boxSizing: 'border-box' }}
+                                            style={{ color: '#eee', fontSize: '0.7rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#0a0a0a', borderRight: '2px solid #333', position: 'sticky', left: 0, zIndex: 950, padding: '0 5px', cursor: 'grab', height: '100%', boxSizing: 'border-box' }}
                                         >
                                             <div style={{ display: 'flex', alignItems: 'center', gap: 4, pointerEvents: 'none' }}>
                                                 <Layers size={12} style={{ opacity: 0.3 }} />
@@ -1784,12 +1785,12 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                     onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragging({ type: 'playhead' }); }}
                                     style={{
                                         position: 'absolute',
-                                        top: 30, // Ruler altında (zIndex 9000 olduğu için altında kalacak)
+                                        top: 32, // Ruler (32px) hemen bitiminden başlasın
                                         bottom: 0,
                                         left: 80 + (currentTime * zoomLevel) - 1,
                                         width: 12,
                                         marginLeft: -5,
-                                        zIndex: 800, // Klinkerden (100) üstte, Ruler (1000) ve Headerden (900) altta
+                                        zIndex: 900, // Header (950) ve Ruler (1000) altında kalmalı
                                         cursor: 'ew-resize',
                                         pointerEvents: 'auto'
                                     }}>
