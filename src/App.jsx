@@ -606,9 +606,9 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
 
                 setCurrentTime(prev => {
                     const next = prev + delta;
-                    if (next >= timelineDuration) {
+                    if (next >= contentDuration) {
                         setIsPlaying(false);
-                        return timelineDuration;
+                        return contentDuration;
                     }
                     return next;
                 });
@@ -628,7 +628,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
         const video = videoRef.current;
         if (!video) return;
 
-        if (activeVClip) {
+        if (activeVClip && activeVClip.type === 'video') {
             const targetTime = activeVClip.start + (currentTime - activeVClip.offset);
             if (Math.abs(video.currentTime - targetTime) > 0.15) {
                 video.currentTime = targetTime;
