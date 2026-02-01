@@ -1173,70 +1173,84 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                 <div className="editor-grid" style={{ display: 'grid', gridTemplateColumns: '300px minmax(0, 1fr)', gridTemplateRows: 'minmax(0, 1fr) 250px', gap: 10, flex: 1, overflow: 'hidden', padding: 10, height: 'calc(100% - 60px)' }}>
 
                     {/* Left: properties */}
-                    <div className="editor-sidebar sidebar-group" style={{ overflowY: 'auto' }}>
-                        <label style={{ fontSize: '0.9rem', marginBottom: 15, display: 'block' }}>{t.clipProperties || 'CLIP PROPERTIES'}</label>
+                    <div className="editor-sidebar sidebar-group" style={{ overflowY: 'auto', padding: '10px 8px' }}>
+                        <label style={{ fontSize: '0.65rem', fontWeight: 'bold', letterSpacing: '1px', marginBottom: 8, display: 'block', color: 'white', textAlign: 'center' }}>{t.clipProperties || 'CLIP PROPERTIES'}</label>
                         {selectedClip ? (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 15 }}>
-                                <div className="control-item">
-                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                        <label>Brightness</label>
-                                        <span style={{ fontSize: '0.75rem', color: 'var(--netflix-red)' }}>{selectedClip.filters?.brightness ?? 100}%</span>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                                <div className="control-item" style={{ gap: 2 }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <label style={{ fontSize: '0.65rem', opacity: 0.8 }}>Brightness</label>
+                                        <span style={{ fontSize: '0.6rem', color: 'var(--netflix-red)' }}>{selectedClip.filters?.brightness ?? 100}%</span>
                                     </div>
-                                    <input type="range" min="0" max="200" value={selectedClip.filters?.brightness ?? 100}
+                                    <input type="range" min="0" max="200" value={selectedClip.filters?.brightness ?? 100} style={{ height: 3 }}
                                         onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, brightness: e.target.value } })} />
                                 </div>
-                                <div className="control-item">
-                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                        <label>Contrast</label>
-                                        <span style={{ fontSize: '0.75rem', color: 'var(--netflix-red)' }}>{selectedClip.filters?.contrast ?? 100}%</span>
+                                <div className="control-item" style={{ gap: 2 }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <label style={{ fontSize: '0.65rem', opacity: 0.8 }}>Contrast</label>
+                                        <span style={{ fontSize: '0.6rem', color: 'var(--netflix-red)' }}>{selectedClip.filters?.contrast ?? 100}%</span>
                                     </div>
-                                    <input type="range" min="0" max="200" value={selectedClip.filters?.contrast ?? 100}
+                                    <input type="range" min="0" max="200" value={selectedClip.filters?.contrast ?? 100} style={{ height: 3 }}
                                         onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, contrast: e.target.value } })} />
                                 </div>
-                                <div className="control-item">
-                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                        <label>Saturation</label>
-                                        <span style={{ fontSize: '0.75rem', color: 'var(--netflix-red)' }}>{selectedClip.filters?.saturation ?? 100}%</span>
+                                <div className="control-item" style={{ gap: 2 }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <label style={{ fontSize: '0.65rem', opacity: 0.8 }}>Saturation</label>
+                                        <span style={{ fontSize: '0.6rem', color: 'var(--netflix-red)' }}>{selectedClip.filters?.saturation ?? 100}%</span>
                                     </div>
-                                    <input type="range" min="0" max="200" value={selectedClip.filters?.saturation ?? 100}
+                                    <input type="range" min="0" max="200" value={selectedClip.filters?.saturation ?? 100} style={{ height: 3 }}
                                         onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, saturation: e.target.value } })} />
                                 </div>
-                                <div className="control-item">
-                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                        <label>Volume</label>
-                                        <span style={{ fontSize: '0.75rem', color: 'var(--netflix-red)' }}>{selectedClip.volume ?? 100}%</span>
+                                <div className="control-item" style={{ gap: 2 }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <label style={{ fontSize: '0.65rem', opacity: 0.8 }}>Volume</label>
+                                        <span style={{ fontSize: '0.6rem', color: 'var(--netflix-red)' }}>{selectedClip.volume ?? 100}%</span>
                                     </div>
-                                    <input type="range" min="0" max="200" value={selectedClip.volume ?? 100}
+                                    <input type="range" min="0" max="200" value={selectedClip.volume ?? 100} style={{ height: 3 }}
                                         onChange={e => {
                                             const vol = e.target.value;
                                             updateClip(selectedClipId, { volume: vol });
                                             if (videoRef.current) videoRef.current.volume = vol / 100;
                                         }} />
                                 </div>
-                                <div className="control-item">
-                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                        <label>Scale</label>
-                                        <span style={{ fontSize: '0.75rem', color: 'var(--netflix-red)' }}>{(selectedClip.transform?.scale || 1).toFixed(2)}x</span>
+                                <div className="control-item" style={{ gap: 2 }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <label style={{ fontSize: '0.65rem', opacity: 0.8 }}>Scale</label>
+                                        <span style={{ fontSize: '0.6rem', color: 'var(--netflix-red)' }}>{(selectedClip.transform?.scale || 1).toFixed(2)}x</span>
                                     </div>
-                                    <input type="range" min="0.1" max="5" step="0.01" value={selectedClip.transform?.scale || 1}
+                                    <input type="range" min="0.1" max="5" step="0.01" value={selectedClip.transform?.scale || 1} style={{ height: 3 }}
                                         onChange={e => updateClip(selectedClipId, { transform: { ...(selectedClip.transform || { x: 0, y: 0 }), scale: parseFloat(e.target.value) } })} />
                                 </div>
-                                <button className="action-btn" style={{ fontSize: '0.75rem', background: 'rgba(255,255,255,0.05)' }} onClick={() => updateClip(selectedClipId, { filters: { brightness: 100, contrast: 100, saturation: 100, gamma: 1.0 }, volume: 100 })}><Droplet size={14} style={{ marginRight: 8 }} /> Filtreleri Sıfırla</button>
+                                <button className="action-btn" style={{ width: '100%', background: '#387f85', color: 'white', justifyContent: 'center', fontSize: '0.8rem', padding: '6px' }} onClick={() => updateClip(selectedClipId, { filters: { brightness: 100, contrast: 100, saturation: 100, gamma: 1.0 }, volume: 100 })}>
+                                    <RotateCw size={14} style={{ marginRight: 8 }} /> Filtreleri Sıfırla
+                                </button>
 
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 5 }}>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5 }}>
-                                        <button className="action-btn" onClick={() => updateClip(selectedClipId, { rotate: ((selectedClip.rotate || 0) + 90) % 360 })}><RotateCw size={14} style={{ marginRight: 10 }} /> {t?.rotate || 'Rotate'}</button>
-                                        <button className={`action-btn ${selectedClip.flipH ? 'active' : ''}`} onClick={() => updateClip(selectedClipId, { flipH: !selectedClip.flipH })}><Maximize2 size={14} style={{ transform: 'rotate(90deg)', marginRight: 10 }} /> {t?.flipH || 'Flip H'}</button>
-                                        <button className={`action-btn ${selectedClip.flipV ? 'active' : ''}`} onClick={() => updateClip(selectedClipId, { flipV: !selectedClip.flipV })}><Maximize2 size={14} style={{ marginRight: 10 }} /> Flip V</button>
-                                        <button className="action-btn" onClick={() => updateClip(selectedClipId, { rotate: 0, flipH: false, flipV: false, transform: { ...(selectedClip.transform || { x: 0, y: 0 }), scale: 1 } })}><CornerUpLeft size={14} style={{ marginRight: 8 }} /> Reset Transf.</button>
+                                    <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                                        <button className="action-btn" style={{ width: 34, height: 34, justifyContent: 'center' }} onClick={() => updateClip(selectedClipId, { rotate: ((selectedClip.rotate || 0) + 90) % 360 })} title={t?.rotate || 'Rotate'}>
+                                            <RotateCw size={16} />
+                                        </button>
+                                        <button className={`action-btn ${selectedClip.flipH ? 'active' : ''}`} style={{ width: 34, height: 34, justifyContent: 'center' }} onClick={() => updateClip(selectedClipId, { flipH: !selectedClip.flipH })} title={t?.flipH || 'Flip H'}>
+                                            <Maximize2 size={16} style={{ transform: 'rotate(90deg)' }} />
+                                        </button>
+                                        <button className={`action-btn ${selectedClip.flipV ? 'active' : ''}`} style={{ width: 34, height: 34, justifyContent: 'center' }} onClick={() => updateClip(selectedClipId, { flipV: !selectedClip.flipV })} title="Flip V">
+                                            <Maximize2 size={16} />
+                                        </button>
+                                        <button className="action-btn" style={{ width: 34, height: 34, justifyContent: 'center' }} onClick={() => updateClip(selectedClipId, { rotate: 0, flipH: false, flipV: false, transform: { ...(selectedClip.transform || { x: 0, y: 0 }), scale: 1 } })} title="Dönüşümü Sıfırla">
+                                            <CornerUpLeft size={16} />
+                                        </button>
                                     </div>
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5 }}>
                                         <button className="action-btn" style={{ background: 'var(--netflix-red)', color: 'white' }} onClick={() => {
                                             const sw = selectedClip.sourceWidth || canvasSize.w;
                                             const sh = selectedClip.sourceHeight || canvasSize.h;
                                             updateClip(selectedClipId, { transform: { ...(selectedClip.transform || { x: 0, y: 0 }), x: (canvasSize.w - sw) / 2, y: (canvasSize.h - sh) / 2 } });
-                                        }}><Monitor size={14} style={{ marginRight: 8 }} /> Ortala</button>
-                                        <button className="action-btn" onClick={() => updateClip(selectedClipId, { transform: { ...(selectedClip.transform || { x: 0, y: 0 }), x: 0, y: 0 } })}><Maximize2 size={14} style={{ marginRight: 8 }} /> Konum Sıfırla</button>
+                                        }} title="Merkeze Hizala (Ortala)">
+                                            <Monitor size={16} style={{ marginRight: 8 }} /> Ortala
+                                        </button>
+                                        <button className="action-btn" onClick={() => updateClip(selectedClipId, { transform: { ...(selectedClip.transform || { x: 0, y: 0 }), x: 0, y: 0 } })} title="Konumu Sıfırla">
+                                            <Maximize2 size={16} style={{ marginRight: 8 }} /> Reset
+                                        </button>
                                     </div>
                                 </div>
                                 <div style={{ marginTop: 10 }}>
@@ -1513,23 +1527,23 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                     </div>
                                 </div>
                                 {tracks.map((track, idx) => (
-                                    <div key={track.id} style={{ display: 'grid', gridTemplateColumns: '80px 1fr', gap: 0, marginBottom: 2, minHeight: 45, borderBottom: '1px solid #1a1a1a' }}>
+                                    <div key={track.id} style={{ display: 'grid', gridTemplateColumns: '80px 1fr', gap: 0, marginBottom: 2, minHeight: 35, borderBottom: '1px solid #1a1a1a' }}>
                                         <div
                                             className={`track-header ${dragTrackIndex === idx ? 'dragging' : ''}`}
                                             draggable
                                             onDragStart={() => handleDragStart(idx)}
                                             onDragOver={(e) => handleDragOver(e, idx)}
                                             onDragEnd={handleDrop}
-                                            style={{ color: '#555', fontSize: '0.7rem', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#0a0a0a', borderRight: '1px solid #222', position: 'sticky', left: 0, zIndex: 20, gap: 4 }}
+                                            style={{ color: '#555', fontSize: '0.7rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#0a0a0a', borderRight: '1px solid #222', position: 'sticky', left: 0, zIndex: 20, padding: '0 5px' }}
                                         >
-                                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', pointerEvents: 'none' }}>
-                                                <Layers size={14} style={{ opacity: 0.3, marginBottom: 2 }} />
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 4, pointerEvents: 'none' }}>
+                                                <Layers size={12} style={{ opacity: 0.3 }} />
                                                 <span style={{ fontWeight: 'bold' }}>{track.id.toUpperCase()}</span>
                                             </div>
-                                            <div style={{ display: 'flex', gap: 2 }}>
-                                                <button onClick={(e) => { e.stopPropagation(); setPickerTarget({ trackId: track.id }); fetchPickerItems(pickerPath); }} style={{ background: 'none', border: 'none', color: '#444', cursor: 'pointer', padding: 2 }} title={t.addMedia || 'Add Media'}><Plus size={12} /></button>
+                                            <div style={{ display: 'flex', gap: 0 }}>
+                                                <button onClick={(e) => { e.stopPropagation(); setPickerTarget({ trackId: track.id }); fetchPickerItems(pickerPath); }} style={{ background: 'none', border: 'none', color: '#46d369', cursor: 'pointer', padding: 2 }} title={t.addMedia || 'Add Media'}><Plus size={14} /></button>
                                                 {track.id !== 'v1' && track.id !== 'a1' && (
-                                                    <button onClick={(e) => { e.stopPropagation(); removeTrack(track.id); }} style={{ background: 'none', border: 'none', color: '#444', cursor: 'pointer', padding: 2 }} title={t.deleteTrack || 'Delete Track'}><Trash size={12} /></button>
+                                                    <button onClick={(e) => { e.stopPropagation(); removeTrack(track.id); }} style={{ background: 'none', border: 'none', color: '#e50914', cursor: 'pointer', padding: 2 }} title={t.deleteTrack || 'Delete Track'}><Trash size={14} /></button>
                                                 )}
                                             </div>
                                         </div>
