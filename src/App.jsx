@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { Folder, X, Play, Pause, ChevronRight, Home, ChevronLeft, Image as ImageIcon, Video as VideoIcon, Search, Trash2, Info, Save, FolderInput, ChevronDown, ChevronUp, Settings, CheckCircle, Scissors, RotateCw, Sun, Contrast, Lock, Unlock, Maximize2, Volume2, Plus, Trash, Droplet, CornerUpLeft, Layers, Crop } from 'lucide-react';
+import { Folder, X, Play, Pause, ChevronRight, Home, ChevronLeft, Image as ImageIcon, Video as VideoIcon, Search, Trash2, Info, Save, FolderInput, ChevronDown, ChevronUp, Settings, CheckCircle, Scissors, RotateCw, Sun, Contrast, Lock, Unlock, Maximize2, Volume2, Plus, Trash, Droplet, CornerUpLeft, Layers, Crop, Monitor } from 'lucide-react';
 import Cropper from "react-cropper";
 import "cropperjs/dist/cropper.css";
 
@@ -741,44 +741,35 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
     };
 
     const setAspectRatio = (ratio) => {
-        const clip = getSelectedClip();
-        if (!clip) return;
-
-        // Videonun veya resmin gerçek boyutlarını alalım
-        let sourceW = 1920;
-        let sourceH = 1080;
-
-        if (clip.type === 'video' && videoRef.current && videoRef.current.videoWidth) {
-            sourceW = videoRef.current.videoWidth;
-            sourceH = videoRef.current.videoHeight;
-        } else if (clip.type === 'image' && imageRef.current && imageRef.current.naturalWidth) {
-            sourceW = imageRef.current.naturalWidth;
-            sourceH = imageRef.current.naturalHeight;
+        if (ratio === 'free') {
+            // Free modunda özel bir şey yapmaya gerek yok, kullanıcı elle boyutlandırabilir
+            setActiveTool('crop');
+            return;
         }
 
-        const sourceRatio = sourceW / sourceH;
-        let newW = 100;
-        let newH = 100;
+        // Standart çözünürlükler (1080p bazlı)
+        let newW = 1920;
+        let newH = 1080;
 
-        if (ratio !== 'free') {
-            // k = Hedef Oran / Kaynak Oran
-            const k = ratio / sourceRatio;
-
-            if (k > 1) {
-                // Hedef oran videodan daha genişse: Genişlik %100, Yükseklik kısalır
-                newW = 100;
-                newH = 100 / k;
-            } else {
-                // Hedef oran videodan daha darsa: Yükseklik %100, Genişlik kısalır
-                newH = 100;
-                newW = 100 * k;
-            }
+        if (ratio === 1) { // 1:1
+            newW = 1080;
+            newH = 1080;
+        } else if (ratio === 16 / 9) {
+            newW = 1920;
+            newH = 1080;
+        } else if (ratio === 9 / 16) {
+            newW = 1080;
+            newH = 1920;
+        } else if (ratio === 4 / 3) {
+            newW = 1440;
+            newH = 1080;
+        } else if (ratio === 21 / 9) {
+            newW = 2560;
+            newH = 1080;
         }
 
-        const newX = (100 - newW) / 2;
-        const newY = (100 - newH) / 2;
-
-        updateClip(clip.id, { crop: { x: newX, y: newY, w: newW, h: newH } });
+        setCanvasSize({ w: newW, h: newH });
+        setActiveTool('crop'); // Canvas Resize Tool
     };
 
     const selectedClip = getSelectedClip();
@@ -1331,7 +1322,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                             <div className="btn-group">
                                 <button className={`action-btn ${activeTool === 'select' ? 'active' : ''}`} onClick={() => setActiveTool('select')} title={t.selectionTool || 'Selection Tool'}><Search size={14} /></button>
                                 <button className={`action-btn ${activeTool === 'transform' ? 'active' : ''}`} onClick={() => setActiveTool('transform')} title="Move & Scale"><Maximize2 size={14} /></button>
-                                <button className={`action-btn ${activeTool === 'crop' ? 'active' : ''}`} onClick={() => setActiveTool('crop')} title="Project Crop / Resize"><Crop size={14} /></button>
+                                <button className={`action-btn ${activeTool === 'crop' ? 'active' : ''}`} onClick={() => setActiveTool('crop')} title={t.projectCanvasResize || 'Project Canvas Resize'}><Monitor size={14} /></button>
                                 <button className={`action-btn ${activeTool === 'split' ? 'active' : ''}`} onClick={handleSplit} title={t.splitAtScrubber || 'Split at Scrubber'}><Scissors size={14} /></button>
                                 <button className={`action-btn ${activeTool === 'delete' ? 'active' : ''}`} onClick={handleDelete} title={t.deleteSelectedClip || 'Delete Selected Clip'}><Trash size={14} /></button>
                                 <button className="action-btn" onClick={packClips} title={t.packClips || 'Pack Clips (Remove Gaps)'}><Droplet size={14} /></button>
