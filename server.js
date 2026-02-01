@@ -64,6 +64,7 @@ const dbPath = path.join(rootGalleryPath, 'gallery_data.db');
 const db = new Database(dbPath);
 db.pragma('journal_mode = WAL');
 db.exec(`CREATE TABLE IF NOT EXISTS item_info (path TEXT PRIMARY KEY, info TEXT, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)`);
+db.exec(`CREATE TABLE IF NOT EXISTS thumb_map (path TEXT PRIMARY KEY, hash TEXT)`);
 
 const EXCLUDED_DIRS = ['node_modules', '.git', 'dist', '.agent', 'public', 'src', '$RECYCLE.BIN', 'System Volume Information', '.gallery_thumbs'];
 const EXCLUDED_FILES = ['gallery_data.db', 'icon.png', 'config.ini', 'GalleryLauncher.exe', 'build.bat', 'Launcher.cs', 'server.js', 'package.json', 'package-lock.json', 'index.html', 'vite.config.js', 'app.ico', 'Thumbs.db', 'desktop.ini'];
@@ -87,6 +88,9 @@ app.get('/api/thumb', async (req, res) => {
     try {
         const type = mime.lookup(fullPath) || '';
         if (type.startsWith('image/')) {
+            // Register to map
+            db.prepare("INSERT OR REPLACE INTO thumb_map (path, hash) VALUES (?, ?)").run(itemRelPath, crypto.createHash('md5').update(itemRelPath).digest('hex'));
+
             ffmpeg(fullPath)
                 .screenshots({
                     timestamps: [0],
@@ -97,15 +101,26 @@ app.get('/api/thumb', async (req, res) => {
                 .on('end', () => res.sendFile(thumbPath))
                 .on('error', () => res.sendFile(fullPath)); // Hata olursa orijinali gönder
         } else if (type.startsWith('video/')) {
-            ffmpeg(fullPath)
-                .screenshots({
-                    timestamps: ['1'],
-                    folder: path.dirname(thumbPath),
-                    filename: path.basename(thumbPath),
-                    size: '400x?'
-                })
-                .on('end', () => res.sendFile(thumbPath))
-                .on('error', () => res.status(500).end());
+            // Register to map
+            db.prepare("INSERT OR REPLACE INTO thumb_map (path, hash) VALUES (?, ?)").run(itemRelPath, crypto.createHash('md5').update(itemRelPath).digest('hex'));
+
+            // Get middle of video for better thumb
+            ffmpeg.ffprobe(fullPath, (err, metadata) => {
+                let seek = 0;
+                if (!err && metadata && metadata.format.duration) {
+                    seek = Math.floor(metadata.format.duration / 2);
+                }
+
+                ffmpeg(fullPath)
+                    .screenshots({
+                        timestamps: [seek],
+                        folder: path.dirname(thumbPath),
+                        filename: path.basename(thumbPath),
+                        size: '400x?'
+                    })
+                    .on('end', () => res.sendFile(thumbPath))
+                    .on('error', () => res.status(500).end());
+            });
         } else {
             res.status(400).end();
         }
@@ -154,6 +169,13 @@ app.get('/api/scan', (req, res) => {
             .map(item => {
                 const fullPath = path.join(absolutePath, item.name);
                 const relPath = path.relative(rootGalleryPath, fullPath).replace(/\\/g, '/');
+
+                // Track existing thumbnails automatically
+                const tPath = getThumbPath(relPath);
+                if (fs.existsSync(tPath)) {
+                    db.prepare("INSERT OR IGNORE INTO thumb_map (path, hash) VALUES (?, ?)").run(relPath, crypto.createHash('md5').update(relPath).digest('hex'));
+                }
+
                 return { name: item.name, path: relPath, type: item.isDirectory() ? 'folder' : (mime.lookup(item.name) || 'unknown') };
             })
             .filter(item => {
@@ -286,8 +308,23 @@ app.delete('/api/delete', (req, res) => {
     if (!absolutePath.toLowerCase().startsWith(rootGalleryPath.toLowerCase())) return res.status(403).json({ error: "Yasak" });
     try {
         if (fs.existsSync(absolutePath)) {
-            if (fs.lstatSync(absolutePath).isDirectory()) fs.rmSync(absolutePath, { recursive: true, force: true });
-            else fs.unlinkSync(absolutePath);
+            if (fs.lstatSync(absolutePath).isDirectory()) {
+                fs.rmSync(absolutePath, { recursive: true, force: true });
+                // Delete all thumbs in this folder
+                const folderPath = itemPath.endsWith('/') ? itemPath : itemPath + '/';
+                const relatedThumbs = db.prepare("SELECT hash FROM thumb_map WHERE path LIKE ?").all(folderPath + '%');
+                relatedThumbs.forEach(t => {
+                    const tPath = path.join(thumbDir, `${t.hash}.jpg`);
+                    if (fs.existsSync(tPath)) try { fs.unlinkSync(tPath); } catch (e) { }
+                });
+                db.prepare("DELETE FROM thumb_map WHERE path LIKE ?").run(folderPath + '%');
+            } else {
+                fs.unlinkSync(absolutePath);
+                // Delete single thumb
+                const tPath = getThumbPath(itemPath);
+                if (fs.existsSync(tPath)) try { fs.unlinkSync(tPath); } catch (e) { }
+                db.prepare("DELETE FROM thumb_map WHERE path = ?").run(itemPath);
+            }
             db.prepare("DELETE FROM item_info WHERE path = ?").run(itemPath);
             res.json({ success: true });
         } else { res.status(404).json({ error: "Bulunamadı" }); }
@@ -429,8 +466,18 @@ app.post('/api/batch-delete', (req, res) => {
             if (fs.existsSync(fullPath)) {
                 if (fs.lstatSync(fullPath).isDirectory()) {
                     fs.rmSync(fullPath, { recursive: true, force: true });
+                    const folderPath = p.endsWith('/') ? p : p + '/';
+                    const relatedThumbs = db.prepare("SELECT hash FROM thumb_map WHERE path LIKE ?").all(folderPath + '%');
+                    relatedThumbs.forEach(t => {
+                        const tPath = path.join(thumbDir, `${t.hash}.jpg`);
+                        if (fs.existsSync(tPath)) try { fs.unlinkSync(tPath); } catch (e) { }
+                    });
+                    db.prepare("DELETE FROM thumb_map WHERE path LIKE ?").run(folderPath + '%');
                 } else {
                     fs.unlinkSync(fullPath);
+                    const tPath = getThumbPath(p);
+                    if (fs.existsSync(tPath)) try { fs.unlinkSync(tPath); } catch (e) { }
+                    db.prepare("DELETE FROM thumb_map WHERE path = ?").run(p);
                 }
                 const relativePath = p.replace(/\\/g, '/');
                 db.prepare("DELETE FROM item_info WHERE path = ?").run(relativePath);
@@ -787,9 +834,13 @@ app.post('/api/process-video', async (req, res) => {
             const userX = clip.transform?.x || 0;
             const userY = clip.transform?.y || 0;
 
-            // Use Absolute Top-Left Coordinates directly (Frontend now sends absolute x/y)
-            const overlayX = Math.round(userX);
-            const overlayY = Math.round(userY);
+            // Coordinate System Correction:
+            // Frontend uses CSS 'transform-origin: center' (default).
+            // A translate(X, Y) effectively positions the unscaled center at (X + srcW/2).
+            // After scaling and rotation, the FINAL visual top-left (which FFmpeg overlay needs) is:
+            // CenterPoint - (FinalProcessedWidth / 2)
+            const overlayX = Math.round((userX + srcW / 2) - finalW / 2);
+            const overlayY = Math.round((userY + srcH / 2) - finalH / 2);
 
             const nextVLabel = `ov_${vClipCounter}`;
             filterComplex.push({
@@ -850,6 +901,9 @@ app.post('/api/process-video', async (req, res) => {
                     }
                     fs.renameSync(tempPath, targetPath);
                     const finalRelPath = path.relative(rootGalleryPath, targetPath).replace(/\\/g, '/');
+                    const tHash = crypto.createHash('md5').update(finalRelPath).digest('hex');
+                    db.prepare("INSERT OR REPLACE INTO thumb_map (path, hash) VALUES (?, ?)").run(finalRelPath, tHash);
+
                     const thumbPath = getThumbPath(finalRelPath);
                     if (fs.existsSync(thumbPath)) fs.unlinkSync(thumbPath);
                     res.json({ success: true, message: "Video başarıyla işlendi", path: finalRelPath });
@@ -865,4 +919,68 @@ app.post('/api/process-video', async (req, res) => {
     }
 });
 
-app.listen(PORT, () => console.log(`Sunucu çalışıyor.`));
+const discoverThumbs = async (currentDir = rootGalleryPath) => {
+    try {
+        const files = fs.readdirSync(currentDir, { withFileTypes: true });
+        for (const file of files) {
+            const resPath = path.join(currentDir, file.name);
+            const relPath = path.relative(rootGalleryPath, resPath).replace(/\\/g, '/');
+
+            if (file.isDirectory()) {
+                if (EXCLUDED_DIRS.includes(file.name)) continue;
+                await discoverThumbs(resPath);
+            } else {
+                const type = mime.lookup(file.name) || '';
+                if (type.startsWith('image/') || type.startsWith('video/')) {
+                    const hash = crypto.createHash('md5').update(relPath).digest('hex');
+                    const tPath = path.join(thumbDir, `${hash}.jpg`);
+                    if (fs.existsSync(tPath)) {
+                        db.prepare("INSERT OR IGNORE INTO thumb_map (path, hash) VALUES (?, ?)").run(relPath, hash);
+                    }
+                }
+            }
+        }
+    } catch (e) { }
+};
+
+const cleanupMap = async () => {
+    let count = 0;
+    try {
+        const infoEntries = db.prepare("SELECT path FROM item_info").all();
+        for (const entry of infoEntries) {
+            if (!fs.existsSync(path.join(rootGalleryPath, entry.path))) {
+                db.prepare("DELETE FROM item_info WHERE path = ?").run(entry.path);
+                count++;
+            }
+        }
+        const mapEntries = db.prepare("SELECT path, hash FROM thumb_map").all();
+        for (const entry of mapEntries) {
+            if (!fs.existsSync(path.join(rootGalleryPath, entry.path))) {
+                const tPath = path.join(thumbDir, `${entry.hash}.jpg`);
+                if (fs.existsSync(tPath)) try { fs.unlinkSync(tPath); } catch (e) { }
+                db.prepare("DELETE FROM thumb_map WHERE path = ?").run(entry.path);
+            }
+        }
+    } catch (e) { }
+    return count;
+};
+
+app.post('/api/admin/cleanup-thumbs', async (req, res) => {
+    try {
+        await discoverThumbs();
+        const deletedCount = await cleanupMap();
+        res.json({ success: true, deletedCount });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.listen(PORT, () => {
+    console.log(`Sunucu çalışıyor.`);
+    const runCycle = async () => {
+        await discoverThumbs();
+        await cleanupMap();
+        setTimeout(runCycle, 600000);
+    };
+    runCycle();
+});

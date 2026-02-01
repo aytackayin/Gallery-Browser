@@ -814,14 +814,20 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
         const isImage = mediaItem.type?.startsWith('image/') || mediaItem.path.match(/\.(jpg|jpeg|png|webp|bmp)$/i);
 
         let actualDuration = 10;
+        let sWidth = 0;
+        let sHeight = 0;
+
         if (isImage) {
             actualDuration = 5;
+            // Resim boyutlarını asenkron al (isteğe bağlı, şimdilik varsayılan kalsın veya API'den al)
         } else {
             try {
                 const res = await fetch(`/api/info?path=${encodeURIComponent(mediaItem.path)}`);
                 const info = await res.json();
-                if (info && info.durationSeconds) {
-                    actualDuration = info.durationSeconds;
+                if (info) {
+                    if (info.durationSeconds) actualDuration = info.durationSeconds;
+                    if (info.width) sWidth = info.width;
+                    if (info.height) sHeight = info.height;
                 }
             } catch (e) {
                 console.error("Duration fetch failed:", e);
@@ -836,6 +842,8 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
             start: 0,
             duration: actualDuration,
             offset: currentTime,
+            sourceWidth: sWidth,
+            sourceHeight: sHeight,
             filters: { brightness: 100, contrast: 100, saturation: 100, gamma: 1.0 },
             crop: { x: 0, y: 0, w: 100, h: 100 },
             rotate: 0, flipH: false, flipV: false, volume: 100
@@ -2139,6 +2147,27 @@ function App() {
         }
     };
 
+    const [isCleaning, setIsCleaning] = useState(false);
+    const handleCleanup = async () => {
+        setIsCleaning(true);
+        try {
+            const res = await fetch('/api/admin/cleanup-thumbs', { method: 'POST' });
+            const data = await res.json();
+            if (data.success) {
+                setToast((t.cleanupSuccess || 'Cleanup complete! Removed {n} items.').replace('{n}', data.deletedCount));
+                setTimeout(() => {
+                    setToast(null);
+                    fetchItems(currentPath);
+                }, 4000);
+            }
+        } catch (e) {
+            setToast('Cleanup failed');
+            setTimeout(() => setToast(null), 3000);
+        } finally {
+            setIsCleaning(false);
+        }
+    };
+
     const deleteItem = async () => {
         if (!confirmDelete) return;
 
@@ -2896,6 +2925,24 @@ function App() {
                                             style={{ flex: 1 }}
                                         >
                                             {t.themeLight || 'Light'}
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="settings-section" style={{ marginTop: 10, paddingTop: 15, borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(0,0,0,0.2)', padding: '12px 15px', borderRadius: 8 }}>
+                                        <div style={{ flex: 1 }}>
+                                            <div style={{ fontSize: '0.9rem', color: '#eee', fontWeight: 'bold', marginBottom: 2 }}>{t.cleanupThumbs || 'Cleanup Orphans'}</div>
+                                            <div style={{ fontSize: '0.75rem', color: '#777', lineHeight: '1.2' }}>{t.cleanupDesc || 'Removes thumbnails and records of manually deleted files.'}</div>
+                                        </div>
+                                        <button
+                                            className={`btn ${isCleaning ? 'btn-grey' : 'btn-primary'}`}
+                                            onClick={handleCleanup}
+                                            disabled={isCleaning}
+                                            style={{ minWidth: 100, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: '0.85rem' }}
+                                        >
+                                            {isCleaning ? <RotateCw size={14} className="spin" /> : <Trash size={14} />}
+                                            {isCleaning ? (t.cleaning || '...') : (t.start || 'Start')}
                                         </button>
                                     </div>
                                 </div>
