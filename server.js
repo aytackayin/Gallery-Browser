@@ -657,13 +657,19 @@ app.post('/api/process-video', async (req, res) => {
                         const vStream = data.streams.find(s => s.codec_type === 'video');
                         const aStream = data.streams.find(s => s.codec_type === 'audio');
                         clipMetadata[clip.id] = {
-                            w: vStream ? vStream.width : 0,
-                            h: vStream ? vStream.height : 0,
+                            w: (vStream && vStream.width) ? vStream.width : (clip.sourceWidth || 1920),
+                            h: (vStream && vStream.height) ? vStream.height : (clip.sourceHeight || 1080),
                             hasAudio: !!aStream,
                             isImage: (mime.lookup(fullPath) || '').startsWith('image/')
                         };
                     } else {
-                        clipMetadata[clip.id] = { w: 0, h: 0, hasAudio: false, isImage: false };
+                        // ffprobe başarısız olsa bile frontend'den gelen boyutları kullan
+                        clipMetadata[clip.id] = {
+                            w: clip.sourceWidth || 1920,
+                            h: clip.sourceHeight || 1080,
+                            hasAudio: false,
+                            isImage: (mime.lookup(fullPath) || '').startsWith('image/')
+                        };
                     }
                     resolve();
                 });
@@ -743,7 +749,9 @@ app.post('/api/process-video', async (req, res) => {
 
             // 1. ADIM: Klibi Hazırla (Loop + Crop)
             let vFilters = [];
-            if (meta.isImage) vFilters.push(`loop=loop=-1:size=1:start=0`);
+            if (meta.isImage) {
+                vFilters.push(`loop=loop=-1:size=1:start=0`);
+            }
 
             const clipCrop = clip.crop || {};
             // Source dimensions

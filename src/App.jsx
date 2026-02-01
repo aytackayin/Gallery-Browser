@@ -817,21 +817,19 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
         let sWidth = 0;
         let sHeight = 0;
 
-        if (isImage) {
-            actualDuration = 5;
-            // Resim boyutlarını asenkron al (isteğe bağlı, şimdilik varsayılan kalsın veya API'den al)
-        } else {
-            try {
-                const res = await fetch(`/api/info?path=${encodeURIComponent(mediaItem.path)}`);
-                const info = await res.json();
-                if (info) {
-                    if (info.durationSeconds) actualDuration = info.durationSeconds;
-                    if (info.width) sWidth = info.width;
-                    if (info.height) sHeight = info.height;
-                }
-            } catch (e) {
-                console.error("Duration fetch failed:", e);
+        try {
+            const res = await fetch(`/api/info?path=${encodeURIComponent(mediaItem.path)}`);
+            const info = await res.json();
+            if (info) {
+                if (info.durationSeconds && !isImage) actualDuration = info.durationSeconds;
+                else if (isImage) actualDuration = 5; // Resimler için varsayılan 5sn
+
+                if (info.width) sWidth = info.width;
+                if (info.height) sHeight = info.height;
             }
+        } catch (e) {
+            console.error("Info fetch failed:", e);
+            if (isImage) actualDuration = 5;
         }
 
         const newClip = {
@@ -1377,8 +1375,11 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                                     src={`http://localhost:3001/media/${encodeURIComponent(activeVClip.path)}`}
                                                     alt="Preview"
                                                     onLoad={(e) => {
-                                                        if (!activeVClip.sourceWidth) {
-                                                            updateClip(activeVClip.id, { sourceWidth: e.target.naturalWidth, sourceHeight: e.target.naturalHeight });
+                                                        const nw = e.target.naturalWidth;
+                                                        const nh = e.target.naturalHeight;
+                                                        // Boyutlar eksikse veya 0 ise güncelle
+                                                        if (!activeVClip.sourceWidth || activeVClip.sourceWidth === 0 || Math.abs(activeVClip.sourceWidth - nw) > 2) {
+                                                            updateClip(activeVClip.id, { sourceWidth: nw, sourceHeight: nh });
                                                         }
                                                     }}
                                                     style={{
