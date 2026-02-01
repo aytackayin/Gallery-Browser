@@ -1263,7 +1263,10 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
     };
 
     const handleMouseUp = (e) => {
-        if (e) e.preventDefault();
+        // Fix for range inputs in Firefox/Zen: Do not prevent default on inputs!
+        if (e && e.target.tagName !== 'INPUT') {
+            e.preventDefault();
+        }
         setIsDragging(null);
         setSnapLines([]);
     };
@@ -1303,7 +1306,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                         <span style={{ fontSize: '0.6rem', color: 'var(--netflix-red)' }}>{selectedClip.filters?.brightness ?? 100}%</span>
                                     </div>
                                     <input type="range" min="0" max="200" value={selectedClip.filters?.brightness ?? 100} style={{ height: 3 }}
-                                        onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, brightness: e.target.value } })} />
+                                        onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, brightness: parseInt(e.target.value) } })} />
                                 </div>
                                 <div className="control-item" style={{ gap: 2 }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1311,7 +1314,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                         <span style={{ fontSize: '0.6rem', color: 'var(--netflix-red)' }}>{selectedClip.filters?.contrast ?? 100}%</span>
                                     </div>
                                     <input type="range" min="0" max="200" value={selectedClip.filters?.contrast ?? 100} style={{ height: 3 }}
-                                        onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, contrast: e.target.value } })} />
+                                        onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, contrast: parseInt(e.target.value) } })} />
                                 </div>
                                 <div className="control-item" style={{ gap: 2 }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1319,7 +1322,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                         <span style={{ fontSize: '0.6rem', color: 'var(--netflix-red)' }}>{selectedClip.filters?.saturation ?? 100}%</span>
                                     </div>
                                     <input type="range" min="0" max="200" value={selectedClip.filters?.saturation ?? 100} style={{ height: 3 }}
-                                        onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, saturation: e.target.value } })} />
+                                        onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, saturation: parseInt(e.target.value) } })} />
                                 </div>
                                 <div className="control-item" style={{ gap: 2 }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1328,7 +1331,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                     </div>
                                     <input type="range" min="0" max="200" value={selectedClip.volume ?? 100} style={{ height: 3 }}
                                         onChange={e => {
-                                            const vol = e.target.value;
+                                            const vol = parseInt(e.target.value);
                                             updateClip(selectedClipId, { volume: vol });
                                             if (videoRef.current) videoRef.current.volume = vol / 100;
                                         }} />
