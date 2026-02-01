@@ -731,11 +731,13 @@ app.post('/api/process-video', async (req, res) => {
             if (bRatio !== 1) vFilters.push(`lutyuv=y=val*${bRatio}`);
 
             // 4. ADIM: Scale (Fit + Zoom)
-            // Calculate Fit Factor (Contain layout)
-            const fitScale = Math.min(targetW / cw, targetH / ch);
+            // Legacy Fit Logic Removed to match Frontend 1:1 pixel mapping
+            // Frontend renders clips at 'sourceWidth' relative to 'canvasWidth'.
+            const fitScale = 1;
+
             // Resulting size after fit
             const fittedW = cw * fitScale;
-            const fittedH = ch * fitScale; // Unused but good for debug
+            const fittedH = ch * fitScale;
 
             // Apply User Zoom (Scale)
             const userScale = clip.transform?.scale || 1;
@@ -766,7 +768,7 @@ app.post('/api/process-video', async (req, res) => {
             });
 
             // 6. ADIM: Tuvale Yerleştir (Positioning)
-            // Determine final dimensions after rotation for proper centering
+            // Determine final dimensions after rotation
             let finalW = scaledW;
             let finalH = scaledH;
             if (clip.rotate === 90 || clip.rotate === 270) {
@@ -777,9 +779,9 @@ app.post('/api/process-video', async (req, res) => {
             const userX = clip.transform?.x || 0;
             const userY = clip.transform?.y || 0;
 
-            // Center (target/2 - final/2) + Offset
-            const overlayX = Math.round((targetW - finalW) / 2 + userX);
-            const overlayY = Math.round((targetH - finalH) / 2 + userY);
+            // Use Absolute Top-Left Coordinates directly (Frontend now sends absolute x/y)
+            const overlayX = Math.round(userX);
+            const overlayY = Math.round(userY);
 
             const nextVLabel = `ov_${vClipCounter}`;
             filterComplex.push({
