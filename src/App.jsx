@@ -564,7 +564,8 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
         syncDuration(video.duration);
 
         // Save source dimensions to clip if missing (required for independent resizing)
-        if (activeVClip && (!activeVClip.sourceWidth || activeVClip.sourceWidth !== video.videoWidth)) {
+        // CRITICAL FIX: Only update if the active clip is actually a video!
+        if (activeVClip && activeVClip.type === 'video' && (!activeVClip.sourceWidth || activeVClip.sourceWidth !== video.videoWidth)) {
             updateClip(activeVClip.id, { sourceWidth: video.videoWidth, sourceHeight: video.videoHeight });
         }
 
@@ -844,8 +845,8 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
             sourceWidth: sWidth,
             sourceHeight: sHeight,
             transform: {
-                x: sWidth ? (canvasSize.w - sWidth) / 2 : 0,
-                y: sHeight ? (canvasSize.h - sHeight) / 2 : 0,
+                x: (sWidth && sWidth > 0) ? (canvasSize.w - sWidth) / 2 : 0,
+                y: (sHeight && sHeight > 0) ? (canvasSize.h - sHeight) / 2 : 0,
                 scale: 1
             },
             filters: { brightness: 100, contrast: 100, saturation: 100, gamma: 1.0 },
@@ -1399,8 +1400,8 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                                                 sourceHeight: nh,
                                                                 transform: {
                                                                     ...(activeVClip.transform || { scale: 1 }),
-                                                                    x: (activeVClip.transform?.x || 0) + dx,
-                                                                    y: (activeVClip.transform?.y || 0) + dy
+                                                                    x: dx,
+                                                                    y: dy
                                                                 }
                                                             });
                                                         } else if (Math.abs(activeVClip.sourceWidth - nw) > 2) {
