@@ -504,7 +504,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
 
     useEffect(() => {
         updateVideoRect();
-    }, [selectedClipId, canvasSize]);
+    }, [selectedClipId, canvasSize, activeVClip?.id]);
 
     useEffect(() => {
         const timer = setTimeout(updateVideoRect, 100);
@@ -572,6 +572,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
         if (canvasSize.w === 1920 && canvasSize.h === 1080 && video.videoWidth && video.videoHeight && !item?.durationSeconds) {
             setCanvasSize({ w: video.videoWidth, h: video.videoHeight });
         }
+        updateVideoRect();
         setTimeout(updateVideoRect, 100);
     };
 
@@ -842,6 +843,11 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
             offset: currentTime,
             sourceWidth: sWidth,
             sourceHeight: sHeight,
+            transform: {
+                x: sWidth ? (canvasSize.w - sWidth) / 2 : 0,
+                y: sHeight ? (canvasSize.h - sHeight) / 2 : 0,
+                scale: 1
+            },
             filters: { brightness: 100, contrast: 100, saturation: 100, gamma: 1.0 },
             crop: { x: 0, y: 0, w: 100, h: 100 },
             rotate: 0, flipH: false, flipV: false, volume: 100
@@ -1329,6 +1335,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                         <>
                                             <video
                                                 ref={videoRef}
+                                                key={`vid-${activeVClip?.id || 'none'}`}
                                                 src={videoUrl}
                                                 preload="auto"
                                                 autoPlay={false}
@@ -1372,24 +1379,47 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                             {activeVClip && activeVClip.type === 'image' && (
                                                 <img
                                                     ref={imageRef}
+                                                    key={`img-${activeVClip.id}`}
                                                     src={`http://localhost:3001/media/${encodeURIComponent(activeVClip.path)}`}
                                                     alt="Preview"
                                                     onLoad={(e) => {
                                                         const nw = e.target.naturalWidth;
                                                         const nh = e.target.naturalHeight;
-                                                        // Boyutlar eksikse veya 0 ise güncelle
-                                                        if (!activeVClip.sourceWidth || activeVClip.sourceWidth === 0 || Math.abs(activeVClip.sourceWidth - nw) > 2) {
+
+                                                        // Sadece boyut bilgisi HİÇ YOKSA (yeni eklenen klip) güncelle ve ortala.
+                                                        // Varsa dokunma, kullanıcının ayarını bozma.
+                                                        if (!activeVClip.sourceWidth || activeVClip.sourceWidth === 0) {
+                                                            const oldW = canvasSize.w; // Varsayılan olarak canvas boyutundaydı
+                                                            const oldH = canvasSize.h;
+                                                            const dx = (oldW - nw) / 2;
+                                                            const dy = (oldH - nh) / 2;
+
+                                                            updateClip(activeVClip.id, {
+                                                                sourceWidth: nw,
+                                                                sourceHeight: nh,
+                                                                transform: {
+                                                                    ...(activeVClip.transform || { scale: 1 }),
+                                                                    x: (activeVClip.transform?.x || 0) + dx,
+                                                                    y: (activeVClip.transform?.y || 0) + dy
+                                                                }
+                                                            });
+                                                        } else if (Math.abs(activeVClip.sourceWidth - nw) > 2) {
+                                                            // Boyut değişmiş ama pozisyonu bozmadan sadece metadatayı güncelle (nadir durum)
                                                             updateClip(activeVClip.id, { sourceWidth: nw, sourceHeight: nh });
                                                         }
+                                                        updateVideoRect();
+                                                        setTimeout(updateVideoRect, 50);
                                                     }}
                                                     style={{
                                                         position: 'absolute',
                                                         left: 0, top: 0,
-                                                        width: activeVClip?.sourceWidth ? `${(activeVClip.sourceWidth / canvasSize.w) * 100}%` : '100%',
-                                                        height: activeVClip?.sourceHeight ? `${(activeVClip.sourceHeight / canvasSize.h) * 100}%` : '100%',
+                                                        width: activeVClip?.sourceWidth ? `${(activeVClip.sourceWidth / canvasSize.w) * 100}%` : 'auto',
+                                                        height: activeVClip?.sourceHeight ? `${(activeVClip.sourceHeight / canvasSize.h) * 100}%` : 'auto',
                                                         objectFit: 'fill',
+                                                        opacity: activeVClip?.sourceWidth ? 1 : 0,
                                                         filter: activeVClip?.filters ? `brightness(${activeVClip.filters.brightness ?? 100}%) contrast(${activeVClip.filters.contrast ?? 100}%) saturate(${activeVClip.filters.saturation ?? 100}%)` : 'none',
                                                         transform: activeVClip ? `translate(${(activeVClip.transform?.x || 0) * viewScaleX}px, ${(activeVClip.transform?.y || 0) * viewScaleY}px) scale(${activeVClip.transform?.scale || 1}) rotate(${activeVClip.rotate || 0}deg) scaleX(${activeVClip.flipH ? -1 : 1}) scaleY(${activeVClip.flipV ? -1 : 1})` : 'none',
+                                                        transformOrigin: '50% 50%',
                                                         clipPath: activeVClip?.crop ? `inset(${activeVClip.crop.y}% ${100 - (activeVClip.crop.x + activeVClip.crop.w)}% ${100 - (activeVClip.crop.y + activeVClip.crop.h)}% ${activeVClip.crop.x}%)` : 'none'
                                                     }}
                                                 />

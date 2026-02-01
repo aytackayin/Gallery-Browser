@@ -651,28 +651,58 @@ app.post('/api/process-video', async (req, res) => {
         const clipMetadata = {};
         for (const clip of clips) {
             const fullPath = path.join(rootGalleryPath, clip.path);
+            const isImage = (mime.lookup(fullPath) || '').startsWith('image/');
+
+            // Metadata Strategy: TRUST THE FRONTEND.
+            // If the frontend sent source dimensions, use them. They represent exactly what the user saw.
+            // Only use ffprobe for audio detection or if dimensions are missing.
             await new Promise((resolve) => {
-                ffmpeg.ffprobe(fullPath, (err, data) => {
-                    if (!err && data) {
-                        const vStream = data.streams.find(s => s.codec_type === 'video');
-                        const aStream = data.streams.find(s => s.codec_type === 'audio');
-                        clipMetadata[clip.id] = {
-                            w: (vStream && vStream.width) ? vStream.width : (clip.sourceWidth || 1920),
-                            h: (vStream && vStream.height) ? vStream.height : (clip.sourceHeight || 1080),
-                            hasAudio: !!aStream,
-                            isImage: (mime.lookup(fullPath) || '').startsWith('image/')
-                        };
+                let w = clip.sourceWidth;
+                let h = clip.sourceHeight;
+                let hasAudio = false;
+
+                // Check audio existence quickly if possible, or assume false for images
+                const checkAudio = () => {
+                    ffmpeg.ffprobe(fullPath, (err, data) => {
+                        if (!err && data && data.streams) {
+                            const aStream = data.streams.find(s => s.codec_type === 'audio');
+                            hasAudio = !!aStream;
+
+                            // Fallback dimensions if frontend was empty
+                            if (!w || !h) {
+                                const vStreams = data.streams
+                                    .filter(s => s.width && s.height)
+                                    .sort((a, b) => (b.width * b.height) - (a.width * a.height));
+                                const vStream = vStreams[0];
+                                if (vStream) {
+                                    w = vStream.width;
+                                    h = vStream.height;
+                                }
+                            }
+                        }
+                        // Final Fallback
+                        if (!w) w = 1920;
+                        if (!h) h = 1080;
+
+                        clipMetadata[clip.id] = { w, h, hasAudio, isImage };
+                        console.log(`[Metadata] Clip ${clip.id} (${clip.name}): ${w}x${h} (Source: ${clip.sourceWidth ? 'Frontend' : 'FFprobe'})`);
+                        resolve();
+                    });
+                };
+
+                if (isImage) {
+                    // Images usually don't have audio we care about for this editor context (unless specific format)
+                    // And we trust frontend dims implicitly for images to fix rotation/thumbnail orientation issues
+                    if (w && h) {
+                        clipMetadata[clip.id] = { w, h, hasAudio: false, isImage: true };
+                        console.log(`[Metadata] Clip ${clip.id} (${clip.name}): ${w}x${h} (Source: Frontend-Image)`);
+                        resolve();
                     } else {
-                        // ffprobe başarısız olsa bile frontend'den gelen boyutları kullan
-                        clipMetadata[clip.id] = {
-                            w: clip.sourceWidth || 1920,
-                            h: clip.sourceHeight || 1080,
-                            hasAudio: false,
-                            isImage: (mime.lookup(fullPath) || '').startsWith('image/')
-                        };
+                        checkAudio();
                     }
-                    resolve();
-                });
+                } else {
+                    checkAudio();
+                }
             });
         }
 
@@ -839,16 +869,22 @@ app.post('/api/process-video', async (req, res) => {
                 finalH = scaledW;
             }
 
-            const userX = clip.transform?.x || 0;
-            const userY = clip.transform?.y || 0;
+            const userX = parseFloat(clip.transform?.x || 0);
+            const userY = parseFloat(clip.transform?.y || 0);
+            // userScale is already defined above in ADIM 4
+            const currentScale = parseFloat(userScale || 1);
 
-            // Coordinate System Correction:
-            // Frontend uses CSS 'transform-origin: center' (default).
-            // A translate(X, Y) effectively positions the unscaled center at (X + srcW/2).
-            // After scaling and rotation, the FINAL visual top-left (which FFmpeg overlay needs) is:
-            // CenterPoint - (FinalProcessedWidth / 2)
-            const overlayX = Math.round((userX + srcW / 2) - finalW / 2);
-            const overlayY = Math.round((userY + srcH / 2) - finalH / 2);
+            // Mathematical Conversion: Center-Pivot (Frontend) to FFmpeg Top-Left
+            // 1. Calculate the visual center of the original image on the canvas
+            const visualCenterX = userX + Number(meta.w) / 2;
+            const visualCenterY = userY + Number(meta.h) / 2;
+
+            // 2. Calculate Top-Left of the SCALED/CROPPED stream
+            // When we scale around the center, a point at 'cx' moves to: center + scale * (cx - originalCenter)
+            const overlayX = Math.round(visualCenterX + currentScale * (Number(cx) - Number(meta.w) / 2));
+            const overlayY = Math.round(visualCenterY + currentScale * (Number(cy) - Number(meta.h) / 2));
+
+            console.log(`[Overlay] Clip ${idx} (${clip.name}): x=${overlayX}, y=${overlayY}, scale=${currentScale}`);
 
             const nextVLabel = `ov_${vClipCounter}`;
             filterComplex.push({
