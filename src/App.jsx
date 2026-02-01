@@ -921,7 +921,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
         }
 
         if (isDragging.type === 'canvas-pan') {
-            if (!videoRect.width || !videoRect.height) return;
+            if (!videoRect.width || !videoRect.height || !activeVClip) return;
 
             const scaleFactorX = canvasSize.w / videoRect.width;
             const scaleFactorY = canvasSize.h / videoRect.height;
@@ -932,49 +932,68 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
             let newX = isDragging.originX + dx;
             let newY = isDragging.originY + dy;
 
+            // ===== CANVAS SNAP POINTS =====
+            // Canvas kenarları ve merkezi (canvas boyutuna göre)
+            const canvasSnapX = {
+                left: 0,
+                center: canvasSize.w / 2,
+                right: canvasSize.w
+            };
+            const canvasSnapY = {
+                top: 0,
+                center: canvasSize.h / 2,
+                bottom: canvasSize.h
+            };
+
+            // ===== CLIP DIMENSIONS =====
+            // Aktif clip'in gerçek boyutları (sourceWidth/Height * scale)
+            const clipScale = activeVClip.transform?.scale || 1;
+            const clipW = (activeVClip.sourceWidth || canvasSize.w) * clipScale;
+            const clipH = (activeVClip.sourceHeight || canvasSize.h) * clipScale;
+
+            // Clip kenarları ve merkezi (mevcut pozisyona göre)
+            const clipLeft = newX;
+            const clipCenterX = newX + clipW / 2;
+            const clipRight = newX + clipW;
+            const clipTop = newY;
+            const clipCenterY = newY + clipH / 2;
+            const clipBottom = newY + clipH;
+
             const newSnapLines = [];
+            const snapThreshold = 20; // Snap eşiği (canvas piksel)
 
-            if (activeVClip) {
-                const scale = activeVClip.transform?.scale || 1;
-                // Use sourceWidth/Height if available, else fallback to canvas size (though all clips should have source dimensions now)
-                const clipW = (activeVClip.sourceWidth || canvasSize.w) * scale;
-                const clipH = (activeVClip.sourceHeight || canvasSize.h) * scale;
+            // ===== X AXIS SNAPPING =====
+            // Clip sol kenarı -> Canvas sol kenarı
+            if (Math.abs(clipLeft - canvasSnapX.left) < snapThreshold) {
+                newX = canvasSnapX.left;
+                newSnapLines.push({ type: 'vertical', pos: 0 });
+            }
+            // Clip merkezi -> Canvas merkezi
+            else if (Math.abs(clipCenterX - canvasSnapX.center) < snapThreshold) {
+                newX = canvasSnapX.center - clipW / 2;
+                newSnapLines.push({ type: 'vertical', pos: 50 });
+            }
+            // Clip sağ kenarı -> Canvas sağ kenarı
+            else if (Math.abs(clipRight - canvasSnapX.right) < snapThreshold) {
+                newX = canvasSnapX.right - clipW;
+                newSnapLines.push({ type: 'vertical', pos: 100 });
+            }
 
-                const snapThreshold = 40; // Logical pixels
-
-                // Snap X
-                // Left
-                if (Math.abs(newX) < snapThreshold) {
-                    newX = 0;
-                    newSnapLines.push({ type: 'vertical', pos: 0 });
-                }
-                // Right
-                else if (Math.abs((newX + clipW) - canvasSize.w) < snapThreshold) {
-                    newX = canvasSize.w - clipW;
-                    newSnapLines.push({ type: 'vertical', pos: 100 });
-                }
-                // Center
-                if (Math.abs((newX + clipW / 2) - (canvasSize.w / 2)) < snapThreshold) {
-                    newX = (canvasSize.w / 2) - (clipW / 2);
-                    newSnapLines.push({ type: 'vertical', pos: 50 });
-                }
-
-                // Snap Y
-                // Top
-                if (Math.abs(newY) < snapThreshold) {
-                    newY = 0;
-                    newSnapLines.push({ type: 'horizontal', pos: 0 });
-                }
-                // Bottom
-                else if (Math.abs((newY + clipH) - canvasSize.h) < snapThreshold) {
-                    newY = canvasSize.h - clipH;
-                    newSnapLines.push({ type: 'horizontal', pos: 100 });
-                }
-                // Center
-                if (Math.abs((newY + clipH / 2) - (canvasSize.h / 2)) < snapThreshold) {
-                    newY = (canvasSize.h / 2) - (clipH / 2);
-                    newSnapLines.push({ type: 'horizontal', pos: 50 });
-                }
+            // ===== Y AXIS SNAPPING =====
+            // Clip üst kenarı -> Canvas üst kenarı
+            if (Math.abs(clipTop - canvasSnapY.top) < snapThreshold) {
+                newY = canvasSnapY.top;
+                newSnapLines.push({ type: 'horizontal', pos: 0 });
+            }
+            // Clip merkezi -> Canvas merkezi
+            else if (Math.abs(clipCenterY - canvasSnapY.center) < snapThreshold) {
+                newY = canvasSnapY.center - clipH / 2;
+                newSnapLines.push({ type: 'horizontal', pos: 50 });
+            }
+            // Clip alt kenarı -> Canvas alt kenarı
+            else if (Math.abs(clipBottom - canvasSnapY.bottom) < snapThreshold) {
+                newY = canvasSnapY.bottom - clipH;
+                newSnapLines.push({ type: 'horizontal', pos: 100 });
             }
 
             setSnapLines(newSnapLines);
@@ -993,15 +1012,14 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
             const dx = (e.clientX - isDragging.startX) / zoomLevel;
             let newOffset = Math.max(0, isDragging.startOffset + dx);
 
-            // Snapping Logic
-            const snapThreshold = 10 / zoomLevel; // 10 pixels snapping
+            // Snapping Logic for timeline clips
+            const snapThreshold = 10 / zoomLevel;
             const draggingClip = tracks.flatMap(t => t.clips).find(c => c.id === isDragging.id);
             if (draggingClip) {
                 const clipDuration = draggingClip.duration;
                 let bestSnap = null;
                 let minDelta = snapThreshold;
 
-                // Potential snap points: tracks clips edges and playhead
                 const snapPoints = [0, currentTime];
                 tracks.forEach(t => {
                     t.clips.forEach(c => {
@@ -1013,13 +1031,11 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                 });
 
                 snapPoints.forEach(sp => {
-                    // Check clip start snapping to point
                     const deltaStart = Math.abs(newOffset - sp);
                     if (deltaStart < minDelta) {
                         minDelta = deltaStart;
                         bestSnap = sp;
                     }
-                    // Check clip end snapping to point
                     const deltaEnd = Math.abs((newOffset + clipDuration) - sp);
                     if (deltaEnd < minDelta) {
                         minDelta = deltaEnd;
@@ -1086,7 +1102,6 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
 
                 const actualDx = newOffset - isDragging.startOffset;
                 const newDur = Math.max(0.1, isDragging.startDuration - actualDx);
-                // If it's a video, we also shift the 'start' point
                 const newStart = clip.type === 'audio' || clip.type === 'video' ? Math.max(0, (isDragging.startIn || 0) + actualDx) : 0;
                 updateClip(clip.id, { offset: newOffset, duration: newDur, start: newStart });
             }
@@ -1303,6 +1318,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                                     display: 'block',
                                                     opacity: (activeVClip && activeVClip.type === 'video') || (duration <= 0) ? 1 : 0,
                                                     filter: activeVClip?.filters ? `brightness(${activeVClip.filters.brightness ?? 100}%) contrast(${activeVClip.filters.contrast ?? 100}%) saturate(${activeVClip.filters.saturation ?? 100}%)` : 'none',
+                                                    transformOrigin: '0 0',
                                                     transform: activeVClip ? `translate(${(activeVClip.transform?.x || 0) * viewScaleX}px, ${(activeVClip.transform?.y || 0) * viewScaleY}px) scale(${activeVClip.transform?.scale || 1}) rotate(${activeVClip.rotate || 0}deg) scaleX(${activeVClip.flipH ? -1 : 1}) scaleY(${activeVClip.flipV ? -1 : 1})` : 'none',
                                                     clipPath: activeVClip?.crop ? `inset(${activeVClip.crop.y}% ${100 - (activeVClip.crop.x + activeVClip.crop.w)}% ${100 - (activeVClip.crop.y + activeVClip.crop.h)}% ${activeVClip.crop.x}%)` : 'none'
                                                 }}
@@ -1325,6 +1341,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                                         height: activeVClip?.sourceHeight ? `${(activeVClip.sourceHeight / canvasSize.h) * 100}%` : '100%',
                                                         objectFit: 'fill',
                                                         filter: activeVClip?.filters ? `brightness(${activeVClip.filters.brightness ?? 100}%) contrast(${activeVClip.filters.contrast ?? 100}%) saturate(${activeVClip.filters.saturation ?? 100}%)` : 'none',
+                                                        transformOrigin: '0 0',
                                                         transform: activeVClip ? `translate(${(activeVClip.transform?.x || 0) * viewScaleX}px, ${(activeVClip.transform?.y || 0) * viewScaleY}px) scale(${activeVClip.transform?.scale || 1}) rotate(${activeVClip.rotate || 0}deg) scaleX(${activeVClip.flipH ? -1 : 1}) scaleY(${activeVClip.flipV ? -1 : 1})` : 'none',
                                                         clipPath: activeVClip?.crop ? `inset(${activeVClip.crop.y}% ${100 - (activeVClip.crop.x + activeVClip.crop.w)}% ${100 - (activeVClip.crop.y + activeVClip.crop.h)}% ${activeVClip.crop.x}%)` : 'none'
                                                     }}
@@ -1334,23 +1351,23 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                     );
                                 })()}
 
-                                {/* Snap Lines Overlay */}
+                                {/* Snap Lines Overlay - Red dotted lines */}
                                 {snapLines.map((line, i) => (
                                     <div key={i} style={{
                                         position: 'absolute',
-                                        zIndex: 10,
+                                        zIndex: 100,
                                         pointerEvents: 'none',
                                         ...(line.type === 'vertical' ? {
                                             top: 0, bottom: 0,
                                             left: `${line.pos}%`,
                                             width: 0,
-                                            borderLeft: '1px dotted red',
+                                            borderLeft: '2px dotted #e50914',
                                             transform: 'translateX(-50%)'
                                         } : {
                                             left: 0, right: 0,
                                             top: `${line.pos}%`,
                                             height: 0,
-                                            borderTop: '1px dotted red',
+                                            borderTop: '2px dotted #e50914',
                                             transform: 'translateY(-50%)'
                                         })
                                     }} />
