@@ -1263,8 +1263,9 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
     };
 
     const handleMouseUp = (e) => {
-        // Fix for range inputs in Firefox/Zen: Do not prevent default on inputs!
-        if (e && e.target.tagName !== 'INPUT') {
+        // Daha güvenli mantık: Sadece bizim başlattığımız bir sürükleme işlemi varsa müdahale et.
+        // Diğer tüm durumlarda (buton tıklamaları, sliderlar, inputlar) tarayıcıyı rahat bırak.
+        if (e && isDragging) {
             e.preventDefault();
         }
         setIsDragging(null);
