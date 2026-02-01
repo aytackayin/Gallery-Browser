@@ -579,6 +579,30 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
         fetchDuration();
     }, [item.path, propRefreshKey]);
 
+    // Düşük seviyeli Wheel listener (Browser Zoom'unu her şartta engellemek için)
+    useEffect(() => {
+        const timeline = timelineRef.current;
+        if (!timeline) return;
+
+        const handleManualWheel = (e) => {
+            // Sadece shift basılıyken tarayıcıya (yatay kaydırma için) izin ver
+            if (e.shiftKey) return;
+
+            e.preventDefault(); // Browser zoom'u burada kesin olarak bloke edilir
+            if (e.ctrlKey) {
+                // Ctrl + Scroll: Dikey kaydırma
+                timeline.scrollTop += e.deltaY;
+            } else {
+                // Normal Scroll: Zoom In/Out
+                const delta = e.deltaY < 0 ? 5 : -5;
+                setZoomLevel(prev => Math.max(5, Math.min(200, prev + delta)));
+            }
+        };
+
+        timeline.addEventListener('wheel', handleManualWheel, { passive: false });
+        return () => timeline.removeEventListener('wheel', handleManualWheel);
+    }, [timelineDuration, zoomLevel]);
+
     const onMetadata = (e) => {
         const video = e.target;
         syncDuration(video.duration);
@@ -1621,12 +1645,6 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                         <div className="timeline-tracks"
                             onMouseDown={handleTimelineClick}
                             ref={timelineRef}
-                            onWheel={(e) => {
-                                if (e.shiftKey) return; // Yatay kaydırma için Shift'e izin ver
-                                e.preventDefault();
-                                const delta = e.deltaY < 0 ? 5 : -5;
-                                setZoomLevel(prev => Math.max(5, Math.min(200, prev + delta)));
-                            }}
                             style={{ flex: 1, overflowX: 'auto', overflowY: 'auto', position: 'relative', padding: '10px 0', cursor: 'crosshair', minHeight: 180 }}>
 
                             <div className="timeline-content" style={{ position: 'relative', width: Math.max(2000, (timelineDuration * zoomLevel) + 2000), minHeight: '100%', minWidth: '100%', display: 'flex', flexDirection: 'column' }}>
