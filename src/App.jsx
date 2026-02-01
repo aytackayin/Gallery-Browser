@@ -955,14 +955,22 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
         if (!timelineDuration || !videoRef.current || !timelineRef.current) return;
         if (e.button !== 0) return; // Sadece sol tık
 
+        // KESİN SCROLLBAR KONTROLÜ: 
+        // Eğer tıklanan yer '.timeline-content' (içerik) içinde değilse, 
+        // bu kesinlikle scrollbar veya dış boşluktur.
+        if (!e.target.closest('.timeline-content')) {
+            return;
+        }
+
         // Eğer bir butona, klibe veya layer başlığına tıklandıysa zaman çizgisini oynatma
         if (e.target.closest('.track-header') || e.target.closest('.clip-item') || e.target.closest('button')) {
             return;
         }
 
         e.preventDefault();
-        const rect = timelineRef.current.getBoundingClientRect();
-        const offsetX = (e.clientX - rect.left) + timelineRef.current.scrollLeft - 80;
+        const timeline = timelineRef.current;
+        const rect = timeline.getBoundingClientRect();
+        const offsetX = (e.clientX - rect.left) + timeline.scrollLeft - 80;
         if (offsetX < -10) return;
 
         const newTime = Math.max(0, Math.min(timelineDuration, offsetX / zoomLevel));
