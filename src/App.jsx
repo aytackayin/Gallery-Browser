@@ -947,17 +947,21 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
 
             // ===== CLIP DIMENSIONS =====
             // Aktif clip'in gerçek boyutları (sourceWidth/Height * scale)
+            const sourceW = (activeVClip.sourceWidth || canvasSize.w);
+            const sourceH = (activeVClip.sourceHeight || canvasSize.h);
             const clipScale = activeVClip.transform?.scale || 1;
-            const clipW = (activeVClip.sourceWidth || canvasSize.w) * clipScale;
-            const clipH = (activeVClip.sourceHeight || canvasSize.h) * clipScale;
+            const clipW = sourceW * clipScale;
+            const clipH = sourceH * clipScale;
 
             // Clip kenarları ve merkezi (mevcut pozisyona göre)
-            const clipLeft = newX;
-            const clipCenterX = newX + clipW / 2;
-            const clipRight = newX + clipW;
-            const clipTop = newY;
-            const clipCenterY = newY + clipH / 2;
-            const clipBottom = newY + clipH;
+            // Transform-origin: center olduğu için translate(newX, newY) merkezi (newX + sourceW/2) konumuna taşır
+            const clipCenterX = newX + sourceW / 2;
+            const clipCenterY = newY + sourceH / 2;
+
+            const clipLeft = clipCenterX - clipW / 2;
+            const clipRight = clipCenterX + clipW / 2;
+            const clipTop = clipCenterY - clipH / 2;
+            const clipBottom = clipCenterY + clipH / 2;
 
             const newSnapLines = [];
             const snapThreshold = 20; // Snap eşiği (canvas piksel)
@@ -965,34 +969,34 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
             // ===== X AXIS SNAPPING =====
             // Clip sol kenarı -> Canvas sol kenarı
             if (Math.abs(clipLeft - canvasSnapX.left) < snapThreshold) {
-                newX = canvasSnapX.left;
+                newX = canvasSnapX.left + (clipW - sourceW) / 2;
                 newSnapLines.push({ type: 'vertical', pos: 0 });
             }
             // Clip merkezi -> Canvas merkezi
             else if (Math.abs(clipCenterX - canvasSnapX.center) < snapThreshold) {
-                newX = canvasSnapX.center - clipW / 2;
+                newX = canvasSnapX.center - sourceW / 2;
                 newSnapLines.push({ type: 'vertical', pos: 50 });
             }
             // Clip sağ kenarı -> Canvas sağ kenarı
             else if (Math.abs(clipRight - canvasSnapX.right) < snapThreshold) {
-                newX = canvasSnapX.right - clipW;
+                newX = (canvasSnapX.right - sourceW) - (clipW - sourceW) / 2;
                 newSnapLines.push({ type: 'vertical', pos: 100 });
             }
 
             // ===== Y AXIS SNAPPING =====
             // Clip üst kenarı -> Canvas üst kenarı
             if (Math.abs(clipTop - canvasSnapY.top) < snapThreshold) {
-                newY = canvasSnapY.top;
+                newY = canvasSnapY.top + (clipH - sourceH) / 2;
                 newSnapLines.push({ type: 'horizontal', pos: 0 });
             }
             // Clip merkezi -> Canvas merkezi
             else if (Math.abs(clipCenterY - canvasSnapY.center) < snapThreshold) {
-                newY = canvasSnapY.center - clipH / 2;
+                newY = canvasSnapY.center - sourceH / 2;
                 newSnapLines.push({ type: 'horizontal', pos: 50 });
             }
             // Clip alt kenarı -> Canvas alt kenarı
             else if (Math.abs(clipBottom - canvasSnapY.bottom) < snapThreshold) {
-                newY = canvasSnapY.bottom - clipH;
+                newY = (canvasSnapY.bottom - sourceH) - (clipH - sourceH) / 2;
                 newSnapLines.push({ type: 'horizontal', pos: 100 });
             }
 
@@ -1209,9 +1213,31 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                             if (videoRef.current) videoRef.current.volume = vol / 100;
                                         }} />
                                 </div>
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5 }}>
-                                    <button className="action-btn" onClick={() => updateClip(selectedClipId, { rotate: ((selectedClip.rotate || 0) + 90) % 360 })}><RotateCw size={14} style={{ marginRight: 10 }} /> {t?.rotate || 'Rotate'}</button>
-                                    <button className={`action-btn ${selectedClip.flipH ? 'active' : ''}`} onClick={() => updateClip(selectedClipId, { flipH: !selectedClip.flipH })}><Maximize2 size={14} style={{ transform: 'rotate(90deg)', marginRight: 10 }} /> {t?.flipH || 'Flip H'}</button>
+                                <div className="control-item">
+                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                        <label>Scale</label>
+                                        <span style={{ fontSize: '0.75rem', color: 'var(--netflix-red)' }}>{(selectedClip.transform?.scale || 1).toFixed(2)}x</span>
+                                    </div>
+                                    <input type="range" min="0.1" max="5" step="0.01" value={selectedClip.transform?.scale || 1}
+                                        onChange={e => updateClip(selectedClipId, { transform: { ...(selectedClip.transform || { x: 0, y: 0 }), scale: parseFloat(e.target.value) } })} />
+                                </div>
+                                <button className="action-btn" style={{ fontSize: '0.75rem', background: 'rgba(255,255,255,0.05)' }} onClick={() => updateClip(selectedClipId, { filters: { brightness: 100, contrast: 100, saturation: 100, gamma: 1.0 }, volume: 100 })}><Droplet size={14} style={{ marginRight: 8 }} /> Filtreleri Sıfırla</button>
+
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 5 }}>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5 }}>
+                                        <button className="action-btn" onClick={() => updateClip(selectedClipId, { rotate: ((selectedClip.rotate || 0) + 90) % 360 })}><RotateCw size={14} style={{ marginRight: 10 }} /> {t?.rotate || 'Rotate'}</button>
+                                        <button className={`action-btn ${selectedClip.flipH ? 'active' : ''}`} onClick={() => updateClip(selectedClipId, { flipH: !selectedClip.flipH })}><Maximize2 size={14} style={{ transform: 'rotate(90deg)', marginRight: 10 }} /> {t?.flipH || 'Flip H'}</button>
+                                        <button className={`action-btn ${selectedClip.flipV ? 'active' : ''}`} onClick={() => updateClip(selectedClipId, { flipV: !selectedClip.flipV })}><Maximize2 size={14} style={{ marginRight: 10 }} /> Flip V</button>
+                                        <button className="action-btn" onClick={() => updateClip(selectedClipId, { rotate: 0, flipH: false, flipV: false, transform: { ...(selectedClip.transform || { x: 0, y: 0 }), scale: 1 } })}><CornerUpLeft size={14} style={{ marginRight: 8 }} /> Reset Transf.</button>
+                                    </div>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5 }}>
+                                        <button className="action-btn" style={{ background: 'var(--netflix-red)', color: 'white' }} onClick={() => {
+                                            const sw = selectedClip.sourceWidth || canvasSize.w;
+                                            const sh = selectedClip.sourceHeight || canvasSize.h;
+                                            updateClip(selectedClipId, { transform: { ...(selectedClip.transform || { x: 0, y: 0 }), x: (canvasSize.w - sw) / 2, y: (canvasSize.h - sh) / 2 } });
+                                        }}><Monitor size={14} style={{ marginRight: 8 }} /> Ortala</button>
+                                        <button className="action-btn" onClick={() => updateClip(selectedClipId, { transform: { ...(selectedClip.transform || { x: 0, y: 0 }), x: 0, y: 0 } })}><Maximize2 size={14} style={{ marginRight: 8 }} /> Konum Sıfırla</button>
+                                    </div>
                                 </div>
                                 <div style={{ marginTop: 10 }}>
                                     <label style={{ fontSize: '0.75rem', color: '#888', marginBottom: 8, display: 'block' }}>{t?.aspectRatio || 'Aspect Ratio'}</label>
@@ -1318,7 +1344,6 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                                     display: 'block',
                                                     opacity: (activeVClip && activeVClip.type === 'video') || (duration <= 0) ? 1 : 0,
                                                     filter: activeVClip?.filters ? `brightness(${activeVClip.filters.brightness ?? 100}%) contrast(${activeVClip.filters.contrast ?? 100}%) saturate(${activeVClip.filters.saturation ?? 100}%)` : 'none',
-                                                    transformOrigin: '0 0',
                                                     transform: activeVClip ? `translate(${(activeVClip.transform?.x || 0) * viewScaleX}px, ${(activeVClip.transform?.y || 0) * viewScaleY}px) scale(${activeVClip.transform?.scale || 1}) rotate(${activeVClip.rotate || 0}deg) scaleX(${activeVClip.flipH ? -1 : 1}) scaleY(${activeVClip.flipV ? -1 : 1})` : 'none',
                                                     clipPath: activeVClip?.crop ? `inset(${activeVClip.crop.y}% ${100 - (activeVClip.crop.x + activeVClip.crop.w)}% ${100 - (activeVClip.crop.y + activeVClip.crop.h)}% ${activeVClip.crop.x}%)` : 'none'
                                                 }}
@@ -1341,7 +1366,6 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                                         height: activeVClip?.sourceHeight ? `${(activeVClip.sourceHeight / canvasSize.h) * 100}%` : '100%',
                                                         objectFit: 'fill',
                                                         filter: activeVClip?.filters ? `brightness(${activeVClip.filters.brightness ?? 100}%) contrast(${activeVClip.filters.contrast ?? 100}%) saturate(${activeVClip.filters.saturation ?? 100}%)` : 'none',
-                                                        transformOrigin: '0 0',
                                                         transform: activeVClip ? `translate(${(activeVClip.transform?.x || 0) * viewScaleX}px, ${(activeVClip.transform?.y || 0) * viewScaleY}px) scale(${activeVClip.transform?.scale || 1}) rotate(${activeVClip.rotate || 0}deg) scaleX(${activeVClip.flipH ? -1 : 1}) scaleY(${activeVClip.flipV ? -1 : 1})` : 'none',
                                                         clipPath: activeVClip?.crop ? `inset(${activeVClip.crop.y}% ${100 - (activeVClip.crop.x + activeVClip.crop.w)}% ${100 - (activeVClip.crop.y + activeVClip.crop.h)}% ${activeVClip.crop.x}%)` : 'none'
                                                     }}
