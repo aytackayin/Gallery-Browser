@@ -303,6 +303,7 @@ const formatTime = (seconds) => {
 
 const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey }) => {
     const videoRef = useRef(null);
+    const imageRef = useRef(null);
     const audioPlayers = useRef({}); // New: Background sync players
     const containerRef = useRef(null);
     const [duration, setDuration] = useState(0);
@@ -747,9 +748,12 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
         let sourceW = 1920;
         let sourceH = 1080;
 
-        if (videoRef.current && videoRef.current.videoWidth) {
+        if (clip.type === 'video' && videoRef.current && videoRef.current.videoWidth) {
             sourceW = videoRef.current.videoWidth;
             sourceH = videoRef.current.videoHeight;
+        } else if (clip.type === 'image' && imageRef.current && imageRef.current.naturalWidth) {
+            sourceW = imageRef.current.naturalWidth;
+            sourceH = imageRef.current.naturalHeight;
         }
 
         const sourceRatio = sourceW / sourceH;
@@ -1190,7 +1194,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                 ref={videoRef}
                                 src={videoUrl}
                                 preload="auto"
-                                autoPlay={true}
+                                autoPlay={false}
                                 muted={true}
                                 playsInline={true}
                                 crossOrigin="anonymous"
@@ -1228,12 +1232,14 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                     // Metada beklerken veya klip aktifken görünür tut (Firefox için opacity 1 önemli)
                                     opacity: (activeVClip && activeVClip.type === 'video') || (duration <= 0) ? 1 : 0,
                                     filter: activeVClip?.filters ? `brightness(${activeVClip.filters.brightness ?? 100}%) contrast(${activeVClip.filters.contrast ?? 100}%) saturate(${activeVClip.filters.saturation ?? 100}%)` : 'none',
-                                    transform: activeVClip ? `translate(${activeVClip.transform?.x || 0}px, ${activeVClip.transform?.y || 0}px) scale(${activeVClip.transform?.scale || 1}) rotate(${activeVClip.rotate || 0}deg) scaleX(${activeVClip.flipH ? -1 : 1}) scaleY(${activeVClip.flipV ? -1 : 1})` : 'none'
+                                    transform: activeVClip ? `translate(${activeVClip.transform?.x || 0}px, ${activeVClip.transform?.y || 0}px) scale(${activeVClip.transform?.scale || 1}) rotate(${activeVClip.rotate || 0}deg) scaleX(${activeVClip.flipH ? -1 : 1}) scaleY(${activeVClip.flipV ? -1 : 1})` : 'none',
+                                    clipPath: activeVClip?.crop ? `inset(${activeVClip.crop.y}% ${100 - (activeVClip.crop.x + activeVClip.crop.w)}% ${100 - (activeVClip.crop.y + activeVClip.crop.h)}% ${activeVClip.crop.x}%)` : 'none'
                                 }}
                             />
 
                             {activeVClip && activeVClip.type === 'image' && (
                                 <img
+                                    ref={imageRef}
                                     src={`http://localhost:3001/media/${encodeURIComponent(activeVClip.path)}`}
                                     alt="Preview"
                                     style={{
@@ -1246,7 +1252,8 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                         zIndex: 1,
                                         backgroundColor: '#000',
                                         filter: activeVClip?.filters ? `brightness(${activeVClip.filters.brightness ?? 100}%) contrast(${activeVClip.filters.contrast ?? 100}%) saturate(${activeVClip.filters.saturation ?? 100}%)` : 'none',
-                                        transform: activeVClip ? `translate(${activeVClip.transform?.x || 0}px, ${activeVClip.transform?.y || 0}px) scale(${activeVClip.transform?.scale || 1}) rotate(${activeVClip.rotate || 0}deg) scaleX(${activeVClip.flipH ? -1 : 1}) scaleY(${activeVClip.flipV ? -1 : 1})` : 'none'
+                                        transform: activeVClip ? `translate(${activeVClip.transform?.x || 0}px, ${activeVClip.transform?.y || 0}px) scale(${activeVClip.transform?.scale || 1}) rotate(${activeVClip.rotate || 0}deg) scaleX(${activeVClip.flipH ? -1 : 1}) scaleY(${activeVClip.flipV ? -1 : 1})` : 'none',
+                                        clipPath: activeVClip?.crop ? `inset(${activeVClip.crop.y}% ${100 - (activeVClip.crop.x + activeVClip.crop.w)}% ${100 - (activeVClip.crop.y + activeVClip.crop.h)}% ${activeVClip.crop.x}%)` : 'none'
                                     }}
                                 />
                             )}
