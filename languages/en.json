@@ -91,5 +91,12 @@
     "videoLayer": "Video Layer",
     "audioLayer": "Audio Layer",
     "selectMediaFor": "Select Media for {track}",
-    "back": "Back"
+    "back": "Back",
+    "resetFilters": "Reset Filters",
+    "resetTransform": "Reset Transform",
+    "resetPosition": "Reset Position",
+    "center": "Center",
+    "moveAndScale": "Move & Scale",
+    "flipV": "Flip V",
+    "errorLoadingMedia": "Error loading media. Try again."
 }

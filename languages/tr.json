@@ -91,5 +91,12 @@
     "videoLayer": "Video Katmanı",
     "audioLayer": "Ses Katmanı",
     "selectMediaFor": "{track} için Medya Seçin",
-    "back": "Geri"
+    "back": "Geri",
+    "resetFilters": "Filtreleri Sıfırla",
+    "resetTransform": "Dönüşümü Sıfırla",
+    "resetPosition": "Konumu Sıfırla",
+    "center": "Ortala",
+    "moveAndScale": "Taşıma ve Ölçekleme",
+    "flipV": "Dikey Çevir",
+    "errorLoadingMedia": "Medya yüklenirken hata oluştu. Tekrar deneyin."
 }
