@@ -29,6 +29,30 @@ body {
   color: var(--text-primary);
   font-family: 'Inter', sans-serif;
   overflow-x: hidden;
+  /* Firefox Scrollbar */
+  scrollbar-width: thin;
+  scrollbar-color: var(--text-secondary) var(--bg-primary);
+}
+
+/* Webkit Scrollbar (Chrome, Edge, Safari) */
+::-webkit-scrollbar {
+  width: 8px; /* İnce ve zarif */
+  height: 8px; /* Yatay scroll için */
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-primary); /* Arkaplan ile uyumlu */
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--border-color); /* Silik gri ton */
+  border-radius: 10px; /* Yuvarlak hatlar */
+  border: 2px solid var(--bg-primary); /* Kenarlardan boşluk bırakarak daha ince görünüm */
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--text-secondary); /* Üzerine gelince belirginleşsin */
 }
 
 /* NAVBAR & SEARCH */
