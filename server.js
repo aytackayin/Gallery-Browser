@@ -686,33 +686,71 @@ app.post('/api/process-video', async (req, res) => {
             const s = (clip.filters.saturation || 100) / 100;
             const g = (clip.filters.gamma || 1.0);
 
-            // 1. ADIM: Klibi Hazırla (Loop + Crop + Ölçekleme + Padding)
+            // 1. ADIM: Klibi Hazırla (Loop + Crop)
             let vFilters = [];
             if (meta.isImage) vFilters.push(`loop=loop=-1:size=1:start=0`);
 
-            let cw = Math.round((clip.crop.w / 100) * meta.w) || meta.w;
-            let ch = Math.round((clip.crop.h / 100) * meta.h) || meta.h;
-            let cx = Math.round((clip.crop.x / 100) * meta.w) || 0;
-            let cy = Math.round((clip.crop.y / 100) * meta.h) || 0;
-            if (cw + cx > meta.w) cw = meta.w - cx;
-            if (ch + cy > meta.h) ch = meta.h - cy;
-            if (cw % 2 !== 0 && cw > 2) cw -= 1;
-            if (ch % 2 !== 0 && ch > 2) ch -= 1;
-            if (cw > 0 && ch > 0) vFilters.push(`crop=w=${cw}:h=${ch}:x=${cx}:y=${cy}`);
+            const clipCrop = clip.crop || {};
+            // Source dimensions
+            const srcW = meta.w;
+            const srcH = meta.h;
 
-            // Siyah Bantlarla Sığdırma (Fit + Pad)
-            vFilters.push(`scale=${targetW}:${targetH}:force_original_aspect_ratio=decrease`);
-            vFilters.push(`pad=${targetW}:${targetH}:(ow-iw)/2:(oh-ih)/2:black`);
-            vFilters.push(`setsar=1`);
+            // Calculate Crop (Source crop - e.g. from ImageEditor or default)
+            let cw = srcW;
+            let ch = srcH;
+            let cx = 0;
+            let cy = 0;
 
-            // 2. ADIM: Zamanlama
+            if (clipCrop.w && clipCrop.h) {
+                cw = Math.round((clipCrop.w / 100) * srcW);
+                ch = Math.round((clipCrop.h / 100) * srcH);
+                cx = Math.round((clipCrop.x / 100) * srcW);
+                cy = Math.round((clipCrop.y / 100) * srcH);
+
+                // Safety clamp
+                if (cw + cx > srcW) cw = srcW - cx;
+                if (ch + cy > srcH) ch = srcH - cy;
+                if (cw < 1) cw = 1;
+                if (ch < 1) ch = 1;
+
+                // Even check for ffmpeg
+                if (cw % 2 !== 0) cw -= 1;
+                if (ch % 2 !== 0) ch -= 1;
+
+                if (cw > 0 && ch > 0 && (cw !== srcW || ch !== srcH)) {
+                    vFilters.push(`crop=w=${cw}:h=${ch}:x=${cx}:y=${cy}`);
+                }
+            }
+
+            // 2. ADIM: Zamanlama (Trim)
             vFilters.push(`trim=start=${clip.start}:duration=${clip.duration}`);
             vFilters.push(`setpts=PTS-STARTPTS+(${clip.offset}/TB)`);
 
-            // 3. ADIM: Filtreler ve Renk Ayarları
+            // 3. ADIM: Filtreler (EQ)
             vFilters.push(`eq=brightness=0:contrast=${cVal}:saturation=${s}:gamma=${g}`);
             if (bRatio !== 1) vFilters.push(`lutyuv=y=val*${bRatio}`);
 
+            // 4. ADIM: Scale (Fit + Zoom)
+            // Calculate Fit Factor (Contain layout)
+            const fitScale = Math.min(targetW / cw, targetH / ch);
+            // Resulting size after fit
+            const fittedW = cw * fitScale;
+            const fittedH = ch * fitScale; // Unused but good for debug
+
+            // Apply User Zoom (Scale)
+            const userScale = clip.transform?.scale || 1;
+            const finalScale = fitScale * userScale;
+
+            let scaledW = Math.round(cw * finalScale);
+            let scaledH = Math.round(ch * finalScale);
+
+            // Even dimensions constraint
+            if (scaledW % 2 !== 0) scaledW += 1;
+            if (scaledH % 2 !== 0) scaledH += 1;
+
+            vFilters.push(`scale=${scaledW}:${scaledH}`);
+
+            // 5. ADIM: Rotate / Flip
             if (clip.rotate) {
                 if (clip.rotate === 90) vFilters.push('transpose=1');
                 else if (clip.rotate === 180) vFilters.push('transpose=1,transpose=1');
@@ -727,11 +765,26 @@ app.post('/api/process-video', async (req, res) => {
                 outputs: outLabel
             });
 
-            // 4. ADIM: Tuvale Yerleştir
+            // 6. ADIM: Tuvale Yerleştir (Positioning)
+            // Determine final dimensions after rotation for proper centering
+            let finalW = scaledW;
+            let finalH = scaledH;
+            if (clip.rotate === 90 || clip.rotate === 270) {
+                finalW = scaledH;
+                finalH = scaledW;
+            }
+
+            const userX = clip.transform?.x || 0;
+            const userY = clip.transform?.y || 0;
+
+            // Center (target/2 - final/2) + Offset
+            const overlayX = Math.round((targetW - finalW) / 2 + userX);
+            const overlayY = Math.round((targetH - finalH) / 2 + userY);
+
             const nextVLabel = `ov_${vClipCounter}`;
             filterComplex.push({
                 inputs: [currentVLabel, outLabel],
-                filter: `overlay=enable='between(t,${clip.offset},${clip.offset + clip.duration})':eof_action=pass`,
+                filter: `overlay=x=${overlayX}:y=${overlayY}:enable='between(t,${clip.offset},${clip.offset + clip.duration})':eof_action=pass`,
                 outputs: nextVLabel
             });
             currentVLabel = nextVLabel;

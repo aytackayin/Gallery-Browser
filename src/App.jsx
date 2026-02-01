@@ -502,7 +502,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
 
     useEffect(() => {
         updateVideoRect();
-    }, [selectedClipId]);
+    }, [selectedClipId, canvasSize]);
 
     useEffect(() => {
         const timer = setTimeout(updateVideoRect, 100);
@@ -1172,6 +1172,20 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                     )}
                                 </div>
                             )}
+                            {/* Canvas Guide Overlay */}
+                            <div
+                                style={{
+                                    position: 'absolute',
+                                    left: videoRect.left,
+                                    top: videoRect.top,
+                                    width: videoRect.width,
+                                    height: videoRect.height,
+                                    border: '1px dashed rgba(255, 255, 255, 0.5)',
+                                    boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.5)',
+                                    pointerEvents: 'none',
+                                    zIndex: 5
+                                }}
+                            />
                             <video
                                 ref={videoRef}
                                 src={videoUrl}
@@ -1203,6 +1217,8 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                 }}
                                 style={{
                                     position: 'absolute',
+                                    left: videoRect.left,
+                                    top: videoRect.top,
                                     width: videoRect.width ? `${videoRect.width}px` : '100%',
                                     height: videoRect.height ? `${videoRect.height}px` : '100%',
                                     objectFit: 'contain',
@@ -1222,6 +1238,8 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                     alt="Preview"
                                     style={{
                                         position: 'absolute',
+                                        left: videoRect.left,
+                                        top: videoRect.top,
                                         width: videoRect.width ? `${videoRect.width}px` : '100%',
                                         height: videoRect.height ? `${videoRect.height}px` : '100%',
                                         objectFit: 'contain',
