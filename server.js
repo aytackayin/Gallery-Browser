@@ -615,28 +615,31 @@ app.post('/api/process-video', async (req, res) => {
             });
         }
 
-        // Proje boyutunu belirle: Tüm kliplerin crop sonrası efektif boyutlarının en büyüğü
-        let targetW = 0;
-        let targetH = 0;
+        // Proje boyutunu belirle: Timeline'dan gelen canvasSize'ı kullan, yoksa kliplerden hesapla
+        let targetW = (timeline.canvasSize && timeline.canvasSize.w) ? parseInt(timeline.canvasSize.w) : 0;
+        let targetH = (timeline.canvasSize && timeline.canvasSize.h) ? parseInt(timeline.canvasSize.h) : 0;
 
-        clips.forEach(clip => {
-            const meta = clipMetadata[clip.id];
-            if (!meta) return;
+        // Auto-calculate only if not provided
+        if (targetW === 0 || targetH === 0) {
+            clips.forEach(clip => {
+                const meta = clipMetadata[clip.id];
+                if (!meta) return;
 
-            // Efektif boyut (Crop uygulanmış hali)
-            let cw = meta.w;
-            let ch = meta.h;
+                // Efektif boyut (Crop uygulanmış hali)
+                let cw = meta.w;
+                let ch = meta.h;
 
-            if (clip.crop) {
-                const rw = (clip.crop.w || 100) / 100;
-                const rh = (clip.crop.h || 100) / 100;
-                cw = Math.round(meta.w * rw);
-                ch = Math.round(meta.h * rh);
-            }
+                if (clip.crop) {
+                    const rw = (clip.crop.w || 100) / 100;
+                    const rh = (clip.crop.h || 100) / 100;
+                    cw = Math.round(meta.w * rw);
+                    ch = Math.round(meta.h * rh);
+                }
 
-            if (cw > targetW) targetW = cw;
-            if (ch > targetH) targetH = ch;
-        });
+                if (cw > targetW) targetW = cw;
+                if (ch > targetH) targetH = ch;
+            });
+        }
 
         // Eğer hiçbir video klibi yoksa varsayılan
         if (targetW === 0) targetW = 1920;
