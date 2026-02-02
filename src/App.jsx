@@ -601,6 +601,9 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                 // Ctrl + Scroll: Precision Zoom
                 const delta = e.deltaY < 0 ? 1 : -1;
                 setZoomLevel(prev => Math.max(5, Math.min(200, prev + delta)));
+            } else if (e.altKey) {
+                // Alt + Scroll: Vertical Scroll (Layers)
+                timeline.scrollTop += e.deltaY;
             } else {
                 // Normal Scroll: Regular Zoom
                 const delta = e.deltaY < 0 ? 5 : -5;
@@ -1922,7 +1925,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                         <div className="timeline-tracks"
                             onMouseDown={handleTimelineClick}
                             ref={timelineRef}
-                            style={{ flex: 1, overflowX: 'auto', overflowY: 'auto', position: 'relative', background: '#0a0a0a', cursor: 'crosshair', minHeight: 180 }}>
+                            style={{ flex: 1, overflowX: 'auto', overflowY: 'auto', position: 'relative', background: '#0a0a0a', cursor: 'crosshair' }}>
 
                             <div className="timeline-content" style={{
                                 position: 'relative',
@@ -2133,6 +2136,10 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                 <div className="shortcut-item" style={{ fontSize: '0.9rem', color: '#eee', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
                                     <div style={{ minWidth: 20, color: 'var(--netflix-red)', fontWeight: 'bold' }}>•</div>
                                     <div dangerouslySetInnerHTML={{ __html: (t.precisionZoomShortcut || '<b>CTRL + Scroll</b>: Precision zoom').replace(/:\s*/, ': <span style="color:#aaa">') + '</span>' }} />
+                                </div>
+                                <div className="shortcut-item" style={{ fontSize: '0.9rem', color: '#eee', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                                    <div style={{ minWidth: 20, color: 'var(--netflix-red)', fontWeight: 'bold' }}>•</div>
+                                    <div dangerouslySetInnerHTML={{ __html: (t.verticalScrollShortcut || '<b>ALT + Scroll</b>: Vertical scroll (Layers)').replace(/:\s*/, ': <span style="color:#aaa">') + '</span>' }} />
                                 </div>
                                 <div className="shortcut-item" style={{ fontSize: '0.9rem', color: '#eee', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
                                     <div style={{ minWidth: 20, color: 'var(--netflix-red)', fontWeight: 'bold' }}>•</div>
