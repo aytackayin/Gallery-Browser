@@ -320,7 +320,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
     // Multi-track state
     // Each clip: { id, path, name, start, duration, offset, type, filters, crop }
     // Mod: Initialize with item.durationSeconds if available to prevent 0-start flicker
-    const initialDuration = (item && item.durationSeconds) ? item.durationSeconds : 0;
+    const initialDuration = (item && isFinite(item.durationSeconds)) ? parseFloat(item.durationSeconds) : 0;
 
     const [tracks, setTracks] = useState(() => {
         if (!item) return [{ id: 'v1', type: 'video', clips: [] }, { id: 'a1', type: 'audio', clips: [] }];
@@ -426,17 +426,16 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
         let max = 0;
         tracks.forEach(t => {
             t.clips.forEach(c => {
-                const end = (c.offset || 0) + (c.duration || 0);
-                if (end > max) max = end;
+                const end = (parseFloat(c.offset) || 0) + (parseFloat(c.duration) || 0);
+                if (isFinite(end) && end > max) max = end;
             });
         });
-        return Math.max(max, 0.1); // Ensure at least a tiny bit of duration
+        return Math.max(max, 0.1);
     }, [tracks]);
 
     const timelineDuration = useMemo(() => {
-        // Daima en az 10 dakika (600s) veya mevcut toplam süreden 10 dakika daha fazlasını göster
-        // Bu sayede kullanıcı ilerideki boş alanlara tıklayıp yeni klip ekleyebilir (limit sorunu çözülür)
-        return Math.max(600, contentDuration + 600);
+        const base = isFinite(contentDuration) ? contentDuration : 0;
+        return Math.max(600, base + 600);
     }, [contentDuration]);
 
 
@@ -618,25 +617,19 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
     // Video Viewport Wheel handler for Scale/Zoom
     useEffect(() => {
         const viewport = containerRef.current;
-        if (!viewport) return;
+        if (!viewport || activeTool !== 'transform' || !activeVClip) return;
 
         const handleViewportWheel = (e) => {
-            if (activeTool !== 'transform' || !selectedClipId || !activeVClip || selectedClipId !== activeVClip.id) {
-                // Not in transform mode, still prevent default if Ctrl is pressed to avoid browser zoom
-                if (e.ctrlKey) e.preventDefault();
-                return;
-            }
-
             e.preventDefault();
             e.stopPropagation();
 
             const baseDelta = e.ctrlKey ? 0.01 : 0.1;
             const delta = e.deltaY > 0 ? -baseDelta : baseDelta;
-            const currentScale = activeVClip.transform?.scale || 1;
+            const currentScale = activeVClip?.transform?.scale || 1;
             const newScale = Math.max(0.1, Math.min(10, currentScale + delta));
 
             updateClip(selectedClipId, {
-                transform: { ...(activeVClip.transform || { x: 0, y: 0 }), scale: newScale }
+                transform: { ...(activeVClip?.transform || { x: 0, y: 0 }), scale: newScale }
             });
         };
 
@@ -727,10 +720,11 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
         if (!video) return;
 
         if (activeVClip && activeVClip.type === 'video') {
-            const speed = (activeVClip.sourceDuration || activeVClip.duration) / activeVClip.duration;
+            const clipDur = activeVClip.duration || 1; // Prevent division by zero
+            const speed = (activeVClip.sourceDuration || clipDur) / clipDur;
             const targetTime = activeVClip.start + (currentTime - activeVClip.offset) * speed;
 
-            if (Math.abs(video.currentTime - targetTime) > 0.15) {
+            if (isFinite(targetTime) && Math.abs(video.currentTime - targetTime) > 0.15) {
                 video.currentTime = targetTime;
             }
             if (isPlaying) {
@@ -739,7 +733,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                 if (!video.paused) video.pause();
             }
             // Sync playback rate for preview (Corrected: playbackRate = Footage / Space)
-            const videoSpeed = activeVClip.sourceDuration / activeVClip.duration;
+            const videoSpeed = (activeVClip.sourceDuration || clipDur) / clipDur;
             if (Math.abs(video.playbackRate - videoSpeed) > 0.05) {
                 video.playbackRate = Math.max(0.1, Math.min(16, videoSpeed));
             }
@@ -780,12 +774,13 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
             const player = audioPlayers.current[clip.id];
             if (!player) return;
 
-            const relTime = currentTime - clip.offset;
-            const isInside = relTime >= 0 && relTime < clip.duration;
+            const relTime = currentTime - (clip.offset || 0);
+            const clipDur = clip.duration || 0.1;
+            const isInside = relTime >= 0 && relTime < clipDur;
 
             if (isInside) {
-                const targetTime = clip.start + relTime;
-                if (Math.abs(player.currentTime - targetTime) > 0.15) {
+                const targetTime = (clip.start || 0) + relTime;
+                if (isFinite(targetTime) && Math.abs(player.currentTime - targetTime) > 0.15) {
                     player.currentTime = targetTime;
                 }
                 if (isPlaying && player.paused) {
@@ -796,7 +791,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
             } else {
                 if (!player.paused) {
                     player.pause();
-                    player.currentTime = clip.start;
+                    player.currentTime = clip.start || 0;
                 }
             }
         });
@@ -1953,8 +1948,8 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                     }}>
                                     <div style={{ width: 80, flexShrink: 0, background: 'var(--bg-card)', borderRight: '2px solid var(--border-color)', position: 'sticky', left: 0, zIndex: 1001 }} />
                                     <div style={{ position: 'relative', flex: 1, height: '100%', background: 'var(--bg-secondary)' }}>
-                                        {Array.from({ length: Math.ceil(timelineDuration / 5) + 2 }).map((_, i) => (
-                                            <div key={i} style={{ position: 'absolute', left: (i * 5) * zoomLevel, borderLeft: '1px solid #444', height: i % 2 === 0 ? 15 : 8, paddingLeft: 3 }}>
+                                        {Array.from({ length: Math.max(1, Math.ceil((isFinite(timelineDuration) ? timelineDuration : 600) / 5) + 2) }).map((_, i) => (
+                                            <div key={i} style={{ position: 'absolute', left: (i * 5) * (isFinite(zoomLevel) ? zoomLevel : 25), borderLeft: '1px solid #444', height: i % 2 === 0 ? 15 : 8, paddingLeft: 3 }}>
                                                 {i % 2 === 0 && <span style={{ fontSize: '0.6rem', color: '#888' }}>{formatTime(i * 5)}</span>}
                                             </div>
                                         ))}
