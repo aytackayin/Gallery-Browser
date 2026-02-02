@@ -1474,17 +1474,17 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                         <h4 style={{ margin: 0, color: 'var(--text-primary)' }}>{t.editVideo || 'Pro Video Editor'}</h4>
                     </div>
                     <div style={{ display: 'flex', gap: 10 }}>
-                        <button className="btn btn-grey" style={{ background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border-color)' }} onClick={() => setShowHelp(true)} data-tooltip={t.help || 'Help'}>
+                        <button className="btn btn-grey" style={{ background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border-color)' }} onClick={() => setShowHelp(true)} data-tooltip={t.help || 'Help'} data-tooltip-pos="bottom" data-tooltip-align="end">
                             <Info size={18} />
                         </button>
-                        <button className="btn btn-primary" onClick={() => handleSave()} disabled={isProcessing} data-tooltip={t.export || 'Save'}>
+                        <button className="btn btn-primary" onClick={() => handleSave()} disabled={isProcessing} data-tooltip={t.export || 'Save'} data-tooltip-pos="bottom" data-tooltip-align="end">
                             {isProcessing ? <div className="spinner-small" /> : <Save size={16} style={{ marginRight: 5 }} />}
                             {t.export || 'Export'}
                         </button>
-                        <button className="btn" onClick={() => setShowSaveAs(true)} disabled={isProcessing} style={{ background: '#46d369', color: 'white', border: 'none' }} data-tooltip={t.saveAs || 'Save As...'}>
+                        <button className="btn" onClick={() => setShowSaveAs(true)} disabled={isProcessing} style={{ background: '#46d369', color: 'white', border: 'none' }} data-tooltip={t.saveAs || 'Save As...'} data-tooltip-pos="bottom" data-tooltip-align="end">
                             <Plus size={16} style={{ marginRight: 5 }} /> {t.saveAs || 'Save As...'}
                         </button>
-                        <button className="btn btn-grey" style={{ background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border-color)' }} onClick={onClose} disabled={isProcessing} data-tooltip={t.close || 'Close'}><X size={20} /></button>
+                        <button className="btn btn-grey" style={{ background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border-color)' }} onClick={onClose} disabled={isProcessing} data-tooltip={t.close || 'Close'} data-tooltip-pos="bottom" data-tooltip-align="end"><X size={20} /></button>
                     </div>
                 </div>
 
@@ -3029,6 +3029,8 @@ function App() {
                     <button
                         className="settings-btn"
                         data-tooltip={t.settings || 'Settings'}
+                        data-tooltip-pos="bottom"
+                        data-tooltip-align="end"
                         onClick={() => setSettingsModal(true)}
                         style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 8 }}
                     >
