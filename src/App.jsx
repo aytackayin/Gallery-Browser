@@ -368,6 +368,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
     const [pickerItems, setPickerItems] = useState([]);
     const [pickerPath, setPickerPath] = useState('.');
     const [zoomLevel, setZoomLevel] = useState(25); // pixels per second
+    const [timelineHeight, setTimelineHeight] = useState(250); // pixels
     const [processingProgress, setProcessingProgress] = useState(0);
     const [processingId, setProcessingId] = useState(null);
     const [showOverwriteConfirm, setShowOverwriteConfirm] = useState(false);
@@ -1574,6 +1575,15 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
             if (videoRef.current) {
                 videoRef.current.currentTime = newTime;
             }
+        } else if (isDragging.type === 'timeline-vertical-resize') {
+            const editorHeight = window.innerHeight * 0.95; // 95vh approximation
+            const padding = 120; // Header + margins
+            const availableHeight = editorHeight - padding;
+            const mouseFromBottom = window.innerHeight - e.clientY;
+            // Limit timeline height between 100px and 70% of available space
+            const newHeight = Math.max(100, Math.min(availableHeight * 0.7, mouseFromBottom - (window.innerHeight * 0.05)));
+            setTimelineHeight(newHeight);
+            setTimeout(updateVideoRect, 10);
         }
     };
 
@@ -1612,10 +1622,20 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                     </div>
                 </div>
 
-                <div className="editor-grid" style={{ display: 'grid', gridTemplateColumns: '300px minmax(0, 1fr)', gridTemplateRows: 'minmax(0, 1fr) 150px', gap: 10, flex: 1, overflow: 'hidden', padding: 10, height: 'calc(100% - 60px)' }}>
+                <div className="editor-grid" style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'minmax(280px, 300px) minmax(0, 1fr)',
+                    gridTemplateRows: `minmax(0, 1fr) 6px ${timelineHeight}px`,
+                    columnGap: 10,
+                    rowGap: 0,
+                    flex: 1,
+                    overflow: 'hidden',
+                    padding: '0 10px 10px 10px',
+                    height: 'calc(100% - 60px)'
+                }}>
 
                     {/* Left: properties */}
-                    <div className="editor-sidebar sidebar-group" style={{ overflowY: 'auto', padding: '10px 8px' }}>
+                    <div className="editor-sidebar sidebar-group" style={{ overflowY: 'auto', padding: '10px 8px', height: '100%', boxSizing: 'border-box' }}>
                         <label style={{ fontSize: '0.65rem', fontWeight: 'bold', letterSpacing: '1px', marginBottom: 8, display: 'block', color: 'var(--text-primary)', textAlign: 'center' }}>{t.clipProperties || 'CLIP PROPERTIES'}</label>
                         {selectedClip ? (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -1749,7 +1769,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                     </div>
 
                     {/* Right: Viewer */}
-                    <div className="editor-main-area" style={{ display: 'flex', flexDirection: 'column', background: 'var(--bg-primary)', borderLeft: '1px solid var(--border-color)', borderRadius: 8, overflow: 'hidden' }}>
+                    <div className="editor-main-area" style={{ display: 'flex', flexDirection: 'column', background: 'var(--bg-primary)', borderLeft: '1px solid var(--border-color)', borderRadius: 8, overflow: 'hidden', height: '100%' }}>
                         <div className="video-viewport video-viewport-container" ref={containerRef}
                             onMouseDown={handleCanvasMouseDown}
                             onContextMenu={(e) => e.preventDefault()}
@@ -2020,8 +2040,29 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                         </div>
                     </div>
 
+                    {/* Resizable Divider */}
+                    <div
+                        onMouseDown={(e) => {
+                            e.preventDefault();
+                            setIsDragging({ type: 'timeline-vertical-resize', startY: e.clientY, startHeight: timelineHeight });
+                        }}
+                        style={{
+                            gridColumn: '1 / -1',
+                            height: 6,
+                            cursor: 'ns-resize',
+                            background: 'transparent',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            zIndex: 1000,
+                            position: 'relative'
+                        }}
+                    >
+                        <div style={{ width: 40, height: 2, background: 'var(--border-color)', borderRadius: 1 }} />
+                    </div>
+
                     {/* Bottom: Timeline */}
-                    <div style={{ gridColumn: '1 / -1', background: 'var(--bg-secondary)', borderRadius: 8, display: 'flex', flexDirection: 'column', overflow: 'visible', border: '1px solid var(--border-color)' }}>
+                    <div style={{ gridColumn: '1 / -1', background: 'var(--bg-secondary)', borderRadius: 8, display: 'flex', flexDirection: 'column', overflow: 'visible', border: '1px solid var(--border-color)', height: '100%' }}>
                         <div className="video-editor-toolbar" style={{ overflow: 'visible' }}>
                             <div className="btn-group" style={{ overflow: 'visible' }}>
                                 <button className={`action-btn ${activeTool === 'select' ? 'active' : ''}`} onClick={() => setActiveTool('select')} data-tooltip={t.selectionTool || 'Selection Tool'}><Search size={14} /></button>
