@@ -1623,8 +1623,8 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                     </div>
 
                     {/* Right: Viewer */}
-                    <div className="editor-main-area" style={{ display: 'flex', flexDirection: 'column', background: '#050505', borderRadius: 8, overflow: 'hidden' }}>
-                        <div className="video-viewport" ref={containerRef} style={{ position: 'relative', flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', userSelect: 'none' }}
+                    <div className="editor-main-area" style={{ display: 'flex', flexDirection: 'column', background: '#1c1c1c', borderRadius: 8, overflow: 'hidden' }}>
+                        <div className="video-viewport" ref={containerRef} style={{ position: 'relative', flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', userSelect: 'none', background: '#111' }}
                             onMouseDown={handleCanvasMouseDown}
                             onContextMenu={(e) => e.preventDefault()}
                         >
