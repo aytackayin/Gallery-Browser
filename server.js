@@ -875,14 +875,46 @@ app.post('/api/process-video', async (req, res) => {
             const currentScale = parseFloat(userScale || 1);
 
             // Mathematical Conversion: Center-Pivot (Frontend) to FFmpeg Top-Left
-            // 1. Calculate the visual center of the original image on the canvas
-            const visualCenterX = userX + Number(meta.w) / 2;
-            const visualCenterY = userY + Number(meta.h) / 2;
+            // 1. Calculate the Visual Pivot (Center of the unrotated, uncropped original box on canvas)
+            const pivotX = userX + Number(srcW) / 2;
+            const pivotY = userY + Number(srcH) / 2;
 
-            // 2. Calculate Top-Left of the SCALED/CROPPED stream
-            // When we scale around the center, a point at 'cx' moves to: center + scale * (cx - originalCenter)
-            const overlayX = Math.round(visualCenterX + currentScale * (Number(cx) - Number(meta.w) / 2));
-            const overlayY = Math.round(visualCenterY + currentScale * (Number(cy) - Number(meta.h) / 2));
+            // 2. Calculate the Relative Center of the CROPPED clip (relative to the pivot)
+            // Before rotation, the center of the cropped part is at (cx + cw/2, cy + ch/2) relative to top-left(0,0)
+            // Relative to pivot (srcW/2, srcH/2):
+            const relCX = (Number(cx) + Number(cw) / 2) - Number(srcW) / 2;
+            const relCY = (Number(cy) + Number(ch) / 2) - Number(srcH) / 2;
+
+            // 3. Apply Rotation and Scale to this relative vector
+            // Standard Grid: X right, Y down. Rotation is Clockwise.
+            let rotatedRelX = relCX;
+            let rotatedRelY = relCY;
+
+            if (clip.rotate === 90) {
+                // (x, y) -> (-y, x)
+                rotatedRelX = -relCY;
+                rotatedRelY = relCX;
+            } else if (clip.rotate === 180) {
+                // (x, y) -> (-x, -y)
+                rotatedRelX = -relCX;
+                rotatedRelY = -relCY;
+            } else if (clip.rotate === 270) {
+                // (x, y) -> (y, -x)
+                rotatedRelX = relCY;
+                rotatedRelY = -relCX;
+            }
+
+            // Apply Scale
+            const finalRelX = rotatedRelX * currentScale;
+            const finalRelY = rotatedRelY * currentScale;
+
+            // 4. Calculate Final Center in Absolute Coords
+            const finalCenterX = pivotX + finalRelX;
+            const finalCenterY = pivotY + finalRelY;
+
+            // 5. Calculate Top-Left for Overlay (subtract half of the FINAL ROTATED dimensions)
+            const overlayX = Math.round(finalCenterX - finalW / 2);
+            const overlayY = Math.round(finalCenterY - finalH / 2);
 
             console.log(`[Overlay] Clip ${idx} (${clip.name}): x=${overlayX}, y=${overlayY}, scale=${currentScale}`);
 
