@@ -98,5 +98,9 @@
     "center": "Center",
     "moveAndScale": "Move & Scale",
     "flipV": "Flip V",
-    "errorLoadingMedia": "Error loading media. Try again."
+    "errorLoadingMedia": "Error loading media. Try again.",
+    "screenshotSaved": "Screenshot saved!",
+    "takeScreenshot": "Take Screenshot",
+    "projectCanvasResize": "Project Canvas Resize",
+    "timelineDurationMsg": "Timeline duration updated"
 }

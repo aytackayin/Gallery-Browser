@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { Folder, X, Play, Pause, ChevronRight, Home, ChevronLeft, Image as ImageIcon, Video as VideoIcon, Search, Trash2, Info, Save, FolderInput, ChevronDown, ChevronUp, Settings, CheckCircle, Scissors, RotateCw, Sun, Contrast, Lock, Unlock, Maximize2, Volume2, Plus, Trash, Droplet, CornerUpLeft, Layers, Crop, Monitor } from 'lucide-react';
+import { Folder, X, Play, Pause, ChevronRight, Home, ChevronLeft, Image as ImageIcon, Video as VideoIcon, Search, Trash2, Info, Save, FolderInput, ChevronDown, ChevronUp, Settings, CheckCircle, Scissors, RotateCw, Sun, Contrast, Lock, Unlock, Maximize2, Volume2, Plus, Trash, Droplet, CornerUpLeft, Layers, Crop, Monitor, Camera } from 'lucide-react';
 import Cropper from "react-cropper";
 import "cropperjs/dist/cropper.css";
 
@@ -301,7 +301,7 @@ const formatTime = (seconds) => {
     }
 };
 
-const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey }) => {
+const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey, onShowToast }) => {
     const videoRef = useRef(null);
     const imageRef = useRef(null);
     const audioPlayers = useRef({}); // New: Background sync players
@@ -949,6 +949,78 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
             canvasSize
         };
         onSave(timelineData, options);
+    };
+
+    const [screenshotSuccess, setScreenshotSuccess] = useState(false);
+    const handleScreenshot = async () => {
+        if (!activeVClip) return;
+        const sourceRef = activeVClip.type === 'image' ? imageRef.current : videoRef.current;
+        if (!sourceRef) return;
+
+        try {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+
+            // Orijinal kaynak boyutları
+            const sw = activeVClip.sourceWidth || (sourceRef.videoWidth || sourceRef.naturalWidth);
+            const sh = activeVClip.sourceHeight || (sourceRef.videoHeight || sourceRef.naturalHeight);
+
+            // Crop alanını hesapla
+            const crop = activeVClip.crop || { x: 0, y: 0, w: 100, h: 100 };
+            const cropX = (crop.x / 100) * sw;
+            const cropY = (crop.y / 100) * sh;
+            const cropW = (crop.w / 100) * sw;
+            const cropH = (crop.h / 100) * sh;
+
+            // Döndürme sonrası boyutları belirle
+            let targetW = cropW;
+            let targetH = cropH;
+            if (activeVClip.rotate % 180 !== 0) {
+                targetW = cropH;
+                targetH = cropW;
+            }
+
+            canvas.width = targetW;
+            canvas.height = targetH;
+
+            // Filtreleri uygula
+            const f = activeVClip.filters || {};
+            ctx.filter = `brightness(${f.brightness ?? 100}%) contrast(${f.contrast ?? 100}%) saturate(${f.saturation ?? 100}%)`;
+
+            // Transform işlemleri (Merkeze taşı -> Döndür -> Flip -> Geri taşı)
+            ctx.translate(targetW / 2, targetH / 2);
+            ctx.rotate((activeVClip.rotate * Math.PI) / 180);
+            ctx.scale(activeVClip.flipH ? -1 : 1, activeVClip.flipV ? -1 : 1);
+
+            // Çizim (Merkeze göre ortalayarak çiz)
+            // cropW/cropH ebatlarında çiziyoruz, ama (0,0) noktası merkez olduğu için -w/2, -h/2
+            ctx.drawImage(sourceRef, cropX, cropY, cropW, cropH, -cropW / 2, -cropH / 2, cropW, cropH);
+
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
+
+            // Ana ögenin bulunduğu klasörü bul
+            let folderPath = ".";
+            if (item && item.path) {
+                // Windows (\) veya Unix (/) ayırıcılarına göre son parçayı at
+                const lastSlash = Math.max(item.path.lastIndexOf('/'), item.path.lastIndexOf('\\'));
+                if (lastSlash !== -1) folderPath = item.path.substring(0, lastSlash);
+            }
+
+            await fetch('/api/save-screenshot', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ folderPath, imageData: dataUrl })
+            });
+
+            // Bildirim
+            setScreenshotSuccess(true);
+            setTimeout(() => setScreenshotSuccess(false), 2000);
+            if (onShowToast) onShowToast(t.screenshotSaved || 'Screenshot saved!');
+
+        } catch (e) {
+            console.error(e);
+            alert("Screenshot error: " + e.message);
+        }
     };
 
     const handleTimelineClick = (e) => {
@@ -1641,6 +1713,10 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                 <button className={`action-btn ${activeTool === 'split' ? 'active' : ''}`} onClick={handleSplit} data-tooltip={t.splitAtScrubber || 'Split at Scrubber'}><Scissors size={14} /></button>
                                 <button className={`action-btn ${activeTool === 'delete' ? 'active' : ''}`} onClick={handleDelete} data-tooltip={t.deleteSelectedClip || 'Delete Selected Clip'}><Trash size={14} /></button>
                                 <button className="action-btn" onClick={packClips} data-tooltip={t.packClips || 'Pack Clips (Remove Gaps)'}><Droplet size={14} /></button>
+                                <div style={{ width: 1, height: 20, background: '#333', margin: '0 5px' }} />
+                                <button className="action-btn" onClick={handleScreenshot} data-tooltip={t.takeScreenshot || 'Take Screenshot'} style={{ color: screenshotSuccess ? '#46d369' : 'white' }}>
+                                    <Camera size={14} />
+                                </button>
                                 <div style={{ width: 1, height: 20, background: '#333', margin: '0 5px' }} />
                                 <button className="action-btn" onClick={() => addTrack('video')} data-tooltip={t.addVideoTrack || 'Add Video Track'} style={{ color: '#e50914' }}><Plus size={14} /> {t.videoLayer || 'Video Layer'}</button>
                                 <button className="action-btn" onClick={() => addTrack('audio')} data-tooltip={t.addAudioTrack || 'Add Audio Track'} style={{ color: '#46d369' }}><Plus size={14} /> {t.audioLayer || 'Audio Layer'}</button>
@@ -3170,6 +3246,10 @@ function App() {
                             setSelectedMediaIndex(-1);
                         }}
                         onSave={handleSaveEditedVideo}
+                        onShowToast={(msg) => {
+                            setToast(msg);
+                            setTimeout(() => setToast(null), 3000);
+                        }}
                     />
                 )
             }

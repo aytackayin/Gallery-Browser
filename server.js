@@ -402,6 +402,41 @@ app.post('/api/save-image', (req, res) => {
     }
 });
 
+app.post('/api/save-screenshot', (req, res) => {
+    const { folderPath, imageData } = req.body;
+    if (!folderPath || !imageData) return res.status(400).json({ error: "Eksik veri" });
+
+    const fullFolderPath = path.join(rootGalleryPath, folderPath);
+    if (!fullFolderPath.toLowerCase().startsWith(rootGalleryPath.toLowerCase())) {
+        return res.status(403).json({ error: "Yasak" });
+    }
+
+    try {
+        const timestamp = Date.now();
+        const randomSuffix = crypto.randomBytes(4).toString('hex');
+        const fileName = `Screenshot_${timestamp}_${randomSuffix}.jpg`;
+        const absolutePath = path.join(fullFolderPath, fileName);
+
+        const base64Data = imageData.replace(/^data:image\/\w+;base64,/, "");
+        const buffer = Buffer.from(base64Data, 'base64');
+
+        fs.writeFileSync(absolutePath, buffer);
+
+        // Veritabanı ve thumb sistemine kaydet (Opsiyonel ama iyi olur)
+        const relPath = path.join(folderPath, fileName).replace(/\\/g, '/');
+        const tHash = crypto.createHash('md5').update(relPath).digest('hex');
+        db.prepare("INSERT OR REPLACE INTO thumb_map (path, hash) VALUES (?, ?)").run(relPath, tHash);
+        // Thumb oluştur
+        const thumbPath = path.join(thumbDir, `${tHash}.jpg`);
+        // Screenshot zaten resim, thumb olarak da küçültülüp kullanılabilir ama şimdilik backend'in otomatik thumb sistemine bırakalım
+        // Veya direkt buffer'ı thumb olarak kopyalayabiliriz (büyük olur ama çalışır)
+
+        res.json({ success: true, message: "Screenshot kaydedildi", newPath: relPath });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 app.post('/api/update', (req, res) => {
     const { oldPath, newName, info } = req.body;
 

@@ -98,5 +98,9 @@
     "center": "Ortala",
     "moveAndScale": "Taşıma ve Ölçekleme",
     "flipV": "Dikey Çevir",
-    "errorLoadingMedia": "Medya yüklenirken hata oluştu. Tekrar deneyin."
+    "errorLoadingMedia": "Medya yüklenirken hata oluştu. Tekrar deneyin.",
+    "screenshotSaved": "Ekran görüntüsü kaydedildi!",
+    "takeScreenshot": "Ekran Görüntüsü Al",
+    "projectCanvasResize": "Proje Tuval Boyutu",
+    "timelineDurationMsg": "Timeline süresi güncellendi"
 }
