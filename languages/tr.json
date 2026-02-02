@@ -115,5 +115,11 @@
     "precisionZoomShortcut": "CTRL + Fare Tekerleği: Hassas yakınlaştırma (Timeline ve Ölçekleme)",
     "verticalScrollShortcut": "ALT + Fare Tekerleği: Katmanlar arasında yukarı/aşağı kaydırır",
     "scrollShortcut": "SHIFT + Fare Tekerleği: Zaman çizelgesini yatay kaydırır",
-    "playbackSpeed": "Oynatma Hızı"
+    "playbackSpeed": "Oynatma Hızı",
+    "saving": "Kaydediliyor...",
+    "processCancelled": "İşlem iptal edildi",
+    "fileExistsTitle": "Dosya Zaten Mevcut",
+    "fileExistsMessage": "'{fileName}' dosyası zaten mevcut. Üzerine yazmak istiyor musunuz?",
+    "yesOverwriteFile": "Evet, Üzerine Yaz",
+    "noGoBack": "Hayır, Geri Dön"
 }

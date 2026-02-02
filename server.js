@@ -15,6 +15,9 @@ import crypto from 'crypto';
 const app = express();
 const PORT = 3001;
 
+// Global process tracking for video editing
+const activeProcesses = new Map();
+
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
@@ -669,7 +672,7 @@ Theme=${theme || 'system'}
 });
 
 app.post('/api/process-video', async (req, res) => {
-    const { timeline, path: sourcePath, newPath } = req.body;
+    const { timeline, path: sourcePath, newPath, overwrite } = req.body;
     if (!timeline || !timeline.tracks) return res.status(400).json({ error: "Eksik timeline verisi" });
 
     try {
@@ -681,6 +684,20 @@ app.post('/api/process-video', async (req, res) => {
         });
 
         if (clips.length === 0) return res.status(400).json({ error: "İşlenecek geçerli bir klip yok" });
+
+        // Determine target path
+        const sourceDir = path.dirname(sourcePath);
+        const targetFilename = newPath || path.basename(sourcePath);
+        const targetPath = path.join(rootGalleryPath, sourceDir, targetFilename);
+
+        // Check if file exists (unless overwrite is explicitly true)
+        if (!overwrite && fs.existsSync(targetPath)) {
+            return res.status(409).json({
+                error: "Dosya zaten mevcut",
+                code: 'FILE_EXISTS',
+                existingFile: targetFilename
+            });
+        }
 
         // Tüm kliplerin metadatasını önden alalım
         const clipMetadata = {};
@@ -778,9 +795,6 @@ app.post('/api/process-video', async (req, res) => {
         const command = ffmpeg();
         clips.forEach(c => command.input(path.join(rootGalleryPath, c.path)));
 
-        const sourceDir = path.dirname(sourcePath);
-        const targetFilename = newPath || path.basename(sourcePath);
-        const targetPath = path.join(rootGalleryPath, sourceDir, targetFilename);
         const tempPath = targetPath + '.tmp.mp4';
 
         let totalTimelineDuration = 0;
@@ -1039,16 +1053,41 @@ app.post('/api/process-video', async (req, res) => {
         const outputLabels = [currentVLabel];
         if (finalAudioLabel) outputLabels.push(finalAudioLabel);
 
+        // File existence already checked at the beginning of this function
+        // Now start SSE stream for processing
+        const processId = Date.now().toString();
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+
+        const sendUpdate = (data) => {
+            res.write(`data: ${JSON.stringify(data)}\n\n`);
+        };
+
+        // Send processId immediately so frontend can cancel
+        sendUpdate({ type: 'started', processId });
+
         command
             .complexFilter(filterComplex, outputLabels)
-            .on('start', cmd => console.log('FFmpeg command:', cmd))
+            .on('start', cmd => {
+                console.log('FFmpeg command:', cmd);
+                activeProcesses.set(processId, command);
+            })
+            .on('progress', progress => {
+                if (progress.percent) {
+                    sendUpdate({ type: 'progress', percent: Math.min(99, Math.max(0, progress.percent)), processId });
+                }
+            })
             .on('error', (err) => {
                 console.error('FFmpeg error:', err);
-                if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
-                res.status(500).json({ error: err.message });
+                activeProcesses.delete(processId);
+                if (fs.existsSync(tempPath)) { try { fs.unlinkSync(tempPath); } catch (e) { } }
+                sendUpdate({ type: 'error', error: err.message });
+                res.end();
             })
             .on('end', () => {
                 try {
+                    activeProcesses.delete(processId);
                     if (fs.existsSync(targetPath) && tempPath !== targetPath) {
                         try { fs.unlinkSync(targetPath); } catch (e) { }
                     }
@@ -1058,17 +1097,41 @@ app.post('/api/process-video', async (req, res) => {
                     db.prepare("INSERT OR REPLACE INTO thumb_map (path, hash) VALUES (?, ?)").run(finalRelPath, tHash);
 
                     const thumbPath = getThumbPath(finalRelPath);
-                    if (fs.existsSync(thumbPath)) fs.unlinkSync(thumbPath);
-                    res.json({ success: true, message: "Video başarıyla işlendi", path: finalRelPath });
+                    if (fs.existsSync(thumbPath)) { try { fs.unlinkSync(thumbPath); } catch (e) { } }
+
+                    sendUpdate({ type: 'success', message: "Video başarıyla işlendi", path: finalRelPath, processId });
+                    res.end();
                 } catch (e) {
-                    res.status(500).json({ error: e.message });
+                    sendUpdate({ type: 'error', error: e.message });
+                    res.end();
                 }
             })
             .save(tempPath);
 
+        // Handle client disconnect
+        req.on('close', () => {
+            // Optional: Auto-kill on disconnect? User asked for a cancel button, 
+            // but killing on close is good practice for orphan processes.
+            // activeProcesses.get(processId)?.kill();
+            // activeProcesses.delete(processId);
+        });
+
     } catch (e) {
         console.error('Server error:', e);
-        res.status(500).json({ error: e.message });
+        res.write(`data: ${JSON.stringify({ type: 'error', error: e.message })}\n\n`);
+        res.end();
+    }
+});
+
+app.post('/api/cancel-video', (req, res) => {
+    const { processId } = req.body;
+    if (activeProcesses.has(processId)) {
+        const command = activeProcesses.get(processId);
+        command.kill('SIGKILL');
+        activeProcesses.delete(processId);
+        res.json({ success: true, message: "İşlem iptal edildi" });
+    } else {
+        res.status(404).json({ error: "İşlem bulunamadı veya çoktan bitti" });
     }
 });
 

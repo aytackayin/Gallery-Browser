@@ -368,6 +368,10 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
     const [pickerItems, setPickerItems] = useState([]);
     const [pickerPath, setPickerPath] = useState('.');
     const [zoomLevel, setZoomLevel] = useState(25); // pixels per second
+    const [processingProgress, setProcessingProgress] = useState(0);
+    const [processingId, setProcessingId] = useState(null);
+    const [showOverwriteConfirm, setShowOverwriteConfirm] = useState(false);
+    const [pendingSaveOptions, setPendingSaveOptions] = useState(null);
     const timelineRef = useRef(null);
     const [dragTrackIndex, setDragTrackIndex] = useState(null);
 
@@ -1021,21 +1025,144 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
         }
     };
 
+    const handleCancelProcessing = async () => {
+        if (!processingId) {
+            console.warn("No processId available for cancellation");
+            return;
+        }
+        try {
+            // First, abort the fetch stream
+            if (window.activeVideoStream) {
+                window.activeVideoStream.abort();
+                window.activeVideoStream = null;
+            }
+
+            // Then tell the server to kill FFmpeg
+            const res = await fetch('/api/cancel-video', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ processId: processingId })
+            });
+            const data = await res.json();
+            if (data.success) {
+                setIsProcessing(false);
+                setProcessingProgress(0);
+                setProcessingId(null);
+                if (onShowToast) onShowToast(t.processCancelled || 'İşlem iptal edildi');
+            }
+        } catch (e) {
+            console.error("Cancel error:", e);
+            // Force reset even if cancel request fails
+            setIsProcessing(false);
+            setProcessingProgress(0);
+            setProcessingId(null);
+        }
+    };
+
     const handleSave = async (options = {}) => {
         setIsProcessing(true);
+        setProcessingProgress(0);
+
         const timelineData = {
             tracks: tracks.map(t => ({
                 id: t.id,
                 type: t.type,
                 clips: t.clips.map(clip => ({
                     ...clip,
-                    // Emergency fallback: if sourceDuration is missing, assume 1x speed
                     sourceDuration: clip.sourceDuration || clip.duration
                 }))
             })),
             canvasSize
         };
-        onSave(timelineData, options);
+
+        try {
+            const currentItem = item;
+            if (!currentItem) return;
+
+            const abortController = new AbortController();
+            window.activeVideoStream = abortController;
+
+            const response = await fetch('/api/process-video', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    path: currentItem.path,
+                    timeline: timelineData,
+                    newPath: options.newName,
+                    overwrite: options.overwrite || false
+                }),
+                signal: abortController.signal
+            });
+
+            // Handle file conflict (409)
+            if (response.status === 409) {
+                const data = await response.json();
+                if (data.code === 'FILE_EXISTS') {
+                    setIsProcessing(false);
+                    setProcessingProgress(0);
+                    window.activeVideoStream = null;
+
+                    // Store options and show confirmation
+                    setPendingSaveOptions(options);
+                    setShowOverwriteConfirm(true);
+                    return;
+                }
+            }
+
+            if (!response.ok) throw new Error("Network response was not ok");
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n\n');
+                buffer = lines.pop(); // Keep the last partial line in buffer
+
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        try {
+                            const data = JSON.parse(line.substring(6));
+                            if (data.type === 'started') {
+                                setProcessingId(data.processId);
+                            } else if (data.type === 'progress') {
+                                setProcessingProgress(data.percent);
+                                if (data.processId) setProcessingId(data.processId);
+                            } else if (data.type === 'success') {
+                                setProcessingProgress(100);
+                                setIsProcessing(false);
+                                setProcessingId(null);
+                                window.activeVideoStream = null;
+                                onSave(timelineData, { ...options, ...data });
+                            } else if (data.type === 'error') {
+                                setIsProcessing(false);
+                                setProcessingProgress(0);
+                                setProcessingId(null);
+                                window.activeVideoStream = null;
+                                throw new Error(data.error);
+                            }
+                        } catch (e) {
+                            console.error("Stream parse error:", e);
+                        }
+                    }
+                }
+            }
+        } catch (e) {
+            if (e.name === 'AbortError') {
+                console.log("Stream aborted by user");
+            } else {
+                setIsProcessing(false);
+                setProcessingProgress(0);
+                setProcessingId(null);
+                if (onShowToast) onShowToast(e.message);
+                else alert('Error processing video: ' + e.message);
+            }
+            window.activeVideoStream = null;
+        }
     };
 
     const [screenshotSuccess, setScreenshotSuccess] = useState(false);
@@ -2198,6 +2325,39 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                         </div>
                     </div>
                 )}
+
+                {/* Overwrite Confirmation Modal */}
+                {showOverwriteConfirm && (
+                    <div className="modal-overlay" style={{ zIndex: 8500 }}>
+                        <div className="modal" style={{ maxWidth: 450 }}>
+                            <div className="modal-header" style={{ marginBottom: 15 }}>
+                                <h3 style={{ margin: 0, color: 'var(--netflix-red)' }}>{t.fileExistsTitle || 'File Already Exists'}</h3>
+                            </div>
+                            <div className="modal-content" style={{ padding: '20px 0' }}>
+                                <p style={{ fontSize: '1rem', lineHeight: 1.6, color: '#ddd' }}>
+                                    {(t.fileExistsMessage || "The file '{fileName}' already exists. Do you want to overwrite it?")
+                                        .replace('{fileName}', pendingSaveOptions?.newName || item?.name)}
+                                </p>
+                            </div>
+                            <div className="modal-footer" style={{ marginTop: 20, display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                                <button className="btn btn-grey" onClick={() => {
+                                    setShowOverwriteConfirm(false);
+                                    setPendingSaveOptions(null);
+                                    setShowSaveAs(true); // Go back to Save As
+                                }}>
+                                    {t.noGoBack || 'No, Go Back'}
+                                </button>
+                                <button className="btn btn-primary" onClick={() => {
+                                    setShowOverwriteConfirm(false);
+                                    handleSave({ ...pendingSaveOptions, overwrite: true });
+                                    setPendingSaveOptions(null);
+                                }}>
+                                    {t.yesOverwriteFile || 'Yes, Overwrite'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {
@@ -2259,6 +2419,23 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                     </div>
                 )
             }
+
+            {/* Processing Overlay */}
+            {isProcessing && (
+                <div className="processing-overlay">
+                    <div className="processing-card">
+                        <div className="processing-spinner"></div>
+                        <div className="processing-title">{(t.saving || 'Kaydediliyor...')}</div>
+                        <div className="progress-container">
+                            <div className="progress-bar" style={{ width: `${processingProgress}%` }}></div>
+                        </div>
+                        <div className="progress-percent">%{Math.round(processingProgress)}</div>
+                        <button className="btn btn-grey" onClick={(e) => { e.stopPropagation(); handleCancelProcessing(); }} style={{ marginTop: 10, padding: '8px 24px' }}>
+                            {t.cancel || 'İptal Et'}
+                        </button>
+                    </div>
+                </div>
+            )}
         </div >
     );
 };
@@ -2843,35 +3020,25 @@ function App() {
     };
 
     const handleSaveEditedVideo = async (timeline, options = {}) => {
+        // This callback is called AFTER VideoEditor's handleSave completes successfully
+        // We don't need to call the API again - just update the UI
         try {
             const currentItem = editVideoItem || selectedMedia;
             if (!currentItem) return;
 
-            const res = await fetch('/api/process-video', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    path: currentItem.path,
-                    timeline,
-                    newPath: options.newName
-                })
-            });
-            const data = await res.json();
-            if (data.success) {
-                setRefreshKey(Date.now());
-                setShowVideoEditor(false);
-                setEditVideoItem(null);
-                setSelectedMediaIndex(-1); // Safety
-                setToast(t.videoSaved || 'Video processed successfully');
-                setTimeout(() => {
-                    setToast(null);
-                    fetchItems(currentPath);
-                }, 3000);
-            } else {
-                alert(data.error || 'Error processing video: ' + data.error);
-            }
+            // Video processing is already done by VideoEditor's handleSave
+            // Just update UI and refresh gallery
+            setRefreshKey(Date.now());
+            setShowVideoEditor(false);
+            setEditVideoItem(null);
+            setSelectedMediaIndex(-1);
+            setToast(t.videoSaved || 'Video processed successfully');
+            setTimeout(() => {
+                setToast(null);
+                fetchItems(currentPath);
+            }, 3000);
         } catch (e) {
-            alert('Error processing video: ' + e.message);
+            console.error('Error in handleSaveEditedVideo:', e);
         }
     };
 

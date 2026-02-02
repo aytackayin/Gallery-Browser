@@ -115,5 +115,11 @@
     "precisionZoomShortcut": "CTRL + Scroll Wheel: Precision zoom (Timeline & Scaling)",
     "verticalScrollShortcut": "ALT + Scroll Wheel: Vertical scroll (Layers/Tracks)",
     "scrollShortcut": "SHIFT + Scroll Wheel: Scroll timeline horizontally",
-    "playbackSpeed": "Playback Speed"
+    "playbackSpeed": "Playback Speed",
+    "saving": "Saving...",
+    "processCancelled": "Process cancelled",
+    "fileExistsTitle": "File Already Exists",
+    "fileExistsMessage": "The file '{fileName}' already exists. Do you want to overwrite it?",
+    "yesOverwriteFile": "Yes, Overwrite",
+    "noGoBack": "No, Go Back"
 }
