@@ -121,5 +121,10 @@
     "fileExistsTitle": "File Already Exists",
     "fileExistsMessage": "The file '{fileName}' already exists. Do you want to overwrite it?",
     "yesOverwriteFile": "Yes, Overwrite",
-    "noGoBack": "No, Go Back"
+    "noGoBack": "No, Go Back",
+    "autoPlayVideos": "Auto Play Videos",
+    "loopVideos": "Loop Videos",
+    "autoPlaySlides": "Auto Play Slides (Next Media)",
+    "loopSlideshow": "Loop Slideshow",
+    "imageSlideDuration": "Image Slide Duration (seconds)"
 }

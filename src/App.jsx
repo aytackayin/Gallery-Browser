@@ -2720,6 +2720,10 @@ function App() {
     const [loading, setLoading] = useState(true);
     const [selectedMediaIndex, setSelectedMediaIndex] = useState(-1);
     const [autoPlaySetting, setAutoPlaySetting] = useState(false);
+    const [autoPlaySlides, setAutoPlaySlides] = useState(false);
+    const [slideDuration, setSlideDuration] = useState(5);
+    const [videoLoop, setVideoLoop] = useState(false);
+    const [slideLoop, setSlideLoop] = useState(false);
     const [language, setLanguage] = useState('en');
     const [translations, setTranslations] = useState({});
     const [scrolled, setScrolled] = useState(false);
@@ -2751,7 +2755,17 @@ function App() {
 
     // Settings State
     const [settingsModal, setSettingsModal] = useState(false);
-    const [settingsData, setSettingsData] = useState({ galleryPath: '', browserPath: 'default', autoPlay: false, language: 'en', theme: 'system' });
+    const [settingsData, setSettingsData] = useState({
+        galleryPath: '',
+        browserPath: 'default',
+        autoPlay: false,
+        language: 'en',
+        theme: 'system',
+        autoPlaySlides: false,
+        slideDuration: 5,
+        videoLoop: false,
+        slideLoop: false
+    });
     const [theme, setTheme] = useState('system');
     const [toast, setToast] = useState(null); // { message: string, type: 'success' | 'error' }
     const [showEditor, setShowEditor] = useState(false);
@@ -2826,6 +2840,10 @@ function App() {
             setSettingsData(data);
             setTheme(data.theme || 'system');
             setAutoPlaySetting(!!data.autoPlay);
+            setAutoPlaySlides(!!data.autoPlaySlides);
+            setSlideDuration(data.slideDuration || 5);
+            setVideoLoop(!!data.videoLoop);
+            setSlideLoop(!!data.slideLoop);
         }).catch(() => { });
 
         const handleScroll = () => {
@@ -2941,6 +2959,10 @@ function App() {
 
             setCurrentPath(data.currentPath || '.');
             setAutoPlaySetting(!!data.autoPlay);
+            setAutoPlaySlides(!!data.autoPlaySlides);
+            setSlideDuration(data.slideDuration || 5);
+            setVideoLoop(!!data.videoLoop);
+            setSlideLoop(!!data.slideLoop);
             if (data.language) setLanguage(data.language);
             if (data.translations) setTranslations(data.translations);
         } catch (e) { } finally { setLoading(false); }
@@ -3049,6 +3071,10 @@ function App() {
             if (data.success) {
                 setTheme(settingsData.theme);
                 setAutoPlaySetting(settingsData.autoPlay);
+                setAutoPlaySlides(settingsData.autoPlaySlides);
+                setSlideDuration(settingsData.slideDuration);
+                setVideoLoop(settingsData.videoLoop);
+                setSlideLoop(settingsData.slideLoop);
                 setSettingsModal(false);
                 setToast(t.restartRequired || 'Restart required for some changes');
                 setTimeout(() => setToast(null), 3000);
@@ -3317,6 +3343,12 @@ function App() {
 
     const navigateMedia = (direction) => {
         let newIndex = selectedMediaIndex + direction;
+
+        if (slideLoop) {
+            if (newIndex >= sortedMediaOnly.length) newIndex = 0;
+            if (newIndex < 0) newIndex = sortedMediaOnly.length - 1;
+        }
+
         if (newIndex >= 0 && newIndex < sortedMediaOnly.length) {
             if (videoRef.current) { videoRef.current.pause(); videoRef.current.src = ""; }
             setZoomMode(false);
@@ -3325,6 +3357,20 @@ function App() {
             setSelectedMediaIndex(newIndex);
         }
     };
+
+    // Auto Play Slides Logic for Images
+    useEffect(() => {
+        let timer;
+        const selectedMedia = selectedMediaIndex !== -1 ? sortedMediaOnly[selectedMediaIndex] : null;
+
+        if (autoPlaySlides && selectedMedia && selectedMedia.type.startsWith('image/') && !showEditor && !showVideoEditor) {
+            timer = setTimeout(() => {
+                navigateMedia(1);
+            }, slideDuration * 1000);
+        }
+
+        return () => clearTimeout(timer);
+    }, [selectedMediaIndex, autoPlaySlides, slideDuration, showEditor, showVideoEditor, slideLoop]);
 
     const handleZoomWheel = (e) => {
         e.preventDefault();
@@ -3804,6 +3850,14 @@ function App() {
                                     onLoadedMetadata={() => {
                                         if (videoRef.current) videoRef.current.volume = 1;
                                     }}
+                                    onEnded={() => {
+                                        if (videoLoop) {
+                                            videoRef.current.currentTime = 0;
+                                            videoRef.current.play();
+                                        } else if (autoPlaySlides) {
+                                            navigateMedia(1);
+                                        }
+                                    }}
                                 />
                             )}
                         </div>
@@ -3842,14 +3896,62 @@ function App() {
                                     />
                                 </div>
 
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                                    <input
-                                        type="checkbox"
-                                        checked={settingsData.autoPlay}
-                                        onChange={(e) => setSettingsData({ ...settingsData, autoPlay: e.target.checked })}
-                                        id="autoplay-checkbox"
-                                    />
-                                    <label htmlFor="autoplay-checkbox" style={{ color: '#ccc', cursor: 'pointer' }}>{t.autoPlay || 'Auto Play Videos'}</label>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 15 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={settingsData.autoPlay}
+                                            onChange={(e) => setSettingsData({ ...settingsData, autoPlay: e.target.checked })}
+                                            id="autoplay-checkbox"
+                                        />
+                                        <label htmlFor="autoplay-checkbox" style={{ fontSize: '0.9rem', cursor: 'pointer' }}>{t.autoPlayVideos || 'Auto Play Videos'}</label>
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={settingsData.videoLoop}
+                                            onChange={(e) => setSettingsData({ ...settingsData, videoLoop: e.target.checked })}
+                                            id="videoloop-checkbox"
+                                        />
+                                        <label htmlFor="videoloop-checkbox" style={{ fontSize: '0.9rem', cursor: 'pointer' }}>{t.loopVideos || 'Loop Videos'}</label>
+                                    </div>
+                                </div>
+
+                                <div style={{ background: 'rgba(255,255,255,0.03)', padding: 15, borderRadius: 10, border: '1px solid #333', display: 'flex', flexDirection: 'column', gap: 15 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={settingsData.autoPlaySlides}
+                                            onChange={(e) => setSettingsData({ ...settingsData, autoPlaySlides: e.target.checked })}
+                                            id="autoplayslides-checkbox"
+                                        />
+                                        <label htmlFor="autoplayslides-checkbox" style={{ fontSize: '0.9rem', cursor: 'pointer', fontWeight: 'bold', color: 'var(--netflix-red)' }}>{t.autoPlaySlides || 'Auto Play Slides (Next Media)'}</label>
+                                    </div>
+
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingLeft: 25 }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={settingsData.slideLoop}
+                                            onChange={(e) => setSettingsData({ ...settingsData, slideLoop: e.target.checked })}
+                                            id="slideloop-checkbox"
+                                        />
+                                        <label htmlFor="slideloop-checkbox" style={{ fontSize: '0.9rem', cursor: 'pointer', color: '#ccc' }}>{t.loopSlideshow || 'Loop Slideshow'}</label>
+                                    </div>
+
+                                    <div style={{ paddingLeft: 25 }}>
+                                        <label style={{ display: 'block', fontSize: '0.8rem', marginBottom: 5, color: '#888' }}>{t.imageSlideDuration || 'Image Slide Duration (seconds)'}</label>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                            <input
+                                                type="range"
+                                                min="1"
+                                                max="60"
+                                                value={settingsData.slideDuration}
+                                                onChange={(e) => setSettingsData({ ...settingsData, slideDuration: parseInt(e.target.value) })}
+                                                style={{ flex: 1 }}
+                                            />
+                                            <span style={{ minWidth: 25, fontSize: '0.9rem', color: '#fff' }}>{settingsData.slideDuration}s</span>
+                                        </div>
+                                    </div>
                                 </div>
 
                                 <div>

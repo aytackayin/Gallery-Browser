@@ -121,5 +121,10 @@
     "fileExistsTitle": "Dosya Zaten Mevcut",
     "fileExistsMessage": "'{fileName}' dosyası zaten mevcut. Üzerine yazmak istiyor musunuz?",
     "yesOverwriteFile": "Evet, Üzerine Yaz",
-    "noGoBack": "Hayır, Geri Dön"
+    "noGoBack": "Hayır, Geri Dön",
+    "autoPlayVideos": "Videoları Otomatik Oynat",
+    "loopVideos": "Videoları Tekrarla",
+    "autoPlaySlides": "Slayt Gösterisi Modu (Sıradaki Medya)",
+    "loopSlideshow": "Slayt Gösterisini Tekrarla",
+    "imageSlideDuration": "Resim Gösterim Süresi (saniye)"
 }

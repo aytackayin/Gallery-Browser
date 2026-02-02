@@ -26,6 +26,10 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 const getConfigs = () => {
     let rootPath = process.cwd();
     let autoPlay = false;
+    let autoPlaySlides = false;
+    let slideDuration = 5;
+    let videoLoop = false;
+    let slideLoop = false;
     let language = 'en';
     let browserPath = 'default';
     let translations = {};
@@ -47,6 +51,18 @@ const getConfigs = () => {
 
             const lang = lines.find(l => l.trim().startsWith('Language='));
             if (lang) language = lang.split('=')[1].trim().toLowerCase();
+
+            const apSlides = lines.find(l => l.trim().startsWith('AutoPlaySlides='));
+            if (apSlides) autoPlaySlides = apSlides.split('=')[1].trim() === '1';
+
+            const sDur = lines.find(l => l.trim().startsWith('SlideDuration='));
+            if (sDur) slideDuration = parseInt(sDur.split('=')[1].trim()) || 5;
+
+            const vLoop = lines.find(l => l.trim().startsWith('VideoLoop='));
+            if (vLoop) videoLoop = vLoop.split('=')[1].trim() === '1';
+
+            const sLoop = lines.find(l => l.trim().startsWith('SlideLoop='));
+            if (sLoop) slideLoop = sLoop.split('=')[1].trim() === '1';
         }
 
         const langPath = path.join(process.cwd(), 'languages', `${language}.json`);
@@ -54,7 +70,7 @@ const getConfigs = () => {
             translations = JSON.parse(fs.readFileSync(langPath, 'utf8'));
         }
     } catch (e) { }
-    return { rootPath: path.resolve(rootPath), autoPlay, language, browserPath, translations };
+    return { rootPath: path.resolve(rootPath), autoPlay, autoPlaySlides, slideDuration, videoLoop, slideLoop, language, browserPath, translations };
 };
 
 const settings = getConfigs();
@@ -195,6 +211,10 @@ app.get('/api/scan', (req, res) => {
             currentPath: subPath,
             items: result,
             autoPlay: settings.autoPlay,
+            autoPlaySlides: settings.autoPlaySlides,
+            slideDuration: settings.slideDuration,
+            videoLoop: settings.videoLoop,
+            slideLoop: settings.slideLoop,
             language: settings.language,
             translations: settings.translations
         });
@@ -764,7 +784,11 @@ app.get('/api/settings', (req, res) => {
             browserPath: 'default',
             autoPlay: false,
             language: 'en',
-            theme: 'system'
+            theme: 'system',
+            autoPlaySlides: false,
+            slideDuration: 5,
+            videoLoop: false,
+            slideLoop: false
         };
 
         if (fs.existsSync(configPath)) {
@@ -785,6 +809,18 @@ app.get('/api/settings', (req, res) => {
 
             const theme = lines.find(l => l.trim().startsWith('Theme='));
             if (theme) settings.theme = theme.split('=')[1].trim().toLowerCase();
+
+            const apSlides = lines.find(l => l.trim().startsWith('AutoPlaySlides='));
+            if (apSlides) settings.autoPlaySlides = apSlides.split('=')[1].trim() === '1';
+
+            const sDur = lines.find(l => l.trim().startsWith('SlideDuration='));
+            if (sDur) settings.slideDuration = parseInt(sDur.split('=')[1].trim()) || 5;
+
+            const vLoop = lines.find(l => l.trim().startsWith('VideoLoop='));
+            if (vLoop) settings.videoLoop = vLoop.split('=')[1].trim() === '1';
+
+            const sLoop = lines.find(l => l.trim().startsWith('SlideLoop='));
+            if (sLoop) settings.slideLoop = sLoop.split('=')[1].trim() === '1';
         }
 
         res.json(settings);
@@ -796,7 +832,7 @@ app.get('/api/settings', (req, res) => {
 app.post('/api/settings', (req, res) => {
     try {
         const configPath = path.join(process.cwd(), 'config.ini');
-        const { galleryPath, browserPath, autoPlay, language, theme } = req.body;
+        const { galleryPath, browserPath, autoPlay, language, theme, autoPlaySlides, slideDuration, videoLoop, slideLoop } = req.body;
 
         const content = `[Settings]
 BrowserPath=${browserPath || 'default'}
@@ -810,6 +846,12 @@ Language=${language || 'en'}
 
 ; Theme (system, dark, light)
 Theme=${theme || 'system'}
+
+; Slideshow Settings
+AutoPlaySlides=${autoPlaySlides ? '1' : '0'}
+SlideDuration=${slideDuration || 5}
+VideoLoop=${videoLoop ? '1' : '0'}
+SlideLoop=${slideLoop ? '1' : '0'}
 `;
 
         fs.writeFileSync(configPath, content, 'utf8');
