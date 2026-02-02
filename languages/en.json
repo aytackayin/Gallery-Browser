@@ -110,7 +110,8 @@
     "deleteShortcut": "Delete / Backspace: Delete selected clip",
     "playPauseShortcut": "Space: Play / Pause",
     "zoomShortcut": "Scroll Wheel: Zoom timeline",
-    "panShortcut": "Right Click + Drag: Pan preview canvas",
+    "panShortcut": "Left Click + Drag: Pan preview canvas",
+    "precisionPanShortcut": "SHIFT + Drag: Precision pan (Preview)",
     "precisionZoomShortcut": "CTRL + Scroll Wheel: Precision zoom (Timeline & Scaling)",
     "scrollShortcut": "SHIFT + Scroll Wheel: Scroll timeline horizontally",
     "playbackSpeed": "Playback Speed"

@@ -110,7 +110,8 @@
     "deleteShortcut": "Delete / Backspace: Seçili klibi siler",
     "playPauseShortcut": "Space: Oynat / Duraklat",
     "zoomShortcut": "Fare Tekerleği: Zaman çizelgesini (Timeline) yakınlaştırır",
-    "panShortcut": "Sağ Tık + Sürükle: Önizleme ekranını kaydırır",
+    "panShortcut": "Sol Tık + Sürükle: Önizleme ekranını kaydırır",
+    "precisionPanShortcut": "SHIFT + Sürükle: Hassas taşıma (Önizleme)",
     "precisionZoomShortcut": "CTRL + Fare Tekerleği: Hassas yakınlaştırma (Timeline ve Ölçekleme)",
     "scrollShortcut": "SHIFT + Fare Tekerleği: Zaman çizelgesini yatay kaydırır",
     "playbackSpeed": "Oynatma Hızı"

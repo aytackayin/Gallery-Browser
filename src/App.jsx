@@ -1007,12 +1007,17 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
     };
 
     const handleCanvasMouseDown = (e) => {
-        // Right click pan OR transform tool drag
-        if (e.button === 2 || activeTool === 'transform') {
-            if (!selectedClipId || !activeVClip || (activeTool === 'transform' && selectedClipId !== activeVClip.id)) return;
+        // Sol tık (0) ile taşıma başlasın
+        if (e.button === 0) {
+            if (!selectedClipId || !activeVClip) return;
             e.stopPropagation();
-            if (e.button === 2) e.preventDefault();
-            setIsDragging({ type: 'canvas-pan', startX: e.clientX, startY: e.clientY, originX: activeVClip.transform?.x || 0, originY: activeVClip.transform?.y || 0 });
+            setIsDragging({
+                type: 'canvas-pan',
+                startX: e.clientX,
+                startY: e.clientY,
+                originX: activeVClip.transform?.x || 0,
+                originY: activeVClip.transform?.y || 0
+            });
         }
     };
 
@@ -1164,8 +1169,14 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
             const scaleFactorX = canvasSize.w / videoRect.width;
             const scaleFactorY = canvasSize.h / videoRect.height;
 
-            const dx = (e.clientX - isDragging.startX) * scaleFactorX;
-            const dy = (e.clientY - isDragging.startY) * scaleFactorY;
+            let dx = (e.clientX - isDragging.startX) * scaleFactorX;
+            let dy = (e.clientY - isDragging.startY) * scaleFactorY;
+
+            // Shift modifier for precision panning
+            if (e.shiftKey) {
+                dx *= 0.1;
+                dy *= 0.1;
+            }
 
             let newX = isDragging.originX + dx;
             let newY = isDragging.originY + dy;
@@ -2092,7 +2103,11 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                 </div>
                                 <div className="shortcut-item" style={{ fontSize: '0.9rem', color: '#eee', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
                                     <div style={{ minWidth: 20, color: 'var(--netflix-red)', fontWeight: 'bold' }}>•</div>
-                                    <div dangerouslySetInnerHTML={{ __html: (t.panShortcut || '<b>Right Click + Drag</b>: Pan preview canvas').replace(/:\s*/, ': <span style="color:#aaa">') + '</span>' }} />
+                                    <div dangerouslySetInnerHTML={{ __html: (t.panShortcut || '<b>Left Click + Drag</b>: Pan preview canvas').replace(/:\s*/, ': <span style="color:#aaa">') + '</span>' }} />
+                                </div>
+                                <div className="shortcut-item" style={{ fontSize: '0.9rem', color: '#eee', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                                    <div style={{ minWidth: 20, color: 'var(--netflix-red)', fontWeight: 'bold' }}>•</div>
+                                    <div dangerouslySetInnerHTML={{ __html: (t.precisionPanShortcut || '<b>SHIFT + Drag</b>: Precision pan (Preview)').replace(/:\s*/, ': <span style="color:#aaa">') + '</span>' }} />
                                 </div>
                                 <div className="shortcut-item" style={{ fontSize: '0.9rem', color: '#eee', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
                                     <div style={{ minWidth: 20, color: 'var(--netflix-red)', fontWeight: 'bold' }}>•</div>
