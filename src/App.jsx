@@ -612,6 +612,35 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
         return () => timeline.removeEventListener('wheel', handleManualWheel);
     }, [timelineDuration, zoomLevel]);
 
+    // Video Viewport Wheel handler for Scale/Zoom
+    useEffect(() => {
+        const viewport = containerRef.current;
+        if (!viewport) return;
+
+        const handleViewportWheel = (e) => {
+            if (activeTool !== 'transform' || !selectedClipId || !activeVClip || selectedClipId !== activeVClip.id) {
+                // Not in transform mode, still prevent default if Ctrl is pressed to avoid browser zoom
+                if (e.ctrlKey) e.preventDefault();
+                return;
+            }
+
+            e.preventDefault();
+            e.stopPropagation();
+
+            const baseDelta = e.ctrlKey ? 0.01 : 0.1;
+            const delta = e.deltaY > 0 ? -baseDelta : baseDelta;
+            const currentScale = activeVClip.transform?.scale || 1;
+            const newScale = Math.max(0.1, Math.min(10, currentScale + delta));
+
+            updateClip(selectedClipId, {
+                transform: { ...(activeVClip.transform || { x: 0, y: 0 }), scale: newScale }
+            });
+        };
+
+        viewport.addEventListener('wheel', handleViewportWheel, { passive: false });
+        return () => viewport.removeEventListener('wheel', handleViewportWheel);
+    }, [activeTool, selectedClipId, activeVClip, canvasSize]);
+
     const onMetadata = (e) => {
         const video = e.target;
         syncDuration(video.duration);
@@ -701,8 +730,10 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
             if (Math.abs(video.currentTime - targetTime) > 0.15) {
                 video.currentTime = targetTime;
             }
-            if (isPlaying && video.paused) {
-                video.play().catch(() => { });
+            if (isPlaying) {
+                if (video.paused) video.play().catch(() => { });
+            } else {
+                if (!video.paused) video.pause();
             }
             // Sync playback rate for preview (Corrected: playbackRate = Footage / Space)
             const videoSpeed = activeVClip.sourceDuration / activeVClip.duration;
@@ -773,6 +804,12 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
         };
     }, [currentTime, isPlaying, tracks]);
 
+    // Use a Ref to keep latest values for shortcuts without frequent rebinding
+    const stateRef = useRef({ currentTime, tracks, selectedClipId });
+    useEffect(() => {
+        stateRef.current = { currentTime, tracks, selectedClipId };
+    });
+
     // Final unmount cleanup
     useEffect(() => {
         const handleKeyDown = (e) => {
@@ -793,17 +830,18 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
             Object.values(audioPlayers.current).forEach(p => p.pause());
             audioPlayers.current = {};
         };
-    }, [selectedClipId]); // Re-bind when selectedClipId changes to have fresh closure if needed, but handleDelete uses state
+    }, []); // Only bind once
 
     const handleTimeUpdate = (e) => {
         // Timeline head drives video currentTime via sync effect
     };
 
     const handleSplit = () => {
-        const clip = getSelectedClip();
+        const { currentTime: cur, tracks: trks, selectedClipId: selId } = stateRef.current;
+        const clip = trks.flatMap(t => t.clips).find(c => c.id === selId);
         if (!clip) return;
 
-        const splitPoint = currentTime - clip.offset;
+        const splitPoint = cur - clip.offset;
         if (splitPoint <= 0 || splitPoint >= clip.duration) return;
 
         const currentStretchFactor = clip.duration / (clip.sourceDuration || clip.duration);
@@ -817,7 +855,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
             start: clip.start + firstPartSourceDuration,
             duration: clip.duration - splitPoint,
             sourceDuration: secondPartSourceDuration,
-            offset: currentTime
+            offset: cur
         };
 
         setTracks(prev => prev.map(track => {
@@ -834,10 +872,11 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
     };
 
     const handleDelete = () => {
-        if (!selectedClipId) return;
+        const { selectedClipId: selId } = stateRef.current;
+        if (!selId) return;
         setTracks(prev => prev.map(track => ({
             ...track,
-            clips: track.clips.filter(c => c.id !== selectedClipId)
+            clips: track.clips.filter(c => c.id !== selId)
         })));
         setSelectedClipId(null);
     };
@@ -960,7 +999,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
         const baseDelta = e.ctrlKey ? 0.01 : 0.1;
         const delta = e.deltaY > 0 ? -baseDelta : baseDelta;
         const currentScale = activeVClip.transform?.scale || 1;
-        const newScale = Math.max(0.1, Math.min(5, currentScale + delta));
+        const newScale = Math.max(0.1, Math.min(10, currentScale + delta));
 
         updateClip(selectedClipId, {
             transform: { ...(activeVClip.transform || { x: 0, y: 0 }), scale: newScale }
@@ -1551,7 +1590,6 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                     {/* Right: Viewer */}
                     <div className="editor-main-area" style={{ display: 'flex', flexDirection: 'column', background: '#050505', borderRadius: 8, overflow: 'hidden' }}>
                         <div className="video-viewport" ref={containerRef} style={{ position: 'relative', flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', userSelect: 'none' }}
-                            onWheel={handleWheel}
                             onMouseDown={handleCanvasMouseDown}
                             onContextMenu={(e) => e.preventDefault()}
                         >
@@ -2362,8 +2400,20 @@ function App() {
                 setVisibleCount(prev => prev + 20);
             }
         };
+
+        // Global block for browser zoom (Ctrl+Wheel) across the whole app
+        const handleGlobalWheel = (e) => {
+            if (e.ctrlKey) {
+                e.preventDefault();
+            }
+        };
+
         window.addEventListener('scroll', handleScroll);
-        return () => window.removeEventListener('scroll', handleScroll);
+        window.addEventListener('wheel', handleGlobalWheel, { passive: false });
+        return () => {
+            window.removeEventListener('scroll', handleScroll);
+            window.removeEventListener('wheel', handleGlobalWheel);
+        };
     }, []);
 
     // Theme effect
