@@ -1495,7 +1495,9 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                 <div className="control-item" style={{ gap: 2 }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                         <label style={{ fontSize: '0.65rem', opacity: 0.8 }}>{t.brightness || 'Brightness'}</label>
-                                        <span style={{ fontSize: '0.6rem', color: 'var(--netflix-red)' }}>{selectedClip.filters?.brightness ?? 100}%</span>
+                                        <input type="number" value={selectedClip.filters?.brightness ?? 100}
+                                            onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, brightness: parseInt(e.target.value) || 0 } })}
+                                            style={{ width: 45, background: 'rgba(255,255,255,0.05)', border: '1px solid #444', color: 'var(--netflix-red)', fontSize: '0.65rem', padding: '1px 3px', borderRadius: 3, textAlign: 'center' }} />
                                     </div>
                                     <input type="range" min="0" max="200" value={selectedClip.filters?.brightness ?? 100} style={{ height: 3 }}
                                         onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, brightness: parseInt(e.target.value) } })} />
@@ -1503,7 +1505,9 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                 <div className="control-item" style={{ gap: 2 }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                         <label style={{ fontSize: '0.65rem', opacity: 0.8 }}>{t.contrast || 'Contrast'}</label>
-                                        <span style={{ fontSize: '0.6rem', color: 'var(--netflix-red)' }}>{selectedClip.filters?.contrast ?? 100}%</span>
+                                        <input type="number" value={selectedClip.filters?.contrast ?? 100}
+                                            onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, contrast: parseInt(e.target.value) || 0 } })}
+                                            style={{ width: 45, background: 'rgba(255,255,255,0.05)', border: '1px solid #444', color: 'var(--netflix-red)', fontSize: '0.65rem', padding: '1px 3px', borderRadius: 3, textAlign: 'center' }} />
                                     </div>
                                     <input type="range" min="0" max="200" value={selectedClip.filters?.contrast ?? 100} style={{ height: 3 }}
                                         onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, contrast: parseInt(e.target.value) } })} />
@@ -1511,7 +1515,9 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                 <div className="control-item" style={{ gap: 2 }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                         <label style={{ fontSize: '0.65rem', opacity: 0.8 }}>{t.saturation || 'Saturation'}</label>
-                                        <span style={{ fontSize: '0.6rem', color: 'var(--netflix-red)' }}>{selectedClip.filters?.saturation ?? 100}%</span>
+                                        <input type="number" value={selectedClip.filters?.saturation ?? 100}
+                                            onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, saturation: parseInt(e.target.value) || 0 } })}
+                                            style={{ width: 45, background: 'rgba(255,255,255,0.05)', border: '1px solid #444', color: 'var(--netflix-red)', fontSize: '0.65rem', padding: '1px 3px', borderRadius: 3, textAlign: 'center' }} />
                                     </div>
                                     <input type="range" min="0" max="200" value={selectedClip.filters?.saturation ?? 100} style={{ height: 3 }}
                                         onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, saturation: parseInt(e.target.value) } })} />
@@ -1519,7 +1525,13 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                 <div className="control-item" style={{ gap: 2 }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                         <label style={{ fontSize: '0.65rem', opacity: 0.8 }}>{t.volume || 'Volume'}</label>
-                                        <span style={{ fontSize: '0.6rem', color: 'var(--netflix-red)' }}>{selectedClip.volume ?? 100}%</span>
+                                        <input type="number" value={selectedClip.volume ?? 100}
+                                            onChange={e => {
+                                                const vol = parseInt(e.target.value) || 0;
+                                                updateClip(selectedClipId, { volume: vol });
+                                                if (videoRef.current) videoRef.current.volume = vol / 100;
+                                            }}
+                                            style={{ width: 45, background: 'rgba(255,255,255,0.05)', border: '1px solid #444', color: 'var(--netflix-red)', fontSize: '0.65rem', padding: '1px 3px', borderRadius: 3, textAlign: 'center' }} />
                                     </div>
                                     <input type="range" min="0" max="200" value={selectedClip.volume ?? 100} style={{ height: 3 }}
                                         onChange={e => {
@@ -1531,15 +1543,24 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                 <div className="control-item" style={{ gap: 2 }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                         <label style={{ fontSize: '0.65rem', opacity: 0.8 }}>{t.scale || 'Scale'}</label>
-                                        <span style={{ fontSize: '0.6rem', color: 'var(--netflix-red)' }}>{(selectedClip.transform?.scale || 1).toFixed(2)}x</span>
+                                        <input type="number" step="0.01" value={(selectedClip.transform?.scale || 1).toFixed(2)}
+                                            onChange={e => updateClip(selectedClipId, { transform: { ...(selectedClip.transform || { x: 0, y: 0 }), scale: parseFloat(e.target.value) || 1 } })}
+                                            style={{ width: 45, background: 'rgba(255,255,255,0.05)', border: '1px solid #444', color: 'var(--netflix-red)', fontSize: '0.65rem', padding: '1px 3px', borderRadius: 3, textAlign: 'center' }} />
                                     </div>
-                                    <input type="range" min="0.1" max="5" step="0.01" value={selectedClip.transform?.scale || 1} style={{ height: 3 }}
+                                    <input type="range" min="0.1" max="10" step="0.01" value={selectedClip.transform?.scale || 1} style={{ height: 3 }}
                                         onChange={e => updateClip(selectedClipId, { transform: { ...(selectedClip.transform || { x: 0, y: 0 }), scale: parseFloat(e.target.value) } })} />
                                 </div>
                                 <div className="control-item" style={{ gap: 2 }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                         <label style={{ fontSize: '0.65rem', opacity: 0.8 }}>{t.playbackSpeed || 'Speed'}</label>
-                                        <span style={{ fontSize: '0.6rem', color: '#ffc107' }}>{((selectedClip.sourceDuration || selectedClip.duration) / selectedClip.duration).toFixed(2)}x</span>
+                                        <input type="number" step="0.01" value={((selectedClip.sourceDuration || selectedClip.duration) / selectedClip.duration).toFixed(2)}
+                                            onChange={e => {
+                                                const newSpeed = parseFloat(e.target.value) || 1;
+                                                const sourceDur = selectedClip.sourceDuration || selectedClip.duration;
+                                                const newTimelineDur = sourceDur / newSpeed;
+                                                updateClip(selectedClipId, { duration: newTimelineDur, sourceDuration: sourceDur });
+                                            }}
+                                            style={{ width: 45, background: 'rgba(255,255,255,0.05)', border: '1px solid #444', color: '#ffc107', fontSize: '0.65rem', padding: '1px 3px', borderRadius: 3, textAlign: 'center' }} />
                                     </div>
                                     <input type="range" min="0.1" max="5" step="0.01" value={(selectedClip.sourceDuration || selectedClip.duration) / selectedClip.duration} style={{ height: 3 }}
                                         onChange={e => {
