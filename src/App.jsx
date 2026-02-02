@@ -1464,27 +1464,27 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
     };
 
     return (
-        <div className="modal-overlay editor-overlay" style={{ zIndex: 7000 }}>
-            <div className="modal editor-modal video-editor-modal" style={{ height: '95vh', width: '98vw', padding: '10px' }}
+        <div className="modal-overlay editor-overlay" style={{ zIndex: 7000, background: 'rgba(0,0,0,0.7)' }}>
+            <div className="modal editor-modal video-editor-modal" style={{ height: '95vh', width: '98vw', padding: '10px', background: 'var(--bg-secondary)', color: 'var(--text-primary)', display: 'flex', flexDirection: 'column' }}
                 onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onClick={e => e.stopPropagation()}>
 
                 <div className="modal-header" style={{ marginBottom: '10px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                         <Scissors size={18} color="var(--netflix-red)" />
-                        <h4 style={{ margin: 0 }}>{t.editVideo || 'Pro Video Editor'}</h4>
+                        <h4 style={{ margin: 0, color: 'var(--text-primary)' }}>{t.editVideo || 'Pro Video Editor'}</h4>
                     </div>
                     <div style={{ display: 'flex', gap: 10 }}>
-                        <button className="btn btn-grey" onClick={() => setShowHelp(true)} data-tooltip={t.help || 'Help'}>
+                        <button className="btn btn-grey" style={{ background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border-color)' }} onClick={() => setShowHelp(true)} data-tooltip={t.help || 'Help'}>
                             <Info size={18} />
                         </button>
                         <button className="btn btn-primary" onClick={() => handleSave()} disabled={isProcessing} data-tooltip={t.export || 'Save'}>
                             {isProcessing ? <div className="spinner-small" /> : <Save size={16} style={{ marginRight: 5 }} />}
                             {t.export || 'Export'}
                         </button>
-                        <button className="btn" onClick={() => setShowSaveAs(true)} disabled={isProcessing} style={{ background: '#46d369', color: 'white' }} data-tooltip={t.saveAs || 'Save As...'}>
+                        <button className="btn" onClick={() => setShowSaveAs(true)} disabled={isProcessing} style={{ background: '#46d369', color: 'white', border: 'none' }} data-tooltip={t.saveAs || 'Save As...'}>
                             <Plus size={16} style={{ marginRight: 5 }} /> {t.saveAs || 'Save As...'}
                         </button>
-                        <button className="btn btn-grey" onClick={onClose} disabled={isProcessing} data-tooltip={t.close || 'Close'}><X size={20} /></button>
+                        <button className="btn btn-grey" style={{ background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border-color)' }} onClick={onClose} disabled={isProcessing} data-tooltip={t.close || 'Close'}><X size={20} /></button>
                     </div>
                 </div>
 
@@ -1492,49 +1492,49 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
 
                     {/* Left: properties */}
                     <div className="editor-sidebar sidebar-group" style={{ overflowY: 'auto', padding: '10px 8px' }}>
-                        <label style={{ fontSize: '0.65rem', fontWeight: 'bold', letterSpacing: '1px', marginBottom: 8, display: 'block', color: 'white', textAlign: 'center' }}>{t.clipProperties || 'CLIP PROPERTIES'}</label>
+                        <label style={{ fontSize: '0.65rem', fontWeight: 'bold', letterSpacing: '1px', marginBottom: 8, display: 'block', color: 'var(--text-primary)', textAlign: 'center' }}>{t.clipProperties || 'CLIP PROPERTIES'}</label>
                         {selectedClip ? (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                                 <div className="control-item" style={{ gap: 2 }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <label style={{ fontSize: '0.65rem', opacity: 0.8 }}>{t.brightness || 'Brightness'}</label>
+                                        <label style={{ fontSize: '0.65rem', opacity: 0.8, color: 'var(--text-primary)' }}>{t.brightness || 'Brightness'}</label>
                                         <input type="number" value={selectedClip.filters?.brightness ?? 100}
                                             onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, brightness: parseInt(e.target.value) || 0 } })}
-                                            style={{ width: 45, background: 'rgba(255,255,255,0.05)', border: '1px solid #444', color: 'var(--netflix-red)', fontSize: '0.65rem', padding: '1px 3px', borderRadius: 3, textAlign: 'center' }} />
+                                            style={{ width: 45, background: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: 'var(--netflix-red)', fontSize: '0.65rem', padding: '1px 3px', borderRadius: 3, textAlign: 'center' }} />
                                     </div>
                                     <input type="range" min="0" max="200" value={selectedClip.filters?.brightness ?? 100} style={{ height: 3 }}
                                         onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, brightness: parseInt(e.target.value) } })} />
                                 </div>
                                 <div className="control-item" style={{ gap: 2 }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <label style={{ fontSize: '0.65rem', opacity: 0.8 }}>{t.contrast || 'Contrast'}</label>
+                                        <label style={{ fontSize: '0.65rem', opacity: 0.8, color: 'var(--text-primary)' }}>{t.contrast || 'Contrast'}</label>
                                         <input type="number" value={selectedClip.filters?.contrast ?? 100}
                                             onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, contrast: parseInt(e.target.value) || 0 } })}
-                                            style={{ width: 45, background: 'rgba(255,255,255,0.05)', border: '1px solid #444', color: 'var(--netflix-red)', fontSize: '0.65rem', padding: '1px 3px', borderRadius: 3, textAlign: 'center' }} />
+                                            style={{ width: 45, background: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: 'var(--netflix-red)', fontSize: '0.65rem', padding: '1px 3px', borderRadius: 3, textAlign: 'center' }} />
                                     </div>
                                     <input type="range" min="0" max="200" value={selectedClip.filters?.contrast ?? 100} style={{ height: 3 }}
                                         onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, contrast: parseInt(e.target.value) } })} />
                                 </div>
                                 <div className="control-item" style={{ gap: 2 }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <label style={{ fontSize: '0.65rem', opacity: 0.8 }}>{t.saturation || 'Saturation'}</label>
+                                        <label style={{ fontSize: '0.65rem', opacity: 0.8, color: 'var(--text-primary)' }}>{t.saturation || 'Saturation'}</label>
                                         <input type="number" value={selectedClip.filters?.saturation ?? 100}
                                             onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, saturation: parseInt(e.target.value) || 0 } })}
-                                            style={{ width: 45, background: 'rgba(255,255,255,0.05)', border: '1px solid #444', color: 'var(--netflix-red)', fontSize: '0.65rem', padding: '1px 3px', borderRadius: 3, textAlign: 'center' }} />
+                                            style={{ width: 45, background: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: 'var(--netflix-red)', fontSize: '0.65rem', padding: '1px 3px', borderRadius: 3, textAlign: 'center' }} />
                                     </div>
                                     <input type="range" min="0" max="200" value={selectedClip.filters?.saturation ?? 100} style={{ height: 3 }}
                                         onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, saturation: parseInt(e.target.value) } })} />
                                 </div>
                                 <div className="control-item" style={{ gap: 2 }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <label style={{ fontSize: '0.65rem', opacity: 0.8 }}>{t.volume || 'Volume'}</label>
+                                        <label style={{ fontSize: '0.65rem', opacity: 0.8, color: 'var(--text-primary)' }}>{t.volume || 'Volume'}</label>
                                         <input type="number" value={selectedClip.volume ?? 100}
                                             onChange={e => {
                                                 const vol = parseInt(e.target.value) || 0;
                                                 updateClip(selectedClipId, { volume: vol });
                                                 if (videoRef.current) videoRef.current.volume = vol / 100;
                                             }}
-                                            style={{ width: 45, background: 'rgba(255,255,255,0.05)', border: '1px solid #444', color: 'var(--netflix-red)', fontSize: '0.65rem', padding: '1px 3px', borderRadius: 3, textAlign: 'center' }} />
+                                            style={{ width: 45, background: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: 'var(--netflix-red)', fontSize: '0.65rem', padding: '1px 3px', borderRadius: 3, textAlign: 'center' }} />
                                     </div>
                                     <input type="range" min="0" max="200" value={selectedClip.volume ?? 100} style={{ height: 3 }}
                                         onChange={e => {
@@ -1545,17 +1545,17 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                 </div>
                                 <div className="control-item" style={{ gap: 2 }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <label style={{ fontSize: '0.65rem', opacity: 0.8 }}>{t.scale || 'Scale'}</label>
+                                        <label style={{ fontSize: '0.65rem', opacity: 0.8, color: 'var(--text-primary)' }}>{t.scale || 'Scale'}</label>
                                         <input type="number" step="0.01" value={(selectedClip.transform?.scale || 1).toFixed(2)}
                                             onChange={e => updateClip(selectedClipId, { transform: { ...(selectedClip.transform || { x: 0, y: 0 }), scale: parseFloat(e.target.value) || 1 } })}
-                                            style={{ width: 45, background: 'rgba(255,255,255,0.05)', border: '1px solid #444', color: 'var(--netflix-red)', fontSize: '0.65rem', padding: '1px 3px', borderRadius: 3, textAlign: 'center' }} />
+                                            style={{ width: 45, background: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: 'var(--netflix-red)', fontSize: '0.65rem', padding: '1px 3px', borderRadius: 3, textAlign: 'center' }} />
                                     </div>
                                     <input type="range" min="0.1" max="10" step="0.01" value={selectedClip.transform?.scale || 1} style={{ height: 3 }}
                                         onChange={e => updateClip(selectedClipId, { transform: { ...(selectedClip.transform || { x: 0, y: 0 }), scale: parseFloat(e.target.value) } })} />
                                 </div>
                                 <div className="control-item" style={{ gap: 2 }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <label style={{ fontSize: '0.65rem', opacity: 0.8 }}>{t.playbackSpeed || 'Speed'}</label>
+                                        <label style={{ fontSize: '0.65rem', opacity: 0.8, color: 'var(--text-primary)' }}>{t.playbackSpeed || 'Speed'}</label>
                                         <input type="number" step="0.01" value={((selectedClip.sourceDuration || selectedClip.duration) / selectedClip.duration).toFixed(2)}
                                             onChange={e => {
                                                 const newSpeed = parseFloat(e.target.value) || 1;
@@ -1563,7 +1563,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                                 const newTimelineDur = sourceDur / newSpeed;
                                                 updateClip(selectedClipId, { duration: newTimelineDur, sourceDuration: sourceDur });
                                             }}
-                                            style={{ width: 45, background: 'rgba(255,255,255,0.05)', border: '1px solid #444', color: '#ffc107', fontSize: '0.65rem', padding: '1px 3px', borderRadius: 3, textAlign: 'center' }} />
+                                            style={{ width: 45, background: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: '#ffc107', fontSize: '0.65rem', padding: '1px 3px', borderRadius: 3, textAlign: 'center' }} />
                                     </div>
                                     <input type="range" min="0.1" max="5" step="0.01" value={(selectedClip.sourceDuration || selectedClip.duration) / selectedClip.duration} style={{ height: 3 }}
                                         onChange={e => {
@@ -1573,47 +1573,46 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                             updateClip(selectedClipId, { duration: newTimelineDur, sourceDuration: sourceDur });
                                         }} />
                                 </div>
-                                <button className="action-btn" style={{ width: '100%', background: '#387f85', color: 'white', justifyContent: 'center', fontSize: '0.8rem', padding: '6px' }} onClick={() => updateClip(selectedClipId, { filters: { brightness: 100, contrast: 100, saturation: 100, gamma: 1.0 }, volume: 100 })}>
+                                <button className="action-btn" style={{ width: '100%', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', justifyContent: 'center', fontSize: '0.8rem', padding: '6px' }} onClick={() => updateClip(selectedClipId, { filters: { brightness: 100, contrast: 100, saturation: 100, gamma: 1.0 }, volume: 100 })}>
                                     <RotateCw size={14} style={{ marginRight: 8 }} /> {t.resetFilters || 'Reset Filters'}
                                 </button>
 
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 5 }}>
-                                    <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-                                        <button className="action-btn" style={{ width: 34, height: 34, justifyContent: 'center' }} onClick={() => updateClip(selectedClipId, { rotate: ((selectedClip.rotate || 0) + 90) % 360 })} data-tooltip={t?.rotate || 'Rotate'}>
+                                    <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', justifyContent: 'flex-start' }}>
+                                        <button className="action-btn" style={{ width: 34, height: 34, background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} onClick={() => updateClip(selectedClipId, { rotate: ((selectedClip.rotate || 0) + 90) % 360 })} data-tooltip={t?.rotate || 'Rotate'}>
                                             <RotateCw size={16} />
                                         </button>
-                                        <button className={`action-btn ${selectedClip.flipH ? 'active' : ''}`} style={{ width: 34, height: 34, justifyContent: 'center' }} onClick={() => updateClip(selectedClipId, { flipH: !selectedClip.flipH })} data-tooltip={t?.flipH || 'Flip H'}>
+                                        <button className={`action-btn ${selectedClip.flipH ? 'active' : ''}`} style={{ width: 34, height: 34, background: selectedClip.flipH ? 'var(--netflix-red)' : 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} onClick={() => updateClip(selectedClipId, { flipH: !selectedClip.flipH })} data-tooltip={t?.flipH || 'Flip H'}>
                                             <Maximize2 size={16} style={{ transform: 'rotate(90deg)' }} />
                                         </button>
-                                        <button className={`action-btn ${selectedClip.flipV ? 'active' : ''}`} style={{ width: 34, height: 34, justifyContent: 'center' }} onClick={() => updateClip(selectedClipId, { flipV: !selectedClip.flipV })} data-tooltip={t?.flipV || 'Flip V'}>
+                                        <button className={`action-btn ${selectedClip.flipV ? 'active' : ''}`} style={{ width: 34, height: 34, background: selectedClip.flipV ? 'var(--netflix-red)' : 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} onClick={() => updateClip(selectedClipId, { flipV: !selectedClip.flipV })} data-tooltip={t?.flipV || 'Flip V'}>
                                             <Maximize2 size={16} />
                                         </button>
-                                        <button className="action-btn" style={{ width: 34, height: 34, justifyContent: 'center' }} onClick={() => updateClip(selectedClipId, { rotate: 0, flipH: false, flipV: false, transform: { ...(selectedClip.transform || { x: 0, y: 0 }), scale: 1 } })} data-tooltip={t.resetTransform || 'Reset Transform'}>
+                                        <button className="action-btn" style={{ width: 34, height: 34, background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} onClick={() => updateClip(selectedClipId, { rotate: 0, flipH: false, flipV: false, transform: { ...(selectedClip.transform || { x: 0, y: 0 }), scale: 1 } })} data-tooltip={t.resetTransform || 'Reset Transform'}>
                                             <CornerUpLeft size={16} />
                                         </button>
                                     </div>
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5 }}>
-                                        <button className="action-btn" style={{ background: 'var(--netflix-red)', color: 'white' }} onClick={() => {
+                                        <button className="action-btn" style={{ background: 'var(--netflix-red)', color: 'white', border: 'none' }} onClick={() => {
                                             const sw = selectedClip.sourceWidth || canvasSize.w;
                                             const sh = selectedClip.sourceHeight || canvasSize.h;
                                             updateClip(selectedClipId, { transform: { ...(selectedClip.transform || { x: 0, y: 0 }), x: (canvasSize.w - sw) / 2, y: (canvasSize.h - sh) / 2 } });
                                         }} data-tooltip={t.center || 'Center'}>
                                             <Monitor size={16} style={{ marginRight: 8 }} /> {t.center || 'Center'}
                                         </button>
-                                        <button className="action-btn" onClick={() => updateClip(selectedClipId, { transform: { ...(selectedClip.transform || { x: 0, y: 0 }), x: 0, y: 0 } })} data-tooltip={t.resetPosition || 'Reset Position'}>
+                                        <button className="action-btn" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} onClick={() => updateClip(selectedClipId, { transform: { ...(selectedClip.transform || { x: 0, y: 0 }), x: 0, y: 0 } })} data-tooltip={t.resetPosition || 'Reset Position'}>
                                             <Maximize2 size={16} style={{ marginRight: 8 }} /> {t.reset || 'Reset'}
                                         </button>
                                     </div>
                                 </div>
                                 <div style={{ marginTop: 10 }}>
-                                    <label style={{ fontSize: '0.75rem', color: '#888', marginBottom: 8, display: 'block' }}>{t?.aspectRatio || 'Aspect Ratio'}</label>
+                                    <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: 8, display: 'block' }}>{t?.aspectRatio || 'Aspect Ratio'}</label>
                                     <div className="ratio-presets" style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-
-                                        <button className="action-btn" style={{ padding: '2px 8px', fontSize: '0.7rem' }} onClick={() => setAspectRatio(1)}>1:1</button>
-                                        <button className="action-btn" style={{ padding: '2px 8px', fontSize: '0.7rem' }} onClick={() => setAspectRatio(16 / 9)}>16:9</button>
-                                        <button className="action-btn" style={{ padding: '2px 8px', fontSize: '0.7rem' }} onClick={() => setAspectRatio(9 / 16)}>9:16</button>
-                                        <button className="action-btn" style={{ padding: '2px 8px', fontSize: '0.7rem' }} onClick={() => setAspectRatio(4 / 3)}>4:3</button>
-                                        <button className="action-btn" style={{ padding: '2px 8px', fontSize: '0.7rem' }} onClick={() => setAspectRatio(21 / 9)}>21:9</button>
+                                        <button className="action-btn" style={{ padding: '2px 8px', fontSize: '0.7rem', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} onClick={() => setAspectRatio(1)}>1:1</button>
+                                        <button className="action-btn" style={{ padding: '2px 8px', fontSize: '0.7rem', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} onClick={() => setAspectRatio(16 / 9)}>16:9</button>
+                                        <button className="action-btn" style={{ padding: '2px 8px', fontSize: '0.7rem', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} onClick={() => setAspectRatio(9 / 16)}>9:16</button>
+                                        <button className="action-btn" style={{ padding: '2px 8px', fontSize: '0.7rem', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} onClick={() => setAspectRatio(4 / 3)}>4:3</button>
+                                        <button className="action-btn" style={{ padding: '2px 8px', fontSize: '0.7rem', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} onClick={() => setAspectRatio(21 / 9)}>21:9</button>
                                     </div>
                                 </div>
                             </div>
@@ -1623,8 +1622,8 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                     </div>
 
                     {/* Right: Viewer */}
-                    <div className="editor-main-area" style={{ display: 'flex', flexDirection: 'column', background: '#1c1c1c', borderRadius: 8, overflow: 'hidden' }}>
-                        <div className="video-viewport" ref={containerRef} style={{ position: 'relative', flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', userSelect: 'none', background: '#111' }}
+                    <div className="editor-main-area" style={{ display: 'flex', flexDirection: 'column', background: 'var(--bg-primary)', borderLeft: '1px solid var(--border-color)', borderRadius: 8, overflow: 'hidden' }}>
+                        <div className="video-viewport video-viewport-container" ref={containerRef}
                             onMouseDown={handleCanvasMouseDown}
                             onContextMenu={(e) => e.preventDefault()}
                         >
@@ -1884,19 +1883,19 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                             )}
 
                             {/* Viewer Controls */}
-                            <div style={{ position: 'absolute', bottom: -5, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 15, background: 'rgba(0,0,0,0.5)', padding: '5px 15px', borderRadius: 20 }}>
-                                <button className="action-btn" onClick={() => setCurrentTime(prev => Math.max(0, prev - 0.1))}><ChevronLeft size={20} /></button>
-                                <button className="action-btn" onClick={togglePlay}>
+                            <div style={{ position: 'absolute', bottom: -5, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 15, background: 'rgba(0,0,0,0.6)', padding: '5px 15px', borderRadius: 20 }}>
+                                <button className="action-btn" style={{ background: 'transparent', border: 'none', color: 'white' }} onClick={() => setCurrentTime(prev => Math.max(0, prev - 0.1))}><ChevronLeft size={20} /></button>
+                                <button className="action-btn" style={{ background: 'transparent', border: 'none', color: 'white' }} onClick={togglePlay}>
                                     {isPlaying ? <Pause size={24} fill="white" /> : <Play size={24} fill="white" />}
                                 </button>
-                                <button className="action-btn" onClick={() => setCurrentTime(prev => Math.min(timelineDuration, prev + 0.1))}><ChevronRight size={20} /></button>
+                                <button className="action-btn" style={{ background: 'transparent', border: 'none', color: 'white' }} onClick={() => setCurrentTime(prev => Math.min(timelineDuration, prev + 0.1))}><ChevronRight size={20} /></button>
                             </div>
                         </div>
                     </div>
 
                     {/* Bottom: Timeline */}
-                    <div style={{ gridColumn: '1 / -1', background: '#111', borderRadius: 8, display: 'flex', flexDirection: 'column', overflow: 'visible' }}>
-                        <div style={{ padding: '5px 10px', display: 'flex', gap: 10, borderBottom: '1px solid #222', alignItems: 'center', overflow: 'visible' }}>
+                    <div style={{ gridColumn: '1 / -1', background: 'var(--bg-secondary)', borderRadius: 8, display: 'flex', flexDirection: 'column', overflow: 'visible', border: '1px solid var(--border-color)' }}>
+                        <div className="video-editor-toolbar" style={{ overflow: 'visible' }}>
                             <div className="btn-group" style={{ overflow: 'visible' }}>
                                 <button className={`action-btn ${activeTool === 'select' ? 'active' : ''}`} onClick={() => setActiveTool('select')} data-tooltip={t.selectionTool || 'Selection Tool'}><Search size={14} /></button>
                                 <button className={`action-btn ${activeTool === 'transform' ? 'active' : ''}`} onClick={() => setActiveTool('transform')} data-tooltip={t.moveAndScale || 'Move & Scale'}><Maximize2 size={14} /></button>
@@ -1904,19 +1903,21 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                 <button className={`action-btn ${activeTool === 'split' ? 'active' : ''}`} onClick={handleSplit} data-tooltip={t.splitAtScrubber || 'Split at Scrubber'}><Scissors size={14} /></button>
                                 <button className={`action-btn ${activeTool === 'delete' ? 'active' : ''}`} onClick={handleDelete} data-tooltip={t.deleteSelectedClip || 'Delete Selected Clip'}><Trash size={14} /></button>
                                 <button className="action-btn" onClick={packClips} data-tooltip={t.packClips || 'Pack Clips (Remove Gaps)'}><Droplet size={14} /></button>
-                                <div style={{ width: 1, height: 20, background: '#333', margin: '0 5px' }} />
-                                <button className="action-btn" onClick={handleScreenshot} data-tooltip={t.takeScreenshot || 'Take Screenshot'} style={{ color: screenshotSuccess ? '#46d369' : 'white' }}>
-                                    <Camera size={14} />
-                                </button>
-                                <div style={{ width: 1, height: 20, background: '#333', margin: '0 5px' }} />
-                                <button className="action-btn" onClick={() => addTrack('video')} data-tooltip={t.addVideoTrack || 'Add Video Track'} style={{ color: '#e50914' }}><Plus size={14} /> {t.videoLayer || 'Video Layer'}</button>
-                                <button className="action-btn" onClick={() => addTrack('audio')} data-tooltip={t.addAudioTrack || 'Add Audio Track'} style={{ color: '#46d369' }}><Plus size={14} /> {t.audioLayer || 'Audio Layer'}</button>
                             </div>
-                            <div style={{ flex: 1, textAlign: 'center', fontSize: '0.85rem', color: '#888', fontFamily: 'monospace' }}>
+                            <div className="toolbar-separator" />
+                            <button className="action-btn" onClick={handleScreenshot} data-tooltip={t.takeScreenshot || 'Take Screenshot'} style={{ color: screenshotSuccess ? '#46d369' : 'var(--text-primary)', border: 'none', background: 'transparent' }}>
+                                <Camera size={14} />
+                            </button>
+                            <div className="toolbar-separator" />
+                            <div className="btn-group" style={{ overflow: 'visible' }}>
+                                <button className="action-btn" onClick={() => addTrack('video')} data-tooltip={t.addVideoTrack || 'Add Video Track'} style={{ color: '#e50914' }}><Plus size={14} /> <span style={{ fontSize: '0.7rem' }}>{t.videoLayer || 'Video Layer'}</span></button>
+                                <button className="action-btn" onClick={() => addTrack('audio')} data-tooltip={t.addAudioTrack || 'Add Audio Track'} style={{ color: '#46d369' }}><Plus size={14} /> <span style={{ fontSize: '0.7rem' }}>{t.audioLayer || 'Audio Layer'}</span></button>
+                            </div>
+                            <div style={{ flex: 1, textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
                                 {formatTime(currentTime)} / {formatTime(contentDuration)}
                             </div>
 
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#222', padding: '2px 8px', borderRadius: 15 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg-primary)', padding: '2px 10px', borderRadius: 15, border: '1px solid var(--border-color)' }}>
                                 <Search size={14} style={{ opacity: 0.5 }} />
                                 <input type="range" min="5" max="200" value={zoomLevel} onChange={e => setZoomLevel(parseInt(e.target.value))} style={{ width: 80, height: 4 }} />
                             </div>
@@ -1925,7 +1926,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                         <div className="timeline-tracks"
                             onMouseDown={handleTimelineClick}
                             ref={timelineRef}
-                            style={{ flex: 1, overflowX: 'auto', overflowY: 'auto', position: 'relative', background: '#0a0a0a', cursor: 'crosshair' }}>
+                            style={{ flex: 1, overflowX: 'auto', overflowY: 'auto', position: 'relative', background: 'var(--bg-primary)', cursor: 'crosshair' }}>
 
                             <div className="timeline-content" style={{
                                 position: 'relative',
@@ -1934,7 +1935,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                 minWidth: '100%',
                                 display: 'flex',
                                 flexDirection: 'column',
-                                background: '#000'
+                                background: 'var(--bg-primary)'
                             }}>
                                 {/* Time Ruler */}
                                 <div
@@ -1945,13 +1946,13 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                         top: 0,
                                         left: 0,
                                         zIndex: 1000,
-                                        background: '#0a0a0a',
-                                        borderBottom: '2px solid #333',
+                                        background: 'var(--bg-secondary)',
+                                        borderBottom: '2px solid var(--border-color)',
                                         display: 'flex',
                                         cursor: 'pointer'
                                     }}>
-                                    <div style={{ width: 80, flexShrink: 0, background: '#050505', borderRight: '2px solid #333', position: 'sticky', left: 0, zIndex: 1001 }} />
-                                    <div style={{ position: 'relative', flex: 1, height: '100%', background: '#0a0a0a' }}>
+                                    <div style={{ width: 80, flexShrink: 0, background: 'var(--bg-card)', borderRight: '2px solid var(--border-color)', position: 'sticky', left: 0, zIndex: 1001 }} />
+                                    <div style={{ position: 'relative', flex: 1, height: '100%', background: 'var(--bg-secondary)' }}>
                                         {Array.from({ length: Math.ceil(timelineDuration / 5) + 2 }).map((_, i) => (
                                             <div key={i} style={{ position: 'absolute', left: (i * 5) * zoomLevel, borderLeft: '1px solid #444', height: i % 2 === 0 ? 15 : 8, paddingLeft: 3 }}>
                                                 {i % 2 === 0 && <span style={{ fontSize: '0.6rem', color: '#888' }}>{formatTime(i * 5)}</span>}
@@ -1961,10 +1962,10 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                 </div>
                                 {/* Sol Sütun Koruma Katmanı (Yükseklik dinamik: tracks.length * 45) */}
                                 <div style={{ position: 'sticky', left: 0, width: 80, height: 0, zIndex: 925, pointerEvents: 'none', overflow: 'visible' }}>
-                                    <div style={{ width: 80, height: tracks.length * 35, background: '#151515', borderRight: '2px solid #333' }} />
+                                    <div style={{ width: 80, height: tracks.length * 35, background: 'var(--bg-secondary)', borderRight: '2px solid var(--border-color)' }} />
                                 </div>
                                 {tracks.map((track, idx) => (
-                                    <div key={track.id} style={{ display: 'grid', gridTemplateColumns: '80px 1fr', gap: 0, marginBottom: 0, minHeight: 35, borderBottom: '1px solid #222', background: '#000', position: 'relative' }}>
+                                    <div key={track.id} style={{ display: 'grid', gridTemplateColumns: '80px 1fr', gap: 0, marginBottom: 0, minHeight: 35, borderBottom: '1px solid var(--border-color)', background: 'var(--bg-primary)', position: 'relative' }}>
                                         <div
                                             className={`track-header ${dragTrackIndex === idx ? 'dragging' : ''}`}
                                             draggable
@@ -1972,7 +1973,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                             onDragOver={(e) => handleDragOver(e, idx)}
                                             onDragEnd={handleDrop}
                                             onMouseDown={(e) => e.stopPropagation()} // Timeline click'i engeller
-                                            style={{ color: '#eee', fontSize: '0.7rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#151515', borderRight: '2px solid #333', borderBottom: '1px solid #222', position: 'sticky', left: 0, zIndex: 950, padding: '0 5px', cursor: 'grab', height: '100%', boxSizing: 'border-box' }}
+                                            style={{ color: 'var(--text-primary)', fontSize: '0.7rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--bg-card)', borderRight: '2px solid var(--border-color)', borderBottom: '1px solid var(--border-color)', position: 'sticky', left: 0, zIndex: 950, padding: '0 5px', cursor: 'grab', height: '100%', boxSizing: 'border-box' }}
                                         >
                                             <div style={{ display: 'flex', alignItems: 'center', gap: 4, pointerEvents: 'none' }}>
                                                 <Layers size={12} style={{ opacity: 0.3 }} />
@@ -1986,7 +1987,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                             </div>
                                         </div>
                                         <div
-                                            style={{ position: 'relative', background: '#080808' }}
+                                            style={{ position: 'relative', background: 'var(--bg-primary)' }}
                                             onMouseEnter={() => {
                                                 if (isDragging?.type === 'clip') {
                                                     moveClipToTrack(isDragging.id, track.id);

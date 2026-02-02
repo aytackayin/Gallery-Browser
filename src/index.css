@@ -36,23 +36,30 @@ body {
 
 /* Webkit Scrollbar (Chrome, Edge, Safari) */
 ::-webkit-scrollbar {
-  width: 8px; /* İnce ve zarif */
-  height: 8px; /* Yatay scroll için */
+  width: 8px;
+  /* İnce ve zarif */
+  height: 8px;
+  /* Yatay scroll için */
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--bg-primary); /* Arkaplan ile uyumlu */
+  background: var(--bg-primary);
+  /* Arkaplan ile uyumlu */
   border-radius: 10px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background-color: var(--border-color); /* Silik gri ton */
-  border-radius: 10px; /* Yuvarlak hatlar */
-  border: 2px solid var(--bg-primary); /* Kenarlardan boşluk bırakarak daha ince görünüm */
+  background-color: var(--border-color);
+  /* Silik gri ton */
+  border-radius: 10px;
+  /* Yuvarlak hatlar */
+  border: 2px solid var(--bg-primary);
+  /* Kenarlardan boşluk bırakarak daha ince görünüm */
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background-color: var(--text-secondary); /* Üzerine gelince belirginleşsin */
+  background-color: var(--text-secondary);
+  /* Üzerine gelince belirginleşsin */
 }
 
 /* NAVBAR & SEARCH */
@@ -250,19 +257,28 @@ body {
 }
 
 .action-btn {
-  background: rgba(255, 255, 255, 0.1);
-  border: none;
-  color: white;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
   padding: 5px;
   border-radius: 4px;
   cursor: pointer;
   transition: 0.2s;
   display: flex;
   align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 
 .action-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--bg-secondary);
+  border-color: var(--netflix-red);
+}
+
+.action-btn.active {
+  background: var(--netflix-red);
+  color: white;
+  border-color: var(--netflix-red);
 }
 
 .delete-btn:hover {
@@ -441,9 +457,14 @@ textarea:focus {
 }
 
 .btn-grey {
-  background: #333;
-  color: white;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
   margin-left: 10px;
+}
+
+.btn-grey:hover {
+  background: var(--bg-secondary);
 }
 
 /* Viewer & Fixed Navigation */
@@ -1141,27 +1162,29 @@ select:focus {
 
 .btn-group {
   display: flex;
-  background: #111;
+  background: var(--bg-card);
   border-radius: 8px;
   overflow: hidden;
-  border: 1px solid #222;
+  border: 1px solid var(--border-color);
 }
 
 .btn-group .action-btn {
   border-radius: 0;
   border: none;
   background: transparent;
-  padding: 8px 12px;
-  color: #aaa;
+  padding: 6px 10px;
+  color: var(--text-secondary);
+  min-width: 34px;
+  height: 32px;
 }
 
 .btn-group .action-btn:not(:last-child) {
-  border-right: 1px solid #222;
+  border-right: 1px solid var(--border-color);
 }
 
 .btn-group .action-btn:hover {
-  background: #222;
-  color: #fff;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
 }
 
 .btn-group .action-btn.active {
@@ -1170,13 +1193,13 @@ select:focus {
 }
 
 .sidebar-group label {
-  color: #888;
+  color: var(--text-secondary);
   letter-spacing: 0.5px;
 }
 
 .control-item label {
   font-size: 0.75rem;
-  color: #aaa;
+  color: var(--text-secondary);
 }
 
 /* Playhead handle marker */
@@ -1275,4 +1298,87 @@ select:focus {
 
 .track-header.drag-over {
   border-top: 2px solid var(--netflix-red) !important;
+}
+
+/* --- Video Editor UI Enhancements --- */
+.video-editor-modal input:focus,
+.video-editor-modal button:focus,
+.video-editor-modal div:focus {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Custom Number Input Style for Editor */
+.video-editor-modal input[type="number"] {
+  outline: none;
+  border: 1px solid var(--border-color);
+  transition: border-color 0.2s;
+}
+
+.video-editor-modal input[type="number"]:focus {
+  border-color: var(--netflix-red) !important;
+}
+
+/* Slider (Range) Theme Support */
+.video-editor-modal input[type="range"] {
+  accent-color: var(--netflix-red);
+}
+
+.video-editor-modal {
+  background-color: var(--bg-secondary) !important;
+  color: var(--text-primary) !important;
+}
+
+.video-editor-modal .modal-header h4 {
+  color: var(--text-primary) !important;
+}
+
+.video-editor-modal .editor-sidebar {
+  background-color: var(--bg-primary);
+  border-right: 1px solid var(--border-color);
+}
+
+.video-editor-modal .sidebar-group {
+  border-bottom: 1px solid var(--border-color);
+}
+
+/* Custom Scrollbar for Editor Layouts */
+.video-editor-modal *::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.video-editor-modal *::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 3px;
+}
+
+.video-editor-toolbar {
+  background-color: var(--bg-card) !important;
+  border-bottom: 1px solid var(--border-color);
+  padding: 4px 8px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  min-height: 40px;
+}
+
+.toolbar-separator {
+  width: 1px;
+  height: 20px;
+  background-color: var(--border-color);
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+
+.video-viewport-container {
+  background-color: #0c0c0c !important;
+  /* Keep viewport dark for video contrast */
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  user-select: none;
 }
