@@ -311,6 +311,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
     const [isPlaying, setIsPlaying] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
     const [canvasSize, setCanvasSize] = useState({ w: 1920, h: 1080 });
+    const [originalSize, setOriginalSize] = useState(null);
     const [snapLines, setSnapLines] = useState([]);
     const VIDEO_WIDTH = canvasSize.w;
     const VIDEO_HEIGHT = canvasSize.h;
@@ -564,13 +565,18 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
             try {
                 const res = await fetch(`/api/info?path=${encodeURIComponent(item.path)}`);
                 const info = await res.json();
-                if (info && info.durationSeconds) {
-                    syncDuration(info.durationSeconds);
-                    // Also update initial clip duration if it's missing
-                    setTracks(prev => prev.map(t => ({
-                        ...t,
-                        clips: t.clips.map(c => (c.id === 'clip-0' && (!c.duration || c.duration === 0)) ? { ...c, duration: info.durationSeconds } : c)
-                    })));
+                if (info) {
+                    if (info.width && info.height) {
+                        setOriginalSize({ w: info.width, h: info.height });
+                    }
+                    if (info.durationSeconds) {
+                        syncDuration(info.durationSeconds);
+                        // Also update initial clip duration if it's missing
+                        setTracks(prev => prev.map(t => ({
+                            ...t,
+                            clips: t.clips.map(c => (c.id === 'clip-0' && (!c.duration || c.duration === 0)) ? { ...c, duration: info.durationSeconds } : c)
+                        })));
+                    }
                 }
             } catch (e) {
                 console.error("API duration fetch failed:", e);
@@ -621,6 +627,10 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
             if (Object.keys(updates).length > 0) {
                 updateClip(activeVClip.id, updates);
             }
+        }
+
+        if (video.videoWidth && video.videoHeight) {
+            setOriginalSize({ w: video.videoWidth, h: video.videoHeight });
         }
 
         // Set canvas to video size initially if it's the first load
@@ -1690,6 +1700,20 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                             style={{ width: 55, background: 'rgba(255,255,255,0.05)', border: '1px solid #444', color: '#fff', fontSize: '0.75rem', padding: '1px 4px', borderRadius: 3, textAlign: 'center', outline: 'none' }}
                                         />
                                         <span style={{ color: '#aaa', marginLeft: 2 }}>px</span>
+                                        <div style={{ width: 1, height: 16, background: 'rgba(255,255,255,0.2)', margin: '0 5px' }} />
+                                        <button
+                                            className="action-btn"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                if (originalSize) {
+                                                    setCanvasSize({ w: originalSize.w, h: originalSize.h });
+                                                }
+                                            }}
+                                            style={{ padding: '2px 6px', height: 'auto', border: 'none', background: 'transparent' }}
+                                            data-tooltip={t.resetTransform || 'Reset'}
+                                        >
+                                            <CornerUpLeft size={14} color="#e50914" />
+                                        </button>
                                     </div>
                                     {['nw', 'ne', 'sw', 'se'].map(pos => (
                                         <div
