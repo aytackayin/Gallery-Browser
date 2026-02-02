@@ -3087,6 +3087,15 @@ function App() {
                                         <Scissors size={18} />
                                     </button>
                                 )}
+                                {selectedMedia.type.startsWith('video/') && (
+                                    <button className="control-btn" data-tooltip={t.editVideo || 'Video Editor'} onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (videoRef.current) videoRef.current.pause();
+                                        setShowVideoEditor(true);
+                                    }} style={{ color: '#46d369' }}>
+                                        <Scissors size={18} />
+                                    </button>
+                                )}
                                 <button className="control-btn" data-tooltip={t.close || 'Close'} onClick={() => resetAndClose()}><X size={30} /></button>
                             </div>
                         </div>
