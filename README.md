@@ -1,98 +1,64 @@
-# Gallery Browser 🎬
+# Gallery Browser & Editor
+
+A high-performance, modern web-based gallery browser with advanced image and video editing capabilities. Inspired by premium streaming interfaces, it provides a seamless experience for managing and processing your local media library.
 
 ![Preview](preview.png)
 
-Gallery Browser is a fast and stylish media gallery application that allows you to browse, view, and manage your local media collection (images and videos).
+## 🌟 Key Features
 
----
+### 📂 Advanced Media Management
+- **Folder Navigation:** Easily browse through your local directories.
+- **File Operations:** Rename, move, and delete files directly from the interface.
+- **Multi-Selection:** Perform batch operations on multiple files simultaneously.
+- **Search:** Quickly find media using the powerful search bar.
+- **Metadata & Notes:** Add custom notes and view detailed technical information for every file.
 
-## 🚀 Features
+### 🖼️ Professional Image Editor
+Powerful tools for quick and high-quality image processing.
+![Image Editor](image-edit.png)
+- **Filters:** Adjust Brightness, Contrast, Saturation, Gamma, and Sharpen.
+- **Crop & Resize:** Manual or aspect-ratio locked (1:1, 16:9, etc.) cropping.
+- **Canvas Control:** Precise resizing with aspect ratio locking.
+- **Transform:** Rotate and flip (Horizontal/Vertical) your images.
 
-- **Theme:** Modern, fast, and user-friendly UI.
-- **Smart Media Viewer:**
-  - Zoom with mouse wheel.
-  - **Pan with Right-Click + Drag.**
-  - Single-click play/pause.
-  - Seamless playback in zoom mode.
-- **File Management:** Support for deleting files and adding custom notes/info for each file.
-- **Advanced Search:** Quick search across all folders.
-- **Multi-Language Support:** Turkish and English support.
-- **Full Screen:** Immersive full-screen viewing experience.
-- **Keyboard Controls:** Easy navigation with Page (Up/Down) and Arrow keys.
+### 🎬 Powerful Video Editor
+A robust multi-track timeline editor for your video projects.
+![Video Editor](video-edit.png)
+- **Multi-Track Timeline:** Manage multiple video and audio layers.
+- **Clip Manipulation:** Split, trim, move, and reorder clips on the timeline.
+- **Live Preview:** Real-time preview of filters and transformations.
+- **Video Processing:** Add filters (Brightness, Contrast, Saturation), adjust playback speed, and volume.
+- **Transform & Crop:** Rotate, flip, and crop videos with visual guides.
+- **Screenshot Tool:** Capture high-quality frames from any video as separate image files.
 
----
+## 🛠️ System Requirements
 
-## 🆕 v1.0.1 Changelog
-- **Modern UI:** Added glassmorphism effect to the navbar.
-- **Form Improvements:** Optimized form elements for light and dark themes.
-- **Notification System:** Replaced browser alerts with elegant toast notifications.
-- **Enhanced Footer:** Added developer info and GitHub repository link.
-- **Video Controls:** Fixed issue where video controls (volume, fullscreen, etc.) were unreachable in zoom mode.
-- **Navigation:** Added PageUp and PageDown key support for switching media.
+- **Operating System:** Windows (optimized with Launcher), macOS, or Linux.
+- **Node.js:** v16.x or higher.
+- **FFmpeg:** Must be installed and added to the system PATH (required for video editing and metadata extraction).
 
----
+## 🚀 Installation & Usage
 
-## 🆕 v1.0.2 Changelog
-- **Image Editor:** Added Crop and Rotate features for images.
-- **Direct Save:** Edited images are saved directly over the original file, and the gallery updates instantly.
-- **Bug Fixes:** Resolved import issues and CORS errors with the Cropperjs library.
-- **Multi-Language:** Added Turkish and English translations for new features.
+### 1. Requirements
+Ensure you have **Node.js** and **FFmpeg** installed on your system.
 
----
-
-## 🆕 v1.0.3 Changelog
-- **Advanced Filters:** Added Brightness, Contrast, Saturation, Gamma, and Sharpen settings.
-- **Dynamic Preview:** Developed an SVG-based real-time preview system for Gamma and Sharpen filters.
-- **Professional Resizing:** Integrated custom resolution input, aspect ratio locking, and popular ratio presets (16:9, 9:16, etc.).
-- **Quick Access:** Added a direct "Edit Image" button to gallery cards for improved user experience.
-- **Browser Configuration:** Added support for custom browser paths in the settings menu.
-- **Performance & Stability:** Fixed image loading flickering, increased server payload limit to 50MB, and ensured instant refresh after saving.
-
----
-
-## 📦 Getting Started
-
-### Quick Start (Windows)
-1. Ensure you have the project files.
-2. Run `GalleryLauncher.exe`. This will automatically start the server and open the browser for you.
-3. Configure your media paths in `config.ini` if necessary.
-
-### Manual Installation (Development)
-1. **Prerequisites:** Node.js (v16 or higher) must be installed.
-2. **Install Dependencies:**
-   ```bash
-   npm install
-   ```
-3. **Start the App:**
-   - For development:
-     ```bash
-     npm run dev
-     ```
-   - To start the server manually:
-     ```bash
-     node server.js
-     ```
-
----
-
-## ⚙️ Configuration
-You can customize the library path and settings in the `config.ini` file:
-```ini
-[Settings]
-LibraryPath=C:/Your/Media/Path
-Language=en
-AutoPlay=true
+### 2. Setup
+Clone the repository and install dependencies:
+```bash
+npm install
 ```
 
----
+### 3. Configuration
+The application uses a `config.ini` file for initial settings. You can also configure these through the **Settings** menu within the app.
 
-## 🛠️ Usage Controls
+### 4. Running the App
+You can start both the backend server and the frontend development server with a single command:
+```bash
+npm start
+```
+Alternatively, on Windows, you can use the `GalleryLauncher.exe` to start the application easily.
 
-| Action | Control |
-| :--- | :--- |
-| **Play / Pause** | Left Click |
-| **Zoom In / Out** | Mouse Wheel |
-| **Panning** | Right-Click + Drag |
-| **Reset Zoom** | Right Click (Single) |
-| **Next / Prev Media** | PageDown / PageUp or Arrows |
-| **Close** | ESC or X button |
+## 🧰 Tech Stack
+- **Frontend:** React 18, Vite, Lucide-React, CropperJS.
+- **Backend:** Node.js, Express, Better-SQLite3 (for metadata).
+- **Processing:** Fluent-FFmpeg.

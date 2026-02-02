@@ -1,98 +1,64 @@
-# Gallery Browser 🎬
+# Galeri Tarayıcı ve Editör
 
-![Preview](preview.png)
+Gelişmiş resim ve video düzenleme yeteneklerine sahip, yüksek performanslı ve modern web tabanlı bir galeri tarayıcısı. Premium akış platformlarından ilham alan arayüzü ile yerel medya kitaplığınızı yönetmek ve işlemek için kusursuz bir deneyim sunar.
 
-Gallery Browser, yerel medya koleksiyonunuzu (resim ve video) Modern bir arayüzle taramanıza, izlemenize ve yönetmenize olanak tanıyan hızlı ve şık bir medya galerisi uygulamasıdır.
+![Önizleme](preview.png)
 
----
+## 🌟 Öne Çıkan Özellikler
 
-## 🚀 Özellikler
+### 📂 Gelişmiş Medya Yönetimi
+- **Klasör Gezintisi:** Yerel dizinleriniz arasında kolayca dolaşın.
+- **Dosya İşlemleri:** Arayüz üzerinden doğrudan isim değiştirme, taşıma ve silme işlemlerini yapın.
+- **Çoklu Seçim:** Birden fazla dosya üzerinde aynı anda toplu işlemler gerçekleştirin.
+- **Arama:** Güçlü arama çubuğu ile medyalarınızı hızla bulun.
+- **Metadata ve Notlar:** Her dosya için özel notlar ekleyin ve detaylı teknik bilgileri görüntüleyin.
 
-- **Tema:** Modern, hızlı ve kullanıcı dostu arayüz.
-- **Akıllı Medya Oynatıcı:** 
-  - Mouse tekerleği ile zoom.
-  - **Sağ tık ile sürükleyerek kaydırma (Pan).**
-  - Tek tıkla play/pause.
-  - Zoom modunda kesintisiz oynatma.
-- **Dosya Yönetimi:** Dosya silme ve her dosya için özel notlar/bilgiler ekleme desteği.
-- **Gelişmiş Arama:** Tüm klasörler içinde hızlı arama.
-- **Çoklu Dil Desteği:** Türkçe ve İngilizce dil desteği.
-- **Full Screen:** Tam ekran izleme deneyimi.
-- **Klavye Kontrolleri:** Sayfa (PagUp/Down) ve Ok tuşları ile kolay geçiş.
+### 🖼️ Profesyonel Resim Editörü
+Hızlı ve yüksek kaliteli resim işleme için güçlü araçlar.
+![Resim Editörü](image-edit.png)
+- **Filtreler:** Parlaklık, Kontrast, Doygunluk, Gamma ve Keskinlik ayarları.
+- **Kırpma ve Boyutlandırma:** Manuel veya en boy oranı kilitli (1:1, 16:9 vb.) kırpma.
+- **Tuval Kontrolü:** En boy oranı kilidi ile hassas boyutlandırma.
+- **Dönüştürme:** Resimlerinizi döndürün ve aynalayın (Yatay/Dikey).
 
----
+### 🎬 Güçlü Video Editörü
+Video projeleriniz için sağlam bir çok kanallı zaman çizelgesi (timeline) düzenleyicisi.
+![Video Editörü](video-edit.png)
+- **Çok Kanallı Zaman Çizelgesi:** Birden fazla video ve ses katmanını yönetin.
+- **Klip Manipülasyonu:** Zaman çizelgesi üzerinde klipleri bölün, kırpın, taşıyın ve yeniden sıralayın.
+- **Canlı Önizleme:** Filtrelerin ve dönüşümlerin gerçek zamanlı önizlemesi.
+- **Video İşleme:** Filtre ekleme (Parlaklık, Kontrast, Doygunluk), oynatma hızı ve ses seviyesi ayarları.
+- **Dönüştürme ve Kırpma:** Görsel kılavuzlarla videoları döndürün, aynalayın ve kırpın.
+- **Görüntü Alma (Screenshot):** Herhangi bir videonun istediğiniz karesinden yüksek kaliteli resim çıktıları alın.
 
-## 🆕 v1.0.1 Yenilikleri
-- **Modern Görünüm:** Navbar üzerine cam (glassmorphism) efekti eklendi.
-- **Form Geliştirmeleri:** Açık ve koyu tema için optimize edilmiş form elemanları.
-- **Bildirim Sistemi:** Alert pencereleri yerine daha şık toast bildirme sistemi.
-- **Gelişmiş Alt Bilgi (Footer):** Geliştirici bilgileri ve GitHub bağlantısı eklendi.
-- **Video Kontrolleri:** Zoom modunda video kontrollerinin (ses, tam ekran vb.) tıklanabilme sorunu giderildi.
-- **Navigasyon:** PageUp ve PageDown tuşları ile medya geçiş desteği eklendi.
+## 🛠️ Sistem Gereksinimleri
 
----
+- **İşletim Sistemi:** Windows (Launcher ile optimize), macOS veya Linux.
+- **Node.js:** v16.x veya daha yüksek.
+- **FFmpeg:** Video düzenleme ve bilgi çıkarma işlemleri için sisteminizde kurulu olmalı ve PATH'e eklenmelidir.
 
-## 🆕 v1.0.2 Yenilikleri
-- **Resim Düzenleyici:** Kırpma (Crop) ve Döndürme (Rotate) özellikleri eklendi.
-- **Doğrudan Kaydetme:** Düzenlenen resimler orijinal dosyanın üzerine kaydedilir ve galeri anında güncellenir.
-- **Hata Düzeltmeleri:** Cropperjs kütüphanesindeki import ve CORS sorunları giderildi.
-- **Dil Desteği:** Yeni özellikler için Türkçe ve İngilizce çeviriler tamamlandı.
+## 🚀 Kurulum ve Kullanım
 
----
+### 1. Gereksinimler
+Sisteminizde **Node.js** ve **FFmpeg**'in kurulu olduğundan emin olun.
 
-## 🆕 v1.0.3 Yenilikleri
-- **Gelişmiş Filtreler:** Parlaklık, Kontrast, Doygunluk, Gama ve Keskinlik (Sharpen) ayarları eklendi.
-- **Dinamik Önizleme:** Gama ve Keskinlik filtreleri için SVG tabanlı canlı önizleme sistemi geliştirildi.
-- **Profesyonel Boyutlandırma:** Özel çözünürlük girişi, en-boy oranı kilitleme ve popüler oran taslakları (16:9, 9:16 vb.) eklendi.
-- **Hızlı Erişim:** Galeri kartlarına doğrudan düzenleme butonu eklenerek kullanıcı deneyimi iyileştirildi.
-- **Tarayıcı Yapılandırması:** Ayarlar menüsüne özel tarayıcı yolu (BrowserPath) desteği eklendi.
-- **Performans & Stabilite:** Resim yükleme titremeleri giderildi, sunucu yükleme sınırı 50MB'a çıkarıldı ve kayıt sonrası anlık yenileme sağlandı.
-
----
-
-## 📦 Başlangıç
-
-### Hızlı Başlat (Windows)
-1. Proje dosyalarının tam olduğundan emin olun.
-2. `GalleryLauncher.exe` dosyasını çalıştırın. Bu işlem sunucuyu otomatik olarak başlatacak ve tarayıcıyı sizin için açacaktır.
-3. Gerekirse medya yollarınızı `config.ini` dosyası üzerinden düzenleyin.
-
-### Manuel Kurulum (Geliştirici)
-1. **Gereksinimler:** Node.js (v16 veya üzeri) yüklü olmalıdır.
-2. **Bağımlılıkları Yükleyin:**
-   ```bash
-   npm install
-   ```
-3. **Uygulamayı Başlatın:**
-   - Geliştirme modu için:
-     ```bash
-     npm run dev
-     ```
-   - Sunucuyu manuel başlatmak için:
-     ```bash
-     node server.js
-     ```
-
----
-
-## ⚙️ Yapılandırma
-Medya kütüphanesi yolunu ve ayarları `config.ini` dosyasından özelleştirebilirsiniz:
-```ini
-[Settings]
-LibraryPath=C:/Sizin/Medya/Yolunuz
-Language=tr
-AutoPlay=true
+### 2. Kurulum
+Depoyu klonlayın ve bağımlılıkları yükleyin:
+```bash
+npm install
 ```
 
----
+### 3. Yapılandırma
+Uygulama, başlangıç ayarları için `config.ini` dosyasını kullanır. Ayarları uygulama içindeki **Ayarlar** menüsünden de değiştirebilirsiniz.
 
-## 🛠️ Kullanım Kontrolleri
+### 4. Çalıştırma
+Hem backend sunucusunu hem de frontend geliştirme sunucusunu tek bir komutla başlatabilirsiniz:
+```bash
+npm start
+```
+Alternatif olarak, Windows üzerinde uygulamayı kolayca başlatmak için `GalleryLauncher.exe` dosyasını kullanabilirsiniz.
 
-| Eylem | Kontrol |
-| :--- | :--- |
-| **Play / Pause** | Sol Tık |
-| **Zoom In / Out** | Mouse Tekerleği |
-| **Kaydırma (Pan)** | Sağ Tık + Sürükle |
-| **Zoom Sıfırla** | Sağ Tık (Tek) |
-| **Sonraki / Önceki Medya** | PageDown / PageUp veya Oklar |
-| **Kapat** | ESC veya X butonu |
+## 🧰 Teknoloji Yığını
+- **Frontend:** React 18, Vite, Lucide-React, CropperJS.
+- **Backend:** Node.js, Express, Better-SQLite3 (metadata için).
+- **İşleme:** Fluent-FFmpeg.
