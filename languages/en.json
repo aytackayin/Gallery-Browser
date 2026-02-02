@@ -102,5 +102,16 @@
     "screenshotSaved": "Screenshot saved!",
     "takeScreenshot": "Take Screenshot",
     "projectCanvasResize": "Project Canvas Resize",
-    "timelineDurationMsg": "Timeline duration updated"
+    "timelineDurationMsg": "Timeline duration updated",
+    "help": "Help",
+    "shortcutsTitle": "Keyboard & Mouse Shortcuts",
+    "stretchShortcut": "ALT + Drag Edge: Change playback speed (Slow/Fast Motion)",
+    "splitShortcut": "S: Split selected clip at scrubber position",
+    "deleteShortcut": "Delete / Backspace: Delete selected clip",
+    "playPauseShortcut": "Space: Play / Pause",
+    "zoomShortcut": "Scroll Wheel: Zoom timeline",
+    "panShortcut": "Right Click + Drag: Pan preview canvas",
+    "precisionZoomShortcut": "CTRL + Scroll Wheel: Precision zoom (Timeline & Scaling)",
+    "scrollShortcut": "SHIFT + Scroll Wheel: Scroll timeline horizontally",
+    "playbackSpeed": "Playback Speed"
 }

@@ -102,5 +102,16 @@
     "screenshotSaved": "Ekran görüntüsü kaydedildi!",
     "takeScreenshot": "Ekran Görüntüsü Al",
     "projectCanvasResize": "Proje Tuval Boyutu",
-    "timelineDurationMsg": "Timeline süresi güncellendi"
+    "timelineDurationMsg": "Timeline süresi güncellendi",
+    "help": "Yardım",
+    "shortcutsTitle": "Klavye ve Fare Kısayolları",
+    "stretchShortcut": "ALT + Kenardan Çekme: Oynatma hızını değiştirir (Slow/Fast Motion)",
+    "splitShortcut": "S: Seçili klibi imleç konumundan böler",
+    "deleteShortcut": "Delete / Backspace: Seçili klibi siler",
+    "playPauseShortcut": "Space: Oynat / Duraklat",
+    "zoomShortcut": "Fare Tekerleği: Zaman çizelgesini (Timeline) yakınlaştırır",
+    "panShortcut": "Sağ Tık + Sürükle: Önizleme ekranını kaydırır",
+    "precisionZoomShortcut": "CTRL + Fare Tekerleği: Hassas yakınlaştırma (Timeline ve Ölçekleme)",
+    "scrollShortcut": "SHIFT + Fare Tekerleği: Zaman çizelgesini yatay kaydırır",
+    "playbackSpeed": "Oynatma Hızı"
 }

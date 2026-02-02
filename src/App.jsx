@@ -313,6 +313,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
     const [canvasSize, setCanvasSize] = useState({ w: 1920, h: 1080 });
     const [originalSize, setOriginalSize] = useState(null);
     const [snapLines, setSnapLines] = useState([]);
+    const [showHelp, setShowHelp] = useState(false);
     const VIDEO_WIDTH = canvasSize.w;
     const VIDEO_HEIGHT = canvasSize.h;
 
@@ -597,10 +598,11 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
 
             e.preventDefault(); // Browser zoom'u burada kesin olarak bloke edilir
             if (e.ctrlKey) {
-                // Ctrl + Scroll: Dikey kaydırma
-                timeline.scrollTop += e.deltaY;
+                // Ctrl + Scroll: Precision Zoom
+                const delta = e.deltaY < 0 ? 1 : -1;
+                setZoomLevel(prev => Math.max(5, Math.min(200, prev + delta)));
             } else {
-                // Normal Scroll: Zoom In/Out
+                // Normal Scroll: Regular Zoom
                 const delta = e.deltaY < 0 ? 5 : -5;
                 setZoomLevel(prev => Math.max(5, Math.min(200, prev + delta)));
             }
@@ -774,10 +776,15 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
     // Final unmount cleanup
     useEffect(() => {
         const handleKeyDown = (e) => {
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
+
             if (e.key === 'Delete' || e.key === 'Backspace') {
-                // Don't trigger if typing in an input
-                if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
                 handleDelete();
+            } else if (e.key.toLowerCase() === 's') {
+                handleSplit();
+            } else if (e.key === ' ') {
+                e.preventDefault();
+                setIsPlaying(prev => !prev);
             }
         };
         window.addEventListener('keydown', handleKeyDown);
@@ -950,7 +957,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
         e.preventDefault();
         e.stopPropagation();
 
-        const baseDelta = e.shiftKey ? 0.01 : 0.1;
+        const baseDelta = e.ctrlKey ? 0.01 : 0.1;
         const delta = e.deltaY > 0 ? -baseDelta : baseDelta;
         const currentScale = activeVClip.transform?.scale || 1;
         const newScale = Math.max(0.1, Math.min(5, currentScale + delta));
@@ -961,9 +968,13 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
     };
 
     const handleCanvasMouseDown = (e) => {
-        if (activeTool !== 'transform' || !selectedClipId || !activeVClip || selectedClipId !== activeVClip.id) return;
-        e.stopPropagation(); // Parent drag kilitlenmesin
-        setIsDragging({ type: 'canvas-pan', startX: e.clientX, startY: e.clientY, originX: activeVClip.transform?.x || 0, originY: activeVClip.transform?.y || 0 });
+        // Right click pan OR transform tool drag
+        if (e.button === 2 || activeTool === 'transform') {
+            if (!selectedClipId || !activeVClip || (activeTool === 'transform' && selectedClipId !== activeVClip.id)) return;
+            e.stopPropagation();
+            if (e.button === 2) e.preventDefault();
+            setIsDragging({ type: 'canvas-pan', startX: e.clientX, startY: e.clientY, originX: activeVClip.transform?.x || 0, originY: activeVClip.transform?.y || 0 });
+        }
     };
 
     const handleSave = async (options = {}) => {
@@ -1410,6 +1421,9 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                         <h4 style={{ margin: 0 }}>{t.editVideo || 'Pro Video Editor'}</h4>
                     </div>
                     <div style={{ display: 'flex', gap: 10 }}>
+                        <button className="btn btn-grey" onClick={() => setShowHelp(true)} data-tooltip={t.help || 'Help'}>
+                            <Info size={18} />
+                        </button>
                         <button className="btn btn-primary" onClick={() => handleSave()} disabled={isProcessing} data-tooltip={t.export || 'Save'}>
                             {isProcessing ? <div className="spinner-small" /> : <Save size={16} style={{ marginRight: 5 }} />}
                             {t.export || 'Export'}
@@ -1539,6 +1553,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                         <div className="video-viewport" ref={containerRef} style={{ position: 'relative', flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', userSelect: 'none' }}
                             onWheel={handleWheel}
                             onMouseDown={handleCanvasMouseDown}
+                            onContextMenu={(e) => e.preventDefault()}
                         >
                             {(!duration || duration === -1) && (
                                 <div style={{ position: 'absolute', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
@@ -2004,6 +2019,55 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                         </div>
                     </div>
                 </div>
+
+                {/* Help Modal */}
+                {showHelp && (
+                    <div className="modal-overlay" style={{ zIndex: 9000 }} onClick={() => setShowHelp(false)}>
+                        <div className="modal" style={{ maxWidth: 500, background: '#1a1a1a', border: '1px solid #333' }} onClick={e => e.stopPropagation()}>
+                            <div className="modal-header" style={{ borderBottom: '1px solid #333', paddingBottom: 10, marginBottom: 15 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                    <Info size={20} color="var(--netflix-red)" />
+                                    <h3 style={{ margin: 0 }}>{t.shortcutsTitle || 'Keyboard & Mouse Shortcuts'}</h3>
+                                </div>
+                                <button onClick={() => setShowHelp(false)} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer' }}><X size={20} /></button>
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '0 10px 10px 10px' }}>
+                                <div className="shortcut-item" style={{ fontSize: '0.9rem', color: '#eee', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                                    <div style={{ minWidth: 20, color: 'var(--netflix-red)', fontWeight: 'bold' }}>•</div>
+                                    <div dangerouslySetInnerHTML={{ __html: (t.stretchShortcut || '<b>ALT + Drag Edge</b>: Change playback speed (Slow/Fast Motion)').replace(/:\s*/, ': <span style="color:#aaa">') + '</span>' }} />
+                                </div>
+                                <div className="shortcut-item" style={{ fontSize: '0.9rem', color: '#eee', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                                    <div style={{ minWidth: 20, color: 'var(--netflix-red)', fontWeight: 'bold' }}>•</div>
+                                    <div dangerouslySetInnerHTML={{ __html: (t.splitShortcut || '<b>S</b>: Split selected clip at scrubber position').replace(/:\s*/, ': <span style="color:#aaa">') + '</span>' }} />
+                                </div>
+                                <div className="shortcut-item" style={{ fontSize: '0.9rem', color: '#eee', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                                    <div style={{ minWidth: 20, color: 'var(--netflix-red)', fontWeight: 'bold' }}>•</div>
+                                    <div dangerouslySetInnerHTML={{ __html: (t.deleteShortcut || '<b>Delete / Backspace</b>: Delete selected clip').replace(/:\s*/, ': <span style="color:#aaa">') + '</span>' }} />
+                                </div>
+                                <div className="shortcut-item" style={{ fontSize: '0.9rem', color: '#eee', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                                    <div style={{ minWidth: 20, color: 'var(--netflix-red)', fontWeight: 'bold' }}>•</div>
+                                    <div dangerouslySetInnerHTML={{ __html: (t.playPauseShortcut || '<b>Space</b>: Play / Pause').replace(/:\s*/, ': <span style="color:#aaa">') + '</span>' }} />
+                                </div>
+                                <div className="shortcut-item" style={{ fontSize: '0.9rem', color: '#eee', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                                    <div style={{ minWidth: 20, color: 'var(--netflix-red)', fontWeight: 'bold' }}>•</div>
+                                    <div dangerouslySetInnerHTML={{ __html: (t.zoomShortcut || '<b>Scroll Wheel</b>: Zoom timeline').replace(/:\s*/, ': <span style="color:#aaa">') + '</span>' }} />
+                                </div>
+                                <div className="shortcut-item" style={{ fontSize: '0.9rem', color: '#eee', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                                    <div style={{ minWidth: 20, color: 'var(--netflix-red)', fontWeight: 'bold' }}>•</div>
+                                    <div dangerouslySetInnerHTML={{ __html: (t.panShortcut || '<b>Right Click + Drag</b>: Pan preview canvas').replace(/:\s*/, ': <span style="color:#aaa">') + '</span>' }} />
+                                </div>
+                                <div className="shortcut-item" style={{ fontSize: '0.9rem', color: '#eee', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                                    <div style={{ minWidth: 20, color: 'var(--netflix-red)', fontWeight: 'bold' }}>•</div>
+                                    <div dangerouslySetInnerHTML={{ __html: (t.precisionZoomShortcut || '<b>CTRL + Scroll</b>: Precision zoom').replace(/:\s*/, ': <span style="color:#aaa">') + '</span>' }} />
+                                </div>
+                                <div className="shortcut-item" style={{ fontSize: '0.9rem', color: '#eee', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                                    <div style={{ minWidth: 20, color: 'var(--netflix-red)', fontWeight: 'bold' }}>•</div>
+                                    <div dangerouslySetInnerHTML={{ __html: (t.scrollShortcut || '<b>SHIFT + Scroll</b>: Horizontal scroll').replace(/:\s*/, ': <span style="color:#aaa">') + '</span>' }} />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 {/* Save As Modal */}
                 {showSaveAs && (
