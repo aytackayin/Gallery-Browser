@@ -317,8 +317,9 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
     const VIDEO_WIDTH = canvasSize.w;
     const VIDEO_HEIGHT = canvasSize.h;
 
+    const [timelineScroll, setTimelineScroll] = useState(0);
+
     // Multi-track state
-    // Each clip: { id, path, name, start, duration, offset, type, filters, crop }
     // Mod: Initialize with item.durationSeconds if available to prevent 0-start flicker
     const initialDuration = (item && isFinite(item.durationSeconds)) ? parseFloat(item.durationSeconds) : 0;
 
@@ -754,10 +755,10 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
             const speed = (activeVClip.sourceDuration || clipDur) / clipDur;
             const targetTime = activeVClip.start + (currentTime - activeVClip.offset) * speed;
 
-            if (isFinite(targetTime) && Math.abs(video.currentTime - targetTime) > 0.15) {
+            if (isFinite(targetTime) && Math.abs(video.currentTime - targetTime) > 0.05) {
                 video.currentTime = targetTime;
             }
-            if (isPlaying) {
+            if (isPlaying || (isDragging?.type === 'playhead')) {
                 if (video.paused) video.play().catch(() => { });
             } else {
                 if (!video.paused) video.pause();
@@ -770,7 +771,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
         } else {
             if (!video.paused) video.pause();
         }
-    }, [currentTime, activeVClip, isPlaying]);
+    }, [currentTime, activeVClip, isPlaying, isDragging]);
 
     // Background Audio Sync Effect
     useEffect(() => {
@@ -810,13 +811,13 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
 
             if (isInside) {
                 const targetTime = (clip.start || 0) + relTime;
-                if (isFinite(targetTime) && Math.abs(player.currentTime - targetTime) > 0.15) {
+                if (isFinite(targetTime) && Math.abs(player.currentTime - targetTime) > 0.05) {
                     player.currentTime = targetTime;
                 }
-                if (isPlaying && player.paused) {
-                    player.play().catch(() => { });
-                } else if (!isPlaying && !player.paused) {
-                    player.pause();
+                if (isPlaying || (isDragging?.type === 'playhead')) {
+                    if (player.paused) player.play().catch(() => { });
+                } else {
+                    if (!player.paused) player.pause();
                 }
             } else {
                 if (!player.paused) {
@@ -830,7 +831,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
         return () => {
             // We don't want to stop everything on every currentTime update
         };
-    }, [currentTime, isPlaying, tracks]);
+    }, [currentTime, isPlaying, tracks, isDragging]);
 
     // Use a Ref to keep latest values for shortcuts without frequent rebinding
     const stateRef = useRef({ currentTime, tracks, selectedClipId, contentDuration });
@@ -884,6 +885,9 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
             window.removeEventListener('keydown', handleKeyDown);
             Object.values(audioPlayers.current).forEach(p => p.pause());
             audioPlayers.current = {};
+
+            // Clean up temporary timeline cache on exit (kills FFmpeg processes and deletes files)
+            fetch('http://localhost:3001/api/clear-timeline-cache', { method: 'POST', keepalive: true }).catch(() => { });
         };
     }, []); // Only bind once
 
@@ -2143,6 +2147,9 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                         <div className="timeline-tracks"
                             onMouseDown={handleTimelineClick}
                             ref={timelineRef}
+                            onScroll={(e) => {
+                                setTimelineScroll(e.target.scrollLeft);
+                            }}
                             style={{ flex: 1, overflowX: 'auto', overflowY: 'auto', position: 'relative', background: 'var(--bg-primary)', cursor: 'crosshair' }}>
 
                             <div className="timeline-content" style={{
@@ -2215,10 +2222,12 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                                 const isAudio = track.type === 'audio';
                                                 const isVideo = track.type === 'video';
 
-                                                // Dynamic thumb count based on zoom & duration
-                                                const thumbCount = Math.max(1, Math.ceil((clip.duration * zoomLevel) / 80));
-                                                const thumbUrl = `/api/video-timeline-thumbs?path=${encodeURIComponent(clip.path)}&count=${thumbCount}&startTime=${clip.start}&duration=${clip.duration}&t=${clip.id}`;
-                                                const waveUrl = `/api/audio-waveform?path=${encodeURIComponent(clip.path)}&width=${Math.round(clip.duration * zoomLevel)}`;
+                                                // PROFESSIONAL TEMPORAL CHUNKING
+                                                const SECONDS_PER_CHUNK = 2;
+                                                const numChunks = Math.max(1, Math.ceil(clip.duration / SECONDS_PER_CHUNK));
+
+                                                const thumbHeight = 45;
+                                                const thumbWidth = 80;
 
                                                 return (
                                                     <div
@@ -2261,14 +2270,79 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                                     >
                                                         {/* Visual Content */}
                                                         {isVideo && clip.type === 'video' && (
-                                                            <div className="clip-thumbnails">
-                                                                <img src={thumbUrl} loading="lazy" alt="" style={{ width: '100%', height: '100%', objectFit: 'fill', display: 'block' }} />
+                                                            <div className="clip-thumbnails" style={{ display: 'flex', width: '100%', height: '100%', position: 'absolute', top: 0, left: 0 }}>
+                                                                {Array.from({ length: numChunks }).map((_, i) => {
+                                                                    const chunkStart = clip.start + (i * SECONDS_PER_CHUNK);
+                                                                    const chunkDuration = Math.min(SECONDS_PER_CHUNK, clip.duration - (i * SECONDS_PER_CHUNK));
+
+                                                                    const clipLeft = (clip.offset || 0) * zoomLevel;
+                                                                    const chunkLeft = clipLeft + (i * SECONDS_PER_CHUNK * zoomLevel);
+                                                                    const chunkWidth = chunkDuration * zoomLevel;
+
+                                                                    // Simple Visibility Check
+                                                                    const viewportWidth = timelineRef.current?.clientWidth || 2000;
+                                                                    const isVisible = (chunkLeft + chunkWidth > timelineScroll - 500) &&
+                                                                        (chunkLeft < timelineScroll + viewportWidth + 500);
+
+                                                                    if (!isVisible) return <div key={i} style={{ flex: `0 0 ${chunkWidth}px`, width: chunkWidth, height: '100%' }} />;
+
+                                                                    // Constant URL for this 2s segment - Height fixed at 45px
+                                                                    const tUrl = `/api/video-timeline-thumbs?path=${encodeURIComponent(clip.path)}&count=1&width=${thumbWidth}&height=${thumbHeight}&startTime=${chunkStart}&duration=${chunkDuration}&t=v3`;
+
+                                                                    return (
+                                                                        <img
+                                                                            key={i}
+                                                                            src={tUrl}
+                                                                            loading="lazy"
+                                                                            alt=""
+                                                                            style={{
+                                                                                flex: `0 0 ${chunkWidth}px`,
+                                                                                width: chunkWidth,
+                                                                                height: '100%',
+                                                                                objectFit: 'cover',
+                                                                                display: 'block'
+                                                                            }}
+                                                                        />
+                                                                    );
+                                                                })}
                                                             </div>
                                                         )}
 
-                                                        {(isAudio || (isVideo && clip.type === 'video')) && (
-                                                            <div className="clip-waveform">
-                                                                <img src={waveUrl} loading="lazy" alt="" />
+                                                        {isAudio && (
+                                                            <div className="clip-waveform" style={{ display: 'flex', width: '100%', height: '100%', position: 'absolute', top: 0, left: 0 }}>
+                                                                {Array.from({ length: numChunks }).map((_, i) => {
+                                                                    const chunkStart = clip.start + (i * SECONDS_PER_CHUNK);
+                                                                    const chunkDuration = Math.min(SECONDS_PER_CHUNK, clip.duration - (i * SECONDS_PER_CHUNK));
+
+                                                                    const clipLeft = (clip.offset || 0) * zoomLevel;
+                                                                    const chunkLeft = clipLeft + (i * SECONDS_PER_CHUNK * zoomLevel);
+                                                                    const chunkWidth = chunkDuration * zoomLevel;
+
+                                                                    // Visibility check
+                                                                    const viewportWidth = timelineRef.current?.clientWidth || 2000;
+                                                                    const isVisible = (chunkLeft + chunkWidth > timelineScroll - 500) &&
+                                                                        (chunkLeft < timelineScroll + viewportWidth + 500);
+
+                                                                    if (!isVisible) return <div key={i} style={{ flex: `0 0 ${chunkWidth}px`, width: chunkWidth, height: '100%' }} />;
+
+                                                                    const wUrl = `/api/audio-waveform?path=${encodeURIComponent(clip.path)}&width=100&height=45&startTime=${chunkStart}&duration=${chunkDuration}&t=w2`;
+
+                                                                    return (
+                                                                        <img
+                                                                            key={i}
+                                                                            src={wUrl}
+                                                                            loading="lazy"
+                                                                            alt=""
+                                                                            style={{
+                                                                                flex: `0 0 ${chunkWidth}px`,
+                                                                                width: chunkWidth,
+                                                                                height: '100%',
+                                                                                objectFit: 'fill',
+                                                                                display: 'block'
+                                                                            }}
+                                                                        />
+                                                                    );
+                                                                })}
                                                             </div>
                                                         )}
 

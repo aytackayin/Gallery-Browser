@@ -17,6 +17,7 @@ const PORT = 3001;
 
 // Global process tracking for video editing
 const activeProcesses = new Map();
+const activeThumbProcesses = new Set();
 
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
@@ -61,7 +62,9 @@ const rootGalleryPath = settings.rootPath;
 
 // Thumbnail klasörü
 const thumbDir = path.join(rootGalleryPath, '.gallery_thumbs');
+const timelineCacheDir = path.join(thumbDir, 'timeline_cache');
 if (!fs.existsSync(thumbDir)) fs.mkdirSync(thumbDir, { recursive: true });
+if (!fs.existsSync(timelineCacheDir)) fs.mkdirSync(timelineCacheDir, { recursive: true });
 
 const dbPath = path.join(rootGalleryPath, 'gallery_data.db');
 const db = new Database(dbPath);
@@ -302,7 +305,7 @@ app.get('/api/info', async (req, res) => {
 // Video Timeline Thumbnails (Filmstrip)
 app.get('/api/video-timeline-thumbs', async (req, res) => {
     try {
-        const { path: itemPath, count = 10, width = 160, height = 90, startTime = 0, duration = 0 } = req.query;
+        const { path: itemPath, count = 1, width = 40, height = 20, startTime = 0, duration = 0 } = req.query;
         if (!itemPath) return res.status(400).end();
 
         const fullPath = path.join(rootGalleryPath, itemPath);
@@ -315,41 +318,76 @@ app.get('/api/video-timeline-thumbs', async (req, res) => {
         const dur = parseFloat(duration);
 
         const hash = crypto.createHash('md5').update(`${itemPath}_thumbs_${totalCount}_${w}_${h}_${start}_${dur}`).digest('hex');
-        const cachePath = path.join(thumbDir, `strip_${hash}.jpg`);
+        const cachePath = path.join(timelineCacheDir, `strip_${hash}.jpg`);
 
         if (fs.existsSync(cachePath)) {
             return res.sendFile(cachePath);
         }
 
-        // Generate filmstrip using FFmpeg
-        // Use select filter to get frames at regular intervals
-        // Or fps filter: fps = count / duration
-        const fps = totalCount / (dur || 1);
+        const fps = (totalCount > 1 && dur > 0) ? (totalCount / dur) : 1;
 
-        ffmpeg(fullPath)
-            .setStartTime(start)
-            .setDuration(dur || 10000) // Default to long if duration not specified
-            .complexFilter([
-                `fps=${fps},scale=${w}:${h},tile=${totalCount}x1`
-            ])
+        const proc = ffmpeg(fullPath);
+        activeThumbProcesses.add(proc);
+
+        // EXTRA FAST SETTINGS
+        proc.inputOptions([
+            `-ss ${start}`,      // Fast seek before input
+            `-t ${dur + 0.5}`,   // Limit data read
+            '-re'               // Read at native rate or just let it fly
+        ]);
+
+        proc.complexFilter([
+            `fps=${fps},scale=${w}:${h}:force_original_aspect_ratio=increase,crop=${w}:${h},tile=${totalCount}x1`
+        ])
             .frames(1)
-            .output(cachePath)
-            .on('end', () => res.sendFile(cachePath))
-            .on('error', (err) => {
-                console.error("Filmstrip error:", err);
-                res.status(500).end();
-            })
-            .run();
+            .outputOptions([
+                '-q:v 6',            // Slightly lower quality for much faster encoding
+                '-v quiet',          // No logging overhead
+                '-threads 2'         // Limit threads per small job
+            ])
+            .noAudio()
+            .output(cachePath);
+
+        proc.on('start', (commandLine) => {
+            // Optional: console.log('Spawned FFmpeg with command: ' + commandLine);
+        });
+
+        proc.on('end', () => {
+            activeThumbProcesses.delete(proc);
+            if (fs.existsSync(cachePath)) {
+                res.sendFile(cachePath);
+            } else {
+                if (!res.headersSent) res.status(500).end();
+            }
+        });
+
+        proc.on('error', (err) => {
+            activeThumbProcesses.delete(proc);
+            if (!res.headersSent) res.status(500).end();
+        });
+
+        // CRITICAL: Immediately kill the process if the client closes the connection
+        req.on('close', () => {
+            if (activeThumbProcesses.has(proc)) {
+                try {
+                    // Try to kill the process group or the process itself
+                    proc.kill('SIGKILL');
+                } catch (e) { }
+                activeThumbProcesses.delete(proc);
+            }
+        });
+
+        proc.run();
 
     } catch (e) {
-        res.status(500).end();
+        if (!res.headersSent) res.status(500).end();
     }
 });
 
 // Audio Waveform Generation
 app.get('/api/audio-waveform', async (req, res) => {
     try {
-        const { path: itemPath, width = 800, height = 100, color = '0x46d369' } = req.query;
+        const { path: itemPath, width = 100, height = 45, color = '0x46d369', startTime = 0, duration = 0 } = req.query;
         if (!itemPath) return res.status(400).end();
 
         const fullPath = path.join(rootGalleryPath, itemPath);
@@ -357,29 +395,55 @@ app.get('/api/audio-waveform', async (req, res) => {
 
         const w = parseInt(width);
         const h = parseInt(height);
+        const start = parseFloat(startTime);
+        const dur = parseFloat(duration);
 
-        const hash = crypto.createHash('md5').update(`${itemPath}_wave_${w}_${h}_${color}`).digest('hex');
-        const cachePath = path.join(thumbDir, `wave_${hash}.png`);
+        const hash = crypto.createHash('md5').update(`${itemPath}_wave_${w}_${h}_${color}_${start}_${dur}`).digest('hex');
+        const cachePath = path.join(timelineCacheDir, `wave_${hash}.png`);
 
         if (fs.existsSync(cachePath)) {
             return res.sendFile(cachePath);
         }
 
-        ffmpeg(fullPath)
-            .complexFilter([
-                `aformat=channel_layouts=mono,showwavespic=s=${w}x${h}:colors=${color}`
-            ])
+        const proc = ffmpeg(fullPath);
+
+        // Audio fast seek and duration
+        proc.inputOptions([`-ss ${start}`]);
+        if (dur > 0) proc.inputOptions([`-t ${dur + 0.5}`]);
+
+        proc.complexFilter([
+            `aformat=channel_layouts=mono,showwavespic=s=${w}x${h}:colors=${color}`
+        ])
             .frames(1)
-            .output(cachePath)
-            .on('end', () => res.sendFile(cachePath))
+            .noAudio()
+            .output(cachePath);
+
+        activeThumbProcesses.add(proc);
+
+        proc.on('end', () => {
+            activeThumbProcesses.delete(proc);
+            if (fs.existsSync(cachePath)) {
+                res.sendFile(cachePath);
+            } else {
+                if (!res.headersSent) res.status(500).end();
+            }
+        })
             .on('error', (err) => {
-                console.error("Waveform error:", err);
-                res.status(500).end();
-            })
-            .run();
+                activeThumbProcesses.delete(proc);
+                if (!res.headersSent) res.status(500).end();
+            });
+
+        req.on('close', () => {
+            if (activeThumbProcesses.has(proc)) {
+                try { proc.kill('SIGKILL'); } catch (e) { }
+                activeThumbProcesses.delete(proc);
+            }
+        });
+
+        proc.run();
 
     } catch (e) {
-        res.status(500).end();
+        if (!res.headersSent) res.status(500).end();
     }
 });
 
@@ -1283,4 +1347,27 @@ app.listen(PORT, () => {
         setTimeout(runCycle, 600000);
     };
     runCycle();
+});
+
+// Clear Timeline Cache
+app.post('/api/clear-timeline-cache', (req, res) => {
+    try {
+        // Kill all active thumbnail processes
+        activeThumbProcesses.forEach(proc => {
+            try { proc.kill('SIGKILL'); } catch (e) { }
+        });
+        activeThumbProcesses.clear();
+
+        if (fs.existsSync(timelineCacheDir)) {
+            const files = fs.readdirSync(timelineCacheDir);
+            for (const file of files) {
+                try {
+                    fs.unlinkSync(path.join(timelineCacheDir, file));
+                } catch (e) { }
+            }
+        }
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
 });
