@@ -1485,7 +1485,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                     </div>
                 </div>
 
-                <div className="editor-grid" style={{ display: 'grid', gridTemplateColumns: '300px minmax(0, 1fr)', gridTemplateRows: 'minmax(0, 1fr) 200px', gap: 10, flex: 1, overflow: 'hidden', padding: 10, height: 'calc(100% - 60px)' }}>
+                <div className="editor-grid" style={{ display: 'grid', gridTemplateColumns: '300px minmax(0, 1fr)', gridTemplateRows: 'minmax(0, 1fr) 150px', gap: 10, flex: 1, overflow: 'hidden', padding: 10, height: 'calc(100% - 60px)' }}>
 
                     {/* Left: properties */}
                     <div className="editor-sidebar sidebar-group" style={{ overflowY: 'auto', padding: '10px 8px' }}>
@@ -1937,7 +1937,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                 <div
                                     onMouseDown={handleTimelineClick}
                                     style={{
-                                        height: 32,
+                                        height: 28,
                                         position: 'sticky',
                                         top: 0,
                                         left: 0,
@@ -1958,10 +1958,10 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                 </div>
                                 {/* Sol Sütun Koruma Katmanı (Yükseklik dinamik: tracks.length * 45) */}
                                 <div style={{ position: 'sticky', left: 0, width: 80, height: 0, zIndex: 925, pointerEvents: 'none', overflow: 'visible' }}>
-                                    <div style={{ width: 80, height: tracks.length * 45, background: '#151515', borderRight: '2px solid #333' }} />
+                                    <div style={{ width: 80, height: tracks.length * 35, background: '#151515', borderRight: '2px solid #333' }} />
                                 </div>
                                 {tracks.map((track, idx) => (
-                                    <div key={track.id} style={{ display: 'grid', gridTemplateColumns: '80px 1fr', gap: 0, marginBottom: 0, minHeight: 45, borderBottom: '1px solid #222', background: '#000', position: 'relative' }}>
+                                    <div key={track.id} style={{ display: 'grid', gridTemplateColumns: '80px 1fr', gap: 0, marginBottom: 0, minHeight: 35, borderBottom: '1px solid #222', background: '#000', position: 'relative' }}>
                                         <div
                                             className={`track-header ${dragTrackIndex === idx ? 'dragging' : ''}`}
                                             draggable
@@ -2073,7 +2073,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                     onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragging({ type: 'playhead' }); }}
                                     style={{
                                         position: 'absolute',
-                                        top: 32, // Ruler (32px) hemen bitiminden başlasın
+                                        top: 28, // Ruler (28px) hemen bitiminden başlasın
                                         bottom: 0,
                                         left: 80 + (currentTime * zoomLevel) - 1,
                                         width: 12,
