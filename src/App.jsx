@@ -687,6 +687,19 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
             setIsPlaying(false);
             if (videoRef.current) videoRef.current.pause();
         } else {
+            const selectedClip = getSelectedClip();
+            if (selectedClip) {
+                // If selected clip is finished or playhead is far away, restart from clip start
+                const clipEnd = selectedClip.offset + selectedClip.duration;
+                if (currentTime >= clipEnd - 0.05 || currentTime < selectedClip.offset) {
+                    setCurrentTime(selectedClip.offset);
+                }
+            } else {
+                // No selection: restart if at the end of all content
+                if (currentTime >= contentDuration - 0.05) {
+                    setCurrentTime(0);
+                }
+            }
             setIsPlaying(true);
         }
     };
@@ -704,9 +717,19 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
 
                 setCurrentTime(prev => {
                     const next = prev + delta;
-                    if (next >= contentDuration) {
-                        setIsPlaying(false);
-                        return contentDuration;
+                    const selectedClip = getSelectedClip();
+
+                    if (selectedClip) {
+                        const clipEnd = selectedClip.offset + selectedClip.duration;
+                        if (next >= clipEnd) {
+                            setIsPlaying(false);
+                            return clipEnd;
+                        }
+                    } else {
+                        if (next >= contentDuration) {
+                            setIsPlaying(false);
+                            return contentDuration;
+                        }
                     }
                     return next;
                 });
@@ -810,9 +833,9 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
     }, [currentTime, isPlaying, tracks]);
 
     // Use a Ref to keep latest values for shortcuts without frequent rebinding
-    const stateRef = useRef({ currentTime, tracks, selectedClipId });
+    const stateRef = useRef({ currentTime, tracks, selectedClipId, contentDuration });
     useEffect(() => {
-        stateRef.current = { currentTime, tracks, selectedClipId };
+        stateRef.current = { currentTime, tracks, selectedClipId, contentDuration };
     });
 
     // Final unmount cleanup
@@ -826,7 +849,34 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                 handleSplit();
             } else if (e.key === ' ') {
                 e.preventDefault();
-                setIsPlaying(prev => !prev);
+                const { currentTime: cur, tracks: trks, selectedClipId: selId } = stateRef.current;
+
+                setIsPlaying(prev => {
+                    const willPlay = !prev;
+                    if (willPlay) {
+                        const { currentTime: currentCur, tracks: currentTrks, selectedClipId: currentSelId, contentDuration: currentDur } = stateRef.current;
+                        // Restart logic if starting playback
+                        let selectedClip = null;
+                        for (const track of currentTrks) {
+                            const clip = track.clips.find(c => c.id === currentSelId);
+                            if (clip) { selectedClip = clip; break; }
+                        }
+
+                        if (selectedClip) {
+                            const clipEnd = selectedClip.offset + selectedClip.duration;
+                            if (currentCur >= clipEnd - 0.05 || currentCur < selectedClip.offset) {
+                                setCurrentTime(selectedClip.offset);
+                            }
+                        } else {
+                            if (currentCur >= currentDur - 0.05) {
+                                setCurrentTime(0);
+                            }
+                        }
+                    }
+                    return willPlay;
+                });
+            } else if (e.key === 'Escape') {
+                setSelectedClipId(null);
             }
         };
         window.addEventListener('keydown', handleKeyDown);
@@ -1598,8 +1648,8 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
     };
 
     return (
-        <div className="modal-overlay editor-overlay" style={{ zIndex: 7000, background: 'rgba(0,0,0,0.7)' }}>
-            <div className="modal editor-modal video-editor-modal" style={{ height: '95vh', width: '98vw', padding: '10px', background: 'var(--bg-secondary)', color: 'var(--text-primary)', display: 'flex', flexDirection: 'column' }}
+        <div className="modal-overlay editor-overlay" style={{ zIndex: 7000 }}>
+            <div className="modal editor-modal video-editor-modal"
                 onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onClick={e => e.stopPropagation()}>
 
                 <div className="modal-header" style={{ marginBottom: '10px' }}>
@@ -1630,8 +1680,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                     rowGap: 0,
                     flex: 1,
                     overflow: 'hidden',
-                    padding: '0 10px 10px 10px',
-                    height: 'calc(100% - 60px)'
+                    padding: '0 10px 10px 10px'
                 }}>
 
                     {/* Left: properties */}
