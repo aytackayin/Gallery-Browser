@@ -421,15 +421,15 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
     }, [activeVClip?.path, item?.path, localRefreshKey]);
 
     const contentDuration = useMemo(() => {
-        let max = duration || 0;
+        let max = 0;
         tracks.forEach(t => {
             t.clips.forEach(c => {
                 const end = (c.offset || 0) + (c.duration || 0);
                 if (end > max) max = end;
             });
         });
-        return max;
-    }, [duration, tracks]);
+        return Math.max(max, 0.1); // Ensure at least a tiny bit of duration
+    }, [tracks]);
 
     const timelineDuration = useMemo(() => {
         // Daima en az 10 dakika (600s) veya mevcut toplam süreden 10 dakika daha fazlasını göster
