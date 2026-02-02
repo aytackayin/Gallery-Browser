@@ -2605,6 +2605,49 @@ function App() {
         }
     };
 
+    const handleViewerScreenshot = async (e) => {
+        e.stopPropagation();
+        if (!selectedMedia || !selectedMedia.type.startsWith('video/') || !videoRef.current) return;
+
+        try {
+            const video = videoRef.current;
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
+
+            let folderPath = ".";
+            if (selectedMedia.path) {
+                const lastSlash = Math.max(selectedMedia.path.lastIndexOf('/'), selectedMedia.path.lastIndexOf('\\'));
+                if (lastSlash !== -1) folderPath = selectedMedia.path.substring(0, lastSlash);
+            }
+
+            const res = await fetch('/api/save-screenshot', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ folderPath, imageData: dataUrl })
+            });
+
+            const data = await res.json();
+            if (data.success) {
+                setToast(t.screenshotSaved || 'Screenshot saved!');
+                setTimeout(() => {
+                    setToast(null);
+                    fetchItems(currentPath);
+                }, 3000);
+            } else {
+                alert(data.error);
+            }
+        } catch (err) {
+            console.error(err);
+            alert("Screenshot error");
+        }
+    };
+
     const sortedMediaOnly = items.filter(i => i.type !== 'folder');
     const selectedMedia = selectedMediaIndex >= 0 ? sortedMediaOnly[selectedMediaIndex] : null;
 
@@ -3025,6 +3068,11 @@ function App() {
                                 <button className="control-btn" data-tooltip={t.editInfoRename || 'Edit Info & Rename'} onClick={(e) => { e.stopPropagation(); openEditModal(selectedMedia); }} style={{ color: '#0071eb' }}>
                                     <Info size={18} />
                                 </button>
+                                {selectedMedia.type.startsWith('video/') && (
+                                    <button className="control-btn" data-tooltip={t.takeScreenshot || 'Take Screenshot'} onClick={handleViewerScreenshot} style={{ color: '#fff' }}>
+                                        <Camera size={18} />
+                                    </button>
+                                )}
                                 <button className="control-btn" data-tooltip={t.move || 'Move'} onClick={(e) => { e.stopPropagation(); setMoveModal(selectedMedia); }} style={{ color: '#ff8c00' }}>
                                     <FolderInput size={18} />
                                 </button>
@@ -3075,6 +3123,7 @@ function App() {
                                 />
                             ) : (
                                 <video
+                                    crossOrigin="anonymous"
                                     ref={videoRef}
                                     key={selectedMedia.path}
                                     src={getMediaUrl(selectedMedia.path)}
