@@ -850,9 +850,24 @@ app.post('/api/process-video', async (req, res) => {
                 }
             }
 
-            // 2. ADIM: Zamanlama (Trim)
-            vFilters.push(`trim=start=${clip.start}:duration=${clip.duration}`);
-            vFilters.push(`setpts=PTS-STARTPTS+(${clip.offset}/TB)`);
+            // Calculate speed factor
+            const sourceDur = clip.sourceDuration || clip.duration;
+            const timelineDur = clip.duration || 0.1;
+            const speedFactor = sourceDur / timelineDur; // e.g. 0.5 for slowing down to 2x duration
+
+            // Safety: Ensure we don't trim more than exists in source metadata
+            const safeSourceDur = (meta.duration && (clip.start + sourceDur > meta.duration))
+                ? Math.max(0.1, meta.duration - clip.start)
+                : sourceDur;
+
+            console.log(`[Speed] Clip ${clip.id}: SourceDur=${sourceDur.toFixed(2)} (Safe=${safeSourceDur.toFixed(2)}), TimelineDur=${timelineDur.toFixed(2)}, Speed=${speedFactor.toFixed(2)}x`);
+
+            // 2. ADIM: Zamanlama (Trim & PTS)
+            vFilters.push(`trim=start=${clip.start}:duration=${safeSourceDur}`);
+            vFilters.push(`setpts=PTS-STARTPTS`); // Reset to 0
+            vFilters.push(`setpts=(${1 / speedFactor})*PTS`); // Stretch/Compress
+            vFilters.push(`fps=30`); // Ensure frames are generated/sampled at 30fps for the new duration
+            vFilters.push(`setpts=PTS+(${clip.offset}/TB)`); // Move to timeline position
 
             // 3. ADIM: Filtreler (EQ)
             vFilters.push(`eq=brightness=0:contrast=${cVal}:saturation=${s}:gamma=${g}`);
@@ -965,9 +980,23 @@ app.post('/api/process-video', async (req, res) => {
             if (!meta.isImage && meta.hasAudio) {
                 const aLabel = `vaudio_${idx}`;
                 const delay = Math.round(clip.offset * 1000);
+                // const sourceDur = clip.sourceDuration || clip.duration; // Already defined above
+                // const timelineDur = clip.duration || 0.1; // Already defined above
+                // const speedFactor = sourceDur / timelineDur; // Already defined above
+
+                let aFilters = [`atrim=start=${clip.start}:duration=${sourceDur}`, `asetpts=PTS-STARTPTS`];
+
+                // atempo handles 0.5 - 2.0. Chain them if outside.
+                let tempSpeed = speedFactor;
+                while (tempSpeed > 2.0) { aFilters.push(`atempo=2.0`); tempSpeed /= 2.0; }
+                while (tempSpeed < 0.5) { aFilters.push(`atempo=0.5`); tempSpeed /= 0.5; }
+                if (Math.abs(tempSpeed - 1.0) > 0.01) aFilters.push(`atempo=${tempSpeed}`);
+
+                aFilters.push(`volume=${(clip.volume || 100) / 100}`, `adelay=${delay}:all=1`);
+
                 filterComplex.push({
                     inputs: `${idx}:a`,
-                    filter: `atrim=start=${clip.start}:duration=${clip.duration},asetpts=PTS-STARTPTS,volume=${(clip.volume || 100) / 100},adelay=${delay}:all=1`,
+                    filter: aFilters.join(','),
                     outputs: aLabel
                 });
                 audioStreams.push(aLabel);
@@ -978,11 +1007,24 @@ app.post('/api/process-video', async (req, res) => {
         clips.forEach((clip, idx) => {
             const meta = clipMetadata[clip.id];
             if (clip.trackType !== 'audio' || !meta.hasAudio) return;
-            const aLabel = `aaudio_${idx}`;
+            const aLabel = `audio_${idx}`;
             const delay = Math.round(clip.offset * 1000);
+            const sourceDur = clip.sourceDuration || clip.duration;
+            const timelineDur = clip.duration || 0.1;
+            const speedFactor = sourceDur / timelineDur;
+
+            let aFilters = [`atrim=start=${clip.start}:duration=${sourceDur}`, `asetpts=PTS-STARTPTS`];
+
+            let tempSpeed = speedFactor;
+            while (tempSpeed > 2.0) { aFilters.push(`atempo=2.0`); tempSpeed /= 2.0; }
+            while (tempSpeed < 0.5) { aFilters.push(`atempo=0.5`); tempSpeed /= 0.5; }
+            if (Math.abs(tempSpeed - 1.0) > 0.01) aFilters.push(`atempo=${tempSpeed}`);
+
+            aFilters.push(`volume=${(clip.volume || 100) / 100}`, `adelay=${delay}:all=1`);
+
             filterComplex.push({
                 inputs: `${idx}:a`,
-                filter: `atrim=start=${clip.start}:duration=${clip.duration},asetpts=PTS-STARTPTS,volume=${(clip.volume || 100) / 100},adelay=${delay}:all=1`,
+                filter: aFilters.join(','),
                 outputs: aLabel
             });
             audioStreams.push(aLabel);

@@ -333,6 +333,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                         type: 'video',
                         start: 0,
                         duration: initialDuration,
+                        sourceDuration: initialDuration, // Amount of tape consumed
                         offset: 0,
                         filters: { brightness: 100, contrast: 100, saturation: 100, gamma: 1.0 },
                         crop: { x: 0, y: 0, w: 100, h: 100 },
@@ -350,7 +351,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
             setDuration(prev => Math.max(prev, initialDuration));
             setTracks(prev => prev.map(t => ({
                 ...t,
-                clips: t.clips.map(c => (c.id === 'clip-0' && c.duration < initialDuration) ? { ...c, duration: initialDuration } : c)
+                clips: t.clips.map(c => (c.id === 'clip-0' && (!c.duration || c.duration < initialDuration)) ? { ...c, duration: initialDuration, sourceDuration: initialDuration } : c)
             })));
         }
     }, [initialDuration]);
@@ -574,7 +575,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                         // Also update initial clip duration if it's missing
                         setTracks(prev => prev.map(t => ({
                             ...t,
-                            clips: t.clips.map(c => (c.id === 'clip-0' && (!c.duration || c.duration === 0)) ? { ...c, duration: info.durationSeconds } : c)
+                            clips: t.clips.map(c => (c.id === 'clip-0' && (!c.duration || c.duration === 0)) ? { ...c, duration: info.durationSeconds, sourceDuration: info.durationSeconds } : c)
                         })));
                     }
                 }
@@ -616,13 +617,17 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
         // Save source dimensions and duration to clip if missing
         if (activeVClip && activeVClip.type === 'video') {
             const updates = {};
-            if (!activeVClip.sourceWidth || activeVClip.sourceWidth !== video.videoWidth) {
-                updates.sourceWidth = video.videoWidth;
-                updates.sourceHeight = video.videoHeight;
+            if (!activeVClip.sourceWidth) updates.sourceWidth = video.videoWidth;
+            if (!activeVClip.sourceHeight) updates.sourceHeight = video.videoHeight;
+
+            // If sourceDuration is missing, initialize it to the full source duration
+            if (!activeVClip.sourceDuration) {
+                updates.sourceDuration = activeVClip.duration || video.duration;
             }
-            // Sadece süre hiç yoksa (0 ise) otomatik güncelle, kullanıcı trim yaptıysa dokunma
+            // If duration itself is missing (clip-0 with 0s), set them both
             if (!activeVClip.duration || activeVClip.duration === 0) {
                 updates.duration = video.duration;
+                updates.sourceDuration = video.duration;
             }
             if (Object.keys(updates).length > 0) {
                 updateClip(activeVClip.id, updates);
@@ -688,12 +693,19 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
         if (!video) return;
 
         if (activeVClip && activeVClip.type === 'video') {
-            const targetTime = activeVClip.start + (currentTime - activeVClip.offset);
+            const speed = (activeVClip.sourceDuration || activeVClip.duration) / activeVClip.duration;
+            const targetTime = activeVClip.start + (currentTime - activeVClip.offset) * speed;
+
             if (Math.abs(video.currentTime - targetTime) > 0.15) {
                 video.currentTime = targetTime;
             }
             if (isPlaying && video.paused) {
                 video.play().catch(() => { });
+            }
+            // Sync playback rate for preview (Corrected: playbackRate = Footage / Space)
+            const videoSpeed = activeVClip.sourceDuration / activeVClip.duration;
+            if (Math.abs(video.playbackRate - videoSpeed) > 0.05) {
+                video.playbackRate = Math.max(0.1, Math.min(16, videoSpeed));
             }
         } else {
             if (!video.paused) video.pause();
@@ -787,12 +799,17 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
         const splitPoint = currentTime - clip.offset;
         if (splitPoint <= 0 || splitPoint >= clip.duration) return;
 
+        const currentStretchFactor = clip.duration / (clip.sourceDuration || clip.duration);
+        const firstPartSourceDuration = splitPoint / currentStretchFactor;
+        const secondPartSourceDuration = (clip.duration - splitPoint) / currentStretchFactor;
+
         const newClipId = `clip-${Date.now()}`;
         const secondPart = {
             ...clip,
             id: newClipId,
-            start: clip.start + splitPoint,
+            start: clip.start + firstPartSourceDuration,
             duration: clip.duration - splitPoint,
+            sourceDuration: secondPartSourceDuration,
             offset: currentTime
         };
 
@@ -800,7 +817,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
             if (track.clips.some(c => c.id === clip.id)) {
                 const index = track.clips.findIndex(c => c.id === clip.id);
                 const updatedClips = [...track.clips];
-                updatedClips[index] = { ...clip, duration: splitPoint };
+                updatedClips[index] = { ...clip, duration: splitPoint, sourceDuration: firstPartSourceDuration };
                 updatedClips.splice(index + 1, 0, secondPart);
                 return { ...track, clips: updatedClips };
             }
@@ -905,6 +922,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
             type: isImage ? 'image' : (trackId.startsWith('v') ? 'video' : 'audio'),
             start: 0,
             duration: actualDuration,
+            sourceDuration: actualDuration, // Initialize source duration
             offset: currentTime,
             sourceWidth: sWidth,
             sourceHeight: sHeight,
@@ -954,7 +972,11 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
             tracks: tracks.map(t => ({
                 id: t.id,
                 type: t.type,
-                clips: t.clips
+                clips: t.clips.map(clip => ({
+                    ...clip,
+                    // Emergency fallback: if sourceDuration is missing, assume 1x speed
+                    sourceDuration: clip.sourceDuration || clip.duration
+                }))
             })),
             canvasSize
         };
@@ -1248,12 +1270,24 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                         bestSnap = sp;
                     }
                 });
-
                 if (bestSnap !== null) {
                     newDur = Math.max(0.1, bestSnap - clip.offset);
                 }
-                updateClip(clip.id, { duration: newDur });
-            } else {
+
+                // Important: get the absolute latest clip data from tracks to avoid stale state in long drags
+                const latestClip = tracks.flatMap(t => t.clips).find(c => c.id === clip.id);
+                const currentSourceDur = latestClip ? (latestClip.sourceDuration || latestClip.duration) : isDragging.startDuration;
+
+                if (e.altKey) {
+                    // Strecthing mode (ALT): change visual duration, keep source duration
+                    updateClip(clip.id, { duration: newDur, sourceDuration: currentSourceDur });
+                } else if (isDragging.type === 'resize-edge') {
+                    // Trimming mode (Normal): change visual duration AND source duration proportionally (maintain current speed)
+                    const currentStretchFactor = isDragging.startDuration / currentSourceDur;
+                    const newSourceDur = Math.max(0.1, newDur / currentStretchFactor);
+                    updateClip(clip.id, { duration: newDur, sourceDuration: newSourceDur });
+                }
+            } else { // Left edge resize
                 let newOffset = Math.max(0, isDragging.startOffset + dx);
                 let bestSnap = null;
                 let minDelta = snapThreshold;
@@ -1272,8 +1306,19 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
 
                 const actualDx = newOffset - isDragging.startOffset;
                 const newDur = Math.max(0.1, isDragging.startDuration - actualDx);
-                const newStart = clip.type === 'audio' || clip.type === 'video' ? Math.max(0, (isDragging.startIn || 0) + actualDx) : 0;
-                updateClip(clip.id, { offset: newOffset, duration: newDur, start: newStart });
+                const currentSourceDur = clip.sourceDuration || isDragging.startDuration;
+
+                if (e.altKey) {
+                    // Time stretching: change offset and duration, but source duration remains constant
+                    updateClip(clip.id, { offset: newOffset, duration: newDur, sourceDuration: currentSourceDur });
+                } else {
+                    // Trimming: change offset, duration, and source start
+                    const currentStretchFactor = isDragging.startDuration / currentSourceDur;
+                    const consumedInSource = actualDx / currentStretchFactor; // How much source content is "trimmed" from the start
+                    const newStart = Math.max(0, (isDragging.startIn || 0) + consumedInSource);
+                    const newSourceDur = Math.max(0.1, currentSourceDur - consumedInSource);
+                    updateClip(clip.id, { offset: newOffset, duration: newDur, start: newStart, sourceDuration: newSourceDur });
+                }
             }
         } else if (isDragging.type === 'crop') {
             if (!videoRect.width) return;
@@ -1426,6 +1471,19 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                     </div>
                                     <input type="range" min="0.1" max="5" step="0.01" value={selectedClip.transform?.scale || 1} style={{ height: 3 }}
                                         onChange={e => updateClip(selectedClipId, { transform: { ...(selectedClip.transform || { x: 0, y: 0 }), scale: parseFloat(e.target.value) } })} />
+                                </div>
+                                <div className="control-item" style={{ gap: 2 }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <label style={{ fontSize: '0.65rem', opacity: 0.8 }}>{t.playbackSpeed || 'Speed'}</label>
+                                        <span style={{ fontSize: '0.6rem', color: '#ffc107' }}>{((selectedClip.sourceDuration || selectedClip.duration) / selectedClip.duration).toFixed(2)}x</span>
+                                    </div>
+                                    <input type="range" min="0.1" max="5" step="0.01" value={(selectedClip.sourceDuration || selectedClip.duration) / selectedClip.duration} style={{ height: 3 }}
+                                        onChange={e => {
+                                            const newSpeed = parseFloat(e.target.value) || 1;
+                                            const sourceDur = selectedClip.sourceDuration || selectedClip.duration;
+                                            const newTimelineDur = sourceDur / newSpeed;
+                                            updateClip(selectedClipId, { duration: newTimelineDur, sourceDuration: sourceDur });
+                                        }} />
                                 </div>
                                 <button className="action-btn" style={{ width: '100%', background: '#387f85', color: 'white', justifyContent: 'center', fontSize: '0.8rem', padding: '6px' }} onClick={() => updateClip(selectedClipId, { filters: { brightness: 100, contrast: 100, saturation: 100, gamma: 1.0 }, volume: 100 })}>
                                     <RotateCw size={14} style={{ marginRight: 8 }} /> {t.resetFilters || 'Reset Filters'}
@@ -1893,6 +1951,17 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                                         boxSizing: 'border-box'
                                                     }}
                                                 >
+                                                    <div style={{ pointerEvents: 'none', display: 'flex', flexDirection: 'column', gap: 1 }}>
+                                                        <div style={{ fontWeight: 'bold', overflow: 'hidden', textOverflow: 'ellipsis' }}>{clip.name}</div>
+                                                        <div style={{ fontSize: '0.65rem', opacity: 0.8, display: 'flex', alignItems: 'center', gap: 5 }}>
+                                                            <span>{clip.duration.toFixed(1)}s</span>
+                                                            {(clip.sourceDuration && Math.abs(clip.sourceDuration - clip.duration) > 0.05) && (
+                                                                <span style={{ color: '#ffc107', background: 'rgba(0,0,0,0.5)', padding: '0 4px', borderRadius: 2 }}>
+                                                                    {(clip.sourceDuration / clip.duration).toFixed(2)}x
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </div>
                                                     {/* Resize Handles */}
                                                     <div
                                                         onMouseDown={(e) => {
@@ -1909,8 +1978,6 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                                         style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 6, cursor: 'ew-resize', background: 'rgba(255,255,255,0.1)' }}
                                                     />
 
-                                                    <div style={{ fontWeight: 'bold', marginBottom: 2, pointerEvents: 'none' }}>{clip.name}</div>
-                                                    <div style={{ fontSize: '0.65rem', opacity: 0.6, pointerEvents: 'none' }}>{clip.duration.toFixed(1)}s</div>
                                                 </div>
                                             ))}
                                         </div>
