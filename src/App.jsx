@@ -333,8 +333,8 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                         name: item.name,
                         type: 'video',
                         start: 0,
-                        duration: initialDuration,
-                        sourceDuration: initialDuration, // Amount of tape consumed
+                        duration: initialDuration > 0 ? initialDuration : 0.1,
+                        sourceDuration: initialDuration > 0 ? initialDuration : 0.1,
                         offset: 0,
                         filters: { brightness: 100, contrast: 100, saturation: 100, gamma: 1.0 },
                         crop: { x: 0, y: 0, w: 100, h: 100 },
@@ -648,13 +648,15 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
             if (!activeVClip.sourceHeight) updates.sourceHeight = video.videoHeight;
 
             // If sourceDuration is missing, initialize it to the full source duration
-            if (!activeVClip.sourceDuration) {
-                updates.sourceDuration = activeVClip.duration || video.duration;
+            if (!activeVClip.sourceDuration || activeVClip.sourceDuration <= 0) {
+                const vidDur = isFinite(video.duration) && video.duration > 0 ? video.duration : 0.1;
+                updates.sourceDuration = activeVClip.duration || vidDur;
             }
             // If duration itself is missing (clip-0 with 0s), set them both
-            if (!activeVClip.duration || activeVClip.duration === 0) {
-                updates.duration = video.duration;
-                updates.sourceDuration = video.duration;
+            if (!activeVClip.duration || activeVClip.duration <= 0) {
+                const vidDur = isFinite(video.duration) && video.duration > 0 ? video.duration : 0.1;
+                updates.duration = vidDur;
+                updates.sourceDuration = vidDur;
             }
             if (Object.keys(updates).length > 0) {
                 updateClip(activeVClip.id, updates);
@@ -1541,31 +1543,34 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                 <div className="control-item" style={{ gap: 2 }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                         <label style={{ fontSize: '0.65rem', opacity: 0.8, color: 'var(--text-primary)' }}>{t.scale || 'Scale'}</label>
-                                        <input type="number" step="0.01" value={(selectedClip.transform?.scale || 1).toFixed(2)}
+                                        <input type="number" step="0.01" value={isFinite(selectedClip.transform?.scale) ? parseFloat(selectedClip.transform.scale).toFixed(2) : "1.00"}
                                             onChange={e => updateClip(selectedClipId, { transform: { ...(selectedClip.transform || { x: 0, y: 0 }), scale: parseFloat(e.target.value) || 1 } })}
                                             style={{ width: 45, background: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: 'var(--netflix-red)', fontSize: '0.65rem', padding: '1px 3px', borderRadius: 3, textAlign: 'center' }} />
                                     </div>
-                                    <input type="range" min="0.1" max="10" step="0.01" value={selectedClip.transform?.scale || 1} style={{ height: 3 }}
-                                        onChange={e => updateClip(selectedClipId, { transform: { ...(selectedClip.transform || { x: 0, y: 0 }), scale: parseFloat(e.target.value) } })} />
+                                    <input type="range" min="0.1" max="10" step="0.01" value={isFinite(selectedClip.transform?.scale) ? selectedClip.transform.scale : 1} style={{ height: 3 }}
+                                        onChange={e => updateClip(selectedClipId, { transform: { ...(selectedClip.transform || { x: 0, y: 0 }), scale: parseFloat(e.target.value) || 1 } })} />
                                 </div>
                                 <div className="control-item" style={{ gap: 2 }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                         <label style={{ fontSize: '0.65rem', opacity: 0.8, color: 'var(--text-primary)' }}>{t.playbackSpeed || 'Speed'}</label>
-                                        <input type="number" step="0.01" value={((selectedClip.sourceDuration || selectedClip.duration) / selectedClip.duration).toFixed(2)}
+                                        <input type="number" step="0.01"
+                                            value={(selectedClip.duration > 0 && isFinite(selectedClip.sourceDuration / selectedClip.duration)) ? (selectedClip.sourceDuration / selectedClip.duration).toFixed(2) : "1.00"}
                                             onChange={e => {
-                                                const newSpeed = parseFloat(e.target.value) || 1;
-                                                const sourceDur = selectedClip.sourceDuration || selectedClip.duration;
+                                                const newSpeed = Math.max(0.1, parseFloat(e.target.value) || 1);
+                                                const sourceDur = selectedClip.sourceDuration || selectedClip.duration || 1;
                                                 const newTimelineDur = sourceDur / newSpeed;
-                                                updateClip(selectedClipId, { duration: newTimelineDur, sourceDuration: sourceDur });
+                                                updateClip(selectedClipId, { duration: isFinite(newTimelineDur) ? newTimelineDur : 1, sourceDuration: sourceDur });
                                             }}
                                             style={{ width: 45, background: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: '#ffc107', fontSize: '0.65rem', padding: '1px 3px', borderRadius: 3, textAlign: 'center' }} />
                                     </div>
-                                    <input type="range" min="0.1" max="5" step="0.01" value={(selectedClip.sourceDuration || selectedClip.duration) / selectedClip.duration} style={{ height: 3 }}
+                                    <input type="range" min="0.1" max="5" step="0.01"
+                                        value={(selectedClip.duration > 0 && isFinite(selectedClip.sourceDuration / selectedClip.duration)) ? (selectedClip.sourceDuration / selectedClip.duration) : 1}
+                                        style={{ height: 3 }}
                                         onChange={e => {
-                                            const newSpeed = parseFloat(e.target.value) || 1;
-                                            const sourceDur = selectedClip.sourceDuration || selectedClip.duration;
+                                            const newSpeed = Math.max(0.1, parseFloat(e.target.value) || 1);
+                                            const sourceDur = selectedClip.sourceDuration || selectedClip.duration || 1;
                                             const newTimelineDur = sourceDur / newSpeed;
-                                            updateClip(selectedClipId, { duration: newTimelineDur, sourceDuration: sourceDur });
+                                            updateClip(selectedClipId, { duration: isFinite(newTimelineDur) ? newTimelineDur : 1, sourceDuration: sourceDur });
                                         }} />
                                 </div>
                                 <button className="action-btn" style={{ width: '100%', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', justifyContent: 'center', fontSize: '0.8rem', padding: '6px' }} onClick={() => updateClip(selectedClipId, { filters: { brightness: 100, contrast: 100, saturation: 100, gamma: 1.0 }, volume: 100 })}>
@@ -2016,8 +2021,8 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                                     }}
                                                     style={{
                                                         position: 'absolute',
-                                                        left: clip.offset * zoomLevel,
-                                                        width: clip.duration * zoomLevel,
+                                                        left: (clip.offset || 0) * zoomLevel,
+                                                        width: Math.max(1, (isFinite(clip.duration) ? clip.duration : 0.1) * zoomLevel),
                                                         height: '100%',
                                                         background: clip.id === selectedClipId ? 'rgba(229, 9, 20, 0.4)' : (track.type === 'audio' ? 'rgba(0, 113, 235, 0.2)' : 'rgba(229, 9, 20, 0.1)'),
                                                         border: clip.id === selectedClipId ? '1px solid #e50914' : (track.type === 'audio' ? '1px solid #0071eb' : '1px solid #333'),
