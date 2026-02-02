@@ -538,7 +538,8 @@ textarea:focus {
   justify-content: center;
   z-index: 3010;
   pointer-events: none;
-  /* Altındaki videoya tıklanabilsin */
+  position: relative;
+  /* Positioning context for speed overlay */
 }
 
 .full-media {
@@ -1723,4 +1724,94 @@ select:focus {
 
 .editor-grid {
   height: calc(100% - 60px) !important;
+}
+
+/* Aggressively hide native fullscreen button */
+video::-webkit-media-controls-fullscreen-button {
+  display: none !important;
+}
+
+video::-webkit-media-controls-enclosure {
+  overflow: hidden !important;
+}
+
+video::-moz-list-bullet {
+  display: none !important;
+}
+
+.speed-control-overlay {
+  position: absolute;
+  bottom: 0px;
+  right: 0px;
+  z-index: 3020;
+  pointer-events: auto;
+  opacity: 0;
+  transition: opacity 0.3s ease 0.1s;
+  /* Kaybolurken 1 saniye bekler */
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.viewer-inner:hover .speed-control-overlay {
+  opacity: 1;
+  transition: opacity 0.2s ease 0s;
+  /* Gelirken anında gelir */
+}
+
+.speed-control-wrapper {
+  position: relative;
+}
+
+.speed-btn-integrated {
+  background: rgba(30, 30, 30, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: white;
+  font-size: 0.6rem;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  text-shadow: 0 0 4px rgba(0, 0, 0, 0.8);
+  min-width: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 30px;
+}
+
+.speed-control-wrapper:hover .speed-menu-integrated {
+  display: block;
+}
+
+.speed-menu-integrated {
+  display: none;
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #181111;
+  border: 1px solid #333;
+  border-radius: 4px;
+  padding: 5px 0;
+  min-width: 60px;
+  box-shadow: 0 -4px 10px rgba(0, 0, 0, 0.5);
+}
+
+.speed-option-integrated {
+  padding: 6px 12px;
+  font-size: 0.8rem;
+  color: #ccc;
+  cursor: pointer;
+  text-align: center;
+}
+
+.speed-option-integrated:hover {
+  background: var(--netflix-red);
+  color: white;
+}
+
+.speed-option-integrated.active {
+  color: var(--netflix-red);
+  font-weight: bold;
 }

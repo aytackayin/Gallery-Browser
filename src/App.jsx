@@ -2720,6 +2720,7 @@ function App() {
     const [loading, setLoading] = useState(true);
     const [selectedMediaIndex, setSelectedMediaIndex] = useState(-1);
     const [autoPlaySetting, setAutoPlaySetting] = useState(false);
+    const [playbackRate, setPlaybackRate] = useState(1);
     const [autoPlaySlides, setAutoPlaySlides] = useState(false);
     const [slideDuration, setSlideDuration] = useState(5);
     const [videoLoop, setVideoLoop] = useState(false);
@@ -3358,6 +3359,13 @@ function App() {
         }
     };
 
+    // Effect to sync playbackRate when video changes or rate changes
+    useEffect(() => {
+        if (videoRef.current && selectedMedia?.type.startsWith('video/')) {
+            videoRef.current.playbackRate = playbackRate;
+        }
+    }, [playbackRate, selectedMediaIndex]);
+
     // Auto Play Slides Logic for Images
     useEffect(() => {
         let timer;
@@ -3829,36 +3837,63 @@ function App() {
                                     }}
                                 />
                             ) : (
-                                <video
-                                    crossOrigin="anonymous"
-                                    ref={videoRef}
-                                    key={selectedMedia.path}
-                                    src={getMediaUrl(selectedMedia.path)}
-                                    className={`full-media ${zoomMode ? 'zoomed' : ''}`}
-                                    controls={true}
-                                    autoPlay={autoPlaySetting}
-                                    style={{
-                                        display: (showVideoEditor || showEditor) ? 'none' : 'block',
-                                        transform: `scale(${zoomScale})`,
-                                        transformOrigin: `${zoomOrigin.x}% ${zoomOrigin.y}%`,
-                                        transition: (zoomScale === 1 || isPanning) ? 'none' : 'transform 0.3s',
-                                        pointerEvents: zoomMode ? 'none' : 'auto'
-                                    }}
-                                    draggable="false"
-                                    onPlay={() => setIsPlaying(true)}
-                                    onPause={() => setIsPlaying(false)}
-                                    onLoadedMetadata={() => {
-                                        if (videoRef.current) videoRef.current.volume = 1;
-                                    }}
-                                    onEnded={() => {
-                                        if (videoLoop) {
-                                            videoRef.current.currentTime = 0;
-                                            videoRef.current.play();
-                                        } else if (autoPlaySlides) {
-                                            navigateMedia(1);
-                                        }
-                                    }}
-                                />
+                                <>
+                                    <video
+                                        crossOrigin="anonymous"
+                                        ref={videoRef}
+                                        key={selectedMedia.path}
+                                        src={getMediaUrl(selectedMedia.path)}
+                                        className={`full-media ${zoomMode ? 'zoomed' : ''}`}
+                                        controls={true}
+                                        controlsList="nofullscreen nodownload noremoteplayback"
+                                        disablePictureInPicture={true}
+                                        autoPlay={autoPlaySetting}
+                                        style={{
+                                            display: (showVideoEditor || showEditor) ? 'none' : 'block',
+                                            transform: `scale(${zoomScale})`,
+                                            transformOrigin: `${zoomOrigin.x}% ${zoomOrigin.y}%`,
+                                            transition: (zoomScale === 1 || isPanning) ? 'none' : 'transform 0.3s',
+                                            pointerEvents: zoomMode ? 'none' : 'auto'
+                                        }}
+                                        draggable="false"
+                                        onPlay={() => setIsPlaying(true)}
+                                        onPause={() => setIsPlaying(false)}
+                                        onLoadedMetadata={() => {
+                                            if (videoRef.current) {
+                                                videoRef.current.volume = 1;
+                                                videoRef.current.playbackRate = playbackRate;
+                                            }
+                                        }}
+                                        onEnded={() => {
+                                            if (videoLoop) {
+                                                videoRef.current.currentTime = 0;
+                                                videoRef.current.play();
+                                            } else if (autoPlaySlides) {
+                                                navigateMedia(1);
+                                            }
+                                        }}
+                                    />
+                                    {selectedMedia.type.startsWith('video/') && !zoomMode && (
+                                        <div className="speed-control-overlay" onClick={e => e.stopPropagation()}>
+                                            <div className="speed-control-wrapper">
+                                                <button className="speed-btn-integrated">
+                                                    {playbackRate}x
+                                                </button>
+                                                <div className="speed-menu-integrated">
+                                                    {[0.5, 0.75, 1, 1.25, 1.5, 2].map(rate => (
+                                                        <div
+                                                            key={rate}
+                                                            className={`speed-option-integrated ${playbackRate === rate ? 'active' : ''}`}
+                                                            onClick={() => setPlaybackRate(rate)}
+                                                        >
+                                                            {rate}x
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </>
                             )}
                         </div>
                         {!zoomMode && selectedMediaIndex < sortedMediaOnly.length - 1 && <div className="nav-zone next" onClick={(e) => { e.stopPropagation(); navigateMedia(1); }}><ChevronRight size={60} className="nav-arrow" /></div>}
