@@ -1658,17 +1658,38 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                 >
                                     <div style={{
                                         position: 'absolute',
-                                        top: -30,
+                                        top: -35,
                                         left: '50%',
                                         transform: 'translateX(-50%)',
-                                        background: 'rgba(0,0,0,0.8)',
+                                        background: 'rgba(0,0,0,0.9)',
                                         color: '#fff',
                                         padding: '4px 8px',
-                                        borderRadius: 4,
+                                        borderRadius: 6,
                                         fontSize: '0.8rem',
-                                        whiteSpace: 'nowrap'
+                                        whiteSpace: 'nowrap',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: 5,
+                                        pointerEvents: 'auto',
+                                        border: '1px solid rgba(255,255,255,0.1)',
+                                        boxShadow: '0 4px 10px rgba(0,0,0,0.5)'
                                     }}>
-                                        {Math.round(canvasSize.w)} x {Math.round(canvasSize.h)} px
+                                        <input
+                                            type="number"
+                                            min={1}
+                                            value={Math.round(canvasSize.w)}
+                                            onChange={e => setCanvasSize(prev => ({ ...prev, w: Math.max(1, parseInt(e.target.value) || 0) }))}
+                                            style={{ width: 55, background: 'rgba(255,255,255,0.05)', border: '1px solid #444', color: '#fff', fontSize: '0.75rem', padding: '1px 4px', borderRadius: 3, textAlign: 'center', outline: 'none' }}
+                                        />
+                                        <span style={{ color: '#888' }}>x</span>
+                                        <input
+                                            type="number"
+                                            min={1}
+                                            value={Math.round(canvasSize.h)}
+                                            onChange={e => setCanvasSize(prev => ({ ...prev, h: Math.max(1, parseInt(e.target.value) || 0) }))}
+                                            style={{ width: 55, background: 'rgba(255,255,255,0.05)', border: '1px solid #444', color: '#fff', fontSize: '0.75rem', padding: '1px 4px', borderRadius: 3, textAlign: 'center', outline: 'none' }}
+                                        />
+                                        <span style={{ color: '#aaa', marginLeft: 2 }}>px</span>
                                     </div>
                                     {['nw', 'ne', 'sw', 'se'].map(pos => (
                                         <div
