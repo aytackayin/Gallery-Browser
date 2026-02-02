@@ -395,7 +395,19 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
         setTracks(prev => {
             const sourceTrack = prev.find(t => t.clips.some(c => c.id === clipId));
             if (!sourceTrack || sourceTrack.id === targetTrackId) return prev;
+
+            const targetTrack = prev.find(t => t.id === targetTrackId);
+            if (!targetTrack) return prev;
+
             const clip = sourceTrack.clips.find(c => c.id === clipId);
+
+            // RESTRICTION: Video/Image can only be in video tracks, Audio only in audio tracks
+            const isAudioClip = clip.type === 'audio';
+            const isVideoMedia = clip.type === 'video' || clip.type === 'image';
+
+            if (targetTrack.type === 'audio' && isVideoMedia) return prev;
+            if (targetTrack.type === 'video' && isAudioClip) return prev;
+
             return prev.map(t => {
                 if (t.id === sourceTrack.id) return { ...t, clips: t.clips.filter(c => c.id !== clipId) };
                 if (t.id === targetTrackId) return { ...t, clips: [...t.clips, clip] };
@@ -460,6 +472,26 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
             clips: track.clips.map(c => c.id === clipId ? { ...c, ...updates } : c)
         })));
     };
+
+    const filteredPickerItems = useMemo(() => {
+        if (!pickerTarget) return [];
+        const targetTrack = tracks.find(t => t.id === pickerTarget.trackId);
+        if (!targetTrack) return pickerItems;
+
+        return pickerItems.filter(item => {
+            if (item.isDirectory || item.type === 'folder') return true;
+
+            const isAudioFile = item.type?.startsWith('audio/') || item.path.match(/\.(mp3|wav|ogg|m4a|flac|aac)$/i);
+            const isVideoFile = item.type?.startsWith('video/') || item.path.match(/\.(mp4|mkv|mov|avi|wmv|flv|webm)$/i);
+            const isImageFile = item.type?.startsWith('image/') || item.path.match(/\.(jpg|jpeg|png|webp|bmp)$/i);
+
+            if (targetTrack.type === 'audio') {
+                return isAudioFile;
+            } else {
+                return isVideoFile || isImageFile;
+            }
+        });
+    }, [pickerItems, pickerTarget, tracks]);
 
     const addTrack = (type) => {
         setTracks(prev => {
@@ -2131,8 +2163,8 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                             </button>
                             <div className="toolbar-separator" />
                             <div className="btn-group" style={{ overflow: 'visible' }}>
-                                <button className="action-btn" onClick={() => addTrack('video')} data-tooltip={t.addVideoTrack || 'Add Video Track'} style={{ color: '#e50914' }}><Plus size={14} /> <span style={{ fontSize: '0.7rem' }}>{t.videoLayer || 'Video Layer'}</span></button>
-                                <button className="action-btn" onClick={() => addTrack('audio')} data-tooltip={t.addAudioTrack || 'Add Audio Track'} style={{ color: '#46d369' }}><Plus size={14} /> <span style={{ fontSize: '0.7rem' }}>{t.audioLayer || 'Audio Layer'}</span></button>
+                                <button className="action-btn" onClick={() => addTrack('video')} data-tooltip={t.addVideoTrack || 'Add Video Track'} data-tooltip-pos="bottom" style={{ color: '#e50914' }}><Plus size={14} /> <span style={{ fontSize: '0.7rem' }}>{t.videoLayer || 'Video Layer'}</span></button>
+                                <button className="action-btn" onClick={() => addTrack('audio')} data-tooltip={t.addAudioTrack || 'Add Audio Track'} data-tooltip-pos="bottom" style={{ color: '#46d369' }}><Plus size={14} /> <span style={{ fontSize: '0.7rem' }}>{t.audioLayer || 'Audio Layer'}</span></button>
                             </div>
                             <div style={{ flex: 1, textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
                                 {formatTime(currentTime)} / {formatTime(contentDuration)}
@@ -2204,9 +2236,9 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                                 <span style={{ fontWeight: 'bold' }}>{track.id.toUpperCase()}</span>
                                             </div>
                                             <div style={{ display: 'flex', gap: 0 }}>
-                                                <button onClick={(e) => { e.stopPropagation(); setPickerTarget({ trackId: track.id }); fetchPickerItems(pickerPath); }} style={{ background: 'none', border: 'none', color: '#46d369', cursor: 'pointer', padding: 2 }} data-tooltip={t.addMedia || 'Add Media'}><Plus size={14} /></button>
+                                                <button onClick={(e) => { e.stopPropagation(); setPickerTarget({ trackId: track.id }); fetchPickerItems(pickerPath); }} style={{ background: 'none', border: 'none', color: '#46d369', cursor: 'pointer', padding: 2 }} data-tooltip={t.addMedia || 'Add Media'} data-tooltip-pos="right"><Plus size={14} /></button>
                                                 {track.id !== 'v1' && track.id !== 'a1' && (
-                                                    <button onClick={(e) => { e.stopPropagation(); removeTrack(track.id); }} style={{ background: 'none', border: 'none', color: '#e50914', cursor: 'pointer', padding: 2 }} data-tooltip={t.deleteTrack || 'Delete Track'}><Trash size={14} /></button>
+                                                    <button onClick={(e) => { e.stopPropagation(); removeTrack(track.id); }} style={{ background: 'none', border: 'none', color: '#e50914', cursor: 'pointer', padding: 2 }} data-tooltip={t.deleteTrack || 'Delete Track'} data-tooltip-pos="right"><Trash size={14} /></button>
                                                 )}
                                             </div>
                                         </div>
@@ -2564,7 +2596,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                             </div>
                                         </div>
                                     )}
-                                    {pickerItems.map(pi => (
+                                    {filteredPickerItems.map(pi => (
                                         <div key={pi.path} className="picker-item" onClick={() => {
                                             if (pi.isDirectory || pi.type === 'folder') {
                                                 fetchPickerItems(pi.path);
@@ -2583,13 +2615,13 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                                         onError={(e) => {
                                                             e.target.onerror = null;
                                                             e.target.style.display = 'none';
-                                                            e.target.parentNode.innerHTML = pi.type?.startsWith('image/') ? '<div class="type-icon"><svg viewBox="0 0 24 24" width="30" height="30" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg></div>' : '<div class="type-icon"><svg viewBox="0 0 24 24" width="30" height="30" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg></div>';
+                                                            e.target.parentNode.innerHTML = pi.type?.startsWith('image/') ? '<div class="type-icon"><svg viewBox="0 0 24 24" width="30" height="30" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg></div>' : (pi.type?.startsWith('audio/') ? '<div class="type-icon"><svg viewBox="0 0 24 24" width="30" height="30" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg></div>' : '<div class="type-icon"><svg viewBox="0 0 24 24" width="30" height="30" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg></div>');
                                                         }}
                                                     />
                                                 )}
                                             </div>
                                             <div className="item-footer" style={(pi.isDirectory || pi.type === 'folder') ? { justifyContent: 'center', textAlign: 'center' } : {}}>
-                                                {(!pi.isDirectory && pi.type !== 'folder') && (pi.type?.startsWith('image/') ? <ImageIcon size={12} color="#0071eb" /> : <VideoIcon size={12} color="#46d369" />)}
+                                                {(!pi.isDirectory && pi.type !== 'folder') && (pi.type?.startsWith('image/') ? <ImageIcon size={12} color="#0071eb" /> : (pi.type?.startsWith('audio/') ? <Volume2 size={12} color="#46d369" /> : <VideoIcon size={12} color="#46d369" />))}
                                                 <span data-tooltip={pi.name} style={(pi.isDirectory || pi.type === 'folder') ? { textAlign: 'center' } : {}}>{pi.name}</span>
                                             </div>
                                         </div>
