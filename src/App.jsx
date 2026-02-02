@@ -352,7 +352,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
             setDuration(prev => Math.max(prev, initialDuration));
             setTracks(prev => prev.map(t => ({
                 ...t,
-                clips: t.clips.map(c => (c.id === 'clip-0' && (!c.duration || c.duration < initialDuration)) ? { ...c, duration: initialDuration, sourceDuration: initialDuration } : c)
+                clips: t.clips.map(c => (c.id === 'clip-0' && (c.duration <= 0.1 || c.duration < initialDuration)) ? { ...c, duration: initialDuration, sourceDuration: initialDuration } : c)
             })));
         }
     }, [initialDuration]);
@@ -575,7 +575,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                         // Also update initial clip duration if it's missing
                         setTracks(prev => prev.map(t => ({
                             ...t,
-                            clips: t.clips.map(c => (c.id === 'clip-0' && (!c.duration || c.duration === 0)) ? { ...c, duration: info.durationSeconds, sourceDuration: info.durationSeconds } : c)
+                            clips: t.clips.map(c => (c.id === 'clip-0' && (c.duration <= 0.1)) ? { ...c, duration: info.durationSeconds, sourceDuration: info.durationSeconds } : c)
                         })));
                     }
                 }
@@ -653,7 +653,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                 updates.sourceDuration = activeVClip.duration || vidDur;
             }
             // If duration itself is missing (clip-0 with 0s), set them both
-            if (!activeVClip.duration || activeVClip.duration <= 0) {
+            if (!activeVClip.duration || activeVClip.duration <= 0.1) {
                 const vidDur = isFinite(video.duration) && video.duration > 0 ? video.duration : 0.1;
                 updates.duration = vidDur;
                 updates.sourceDuration = vidDur;
