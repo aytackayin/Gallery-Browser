@@ -299,6 +299,90 @@ app.get('/api/info', async (req, res) => {
     }
 });
 
+// Video Timeline Thumbnails (Filmstrip)
+app.get('/api/video-timeline-thumbs', async (req, res) => {
+    try {
+        const { path: itemPath, count = 10, width = 160, height = 90, startTime = 0, duration = 0 } = req.query;
+        if (!itemPath) return res.status(400).end();
+
+        const fullPath = path.join(rootGalleryPath, itemPath);
+        if (!fs.existsSync(fullPath)) return res.status(404).end();
+
+        const totalCount = parseInt(count);
+        const w = parseInt(width);
+        const h = parseInt(height);
+        const start = parseFloat(startTime);
+        const dur = parseFloat(duration);
+
+        const hash = crypto.createHash('md5').update(`${itemPath}_thumbs_${totalCount}_${w}_${h}_${start}_${dur}`).digest('hex');
+        const cachePath = path.join(thumbDir, `strip_${hash}.jpg`);
+
+        if (fs.existsSync(cachePath)) {
+            return res.sendFile(cachePath);
+        }
+
+        // Generate filmstrip using FFmpeg
+        // Use select filter to get frames at regular intervals
+        // Or fps filter: fps = count / duration
+        const fps = totalCount / (dur || 1);
+
+        ffmpeg(fullPath)
+            .setStartTime(start)
+            .setDuration(dur || 10000) // Default to long if duration not specified
+            .complexFilter([
+                `fps=${fps},scale=${w}:${h},tile=${totalCount}x1`
+            ])
+            .frames(1)
+            .output(cachePath)
+            .on('end', () => res.sendFile(cachePath))
+            .on('error', (err) => {
+                console.error("Filmstrip error:", err);
+                res.status(500).end();
+            })
+            .run();
+
+    } catch (e) {
+        res.status(500).end();
+    }
+});
+
+// Audio Waveform Generation
+app.get('/api/audio-waveform', async (req, res) => {
+    try {
+        const { path: itemPath, width = 800, height = 100, color = '0x46d369' } = req.query;
+        if (!itemPath) return res.status(400).end();
+
+        const fullPath = path.join(rootGalleryPath, itemPath);
+        if (!fs.existsSync(fullPath)) return res.status(404).end();
+
+        const w = parseInt(width);
+        const h = parseInt(height);
+
+        const hash = crypto.createHash('md5').update(`${itemPath}_wave_${w}_${h}_${color}`).digest('hex');
+        const cachePath = path.join(thumbDir, `wave_${hash}.png`);
+
+        if (fs.existsSync(cachePath)) {
+            return res.sendFile(cachePath);
+        }
+
+        ffmpeg(fullPath)
+            .complexFilter([
+                `aformat=channel_layouts=mono,showwavespic=s=${w}x${h}:colors=${color}`
+            ])
+            .frames(1)
+            .output(cachePath)
+            .on('end', () => res.sendFile(cachePath))
+            .on('error', (err) => {
+                console.error("Waveform error:", err);
+                res.status(500).end();
+            })
+            .run();
+
+    } catch (e) {
+        res.status(500).end();
+    }
+});
+
 app.post('/api/info', (req, res) => {
     const { path, info } = req.body;
     db.prepare("INSERT OR REPLACE INTO item_info (path, info) VALUES (?, ?)").run(path, info);

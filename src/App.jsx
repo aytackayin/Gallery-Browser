@@ -2092,7 +2092,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                     <div style={{ width: 80, height: tracks.length * 35, background: 'var(--bg-secondary)', borderRight: '2px solid var(--border-color)' }} />
                                 </div>
                                 {tracks.map((track, idx) => (
-                                    <div key={track.id} style={{ display: 'grid', gridTemplateColumns: '80px 1fr', gap: 0, marginBottom: 0, minHeight: 35, borderBottom: '1px solid var(--border-color)', background: 'var(--bg-primary)', position: 'relative' }}>
+                                    <div key={track.id} className={`timeline-track-row track-type-${track.type}`} style={{ display: 'grid', gridTemplateColumns: '80px 1fr', gap: 0, marginBottom: 0, minHeight: 45, borderBottom: '1px solid var(--border-color)', background: 'var(--bg-primary)', position: 'relative' }}>
                                         <div
                                             className={`track-header ${dragTrackIndex === idx ? 'dragging' : ''}`}
                                             draggable
@@ -2103,7 +2103,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                             style={{ color: 'var(--text-primary)', fontSize: '0.7rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--bg-card)', borderRight: '2px solid var(--border-color)', borderBottom: '1px solid var(--border-color)', position: 'sticky', left: 0, zIndex: 950, padding: '0 5px', cursor: 'grab', height: '100%', boxSizing: 'border-box' }}
                                         >
                                             <div style={{ display: 'flex', alignItems: 'center', gap: 4, pointerEvents: 'none' }}>
-                                                <Layers size={12} style={{ opacity: 0.3 }} />
+                                                {track.type === 'video' ? <VideoIcon size={12} color="#e50914" /> : <Volume2 size={12} color="#46d369" />}
                                                 <span style={{ fontWeight: 'bold' }}>{track.id.toUpperCase()}</span>
                                             </div>
                                             <div style={{ display: 'flex', gap: 0 }}>
@@ -2121,81 +2121,98 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                                 }
                                             }}
                                         >
-                                            {track.clips.map(clip => (
-                                                <div
-                                                    key={clip.id}
-                                                    className={`clip-item ${clip.id === selectedClipId ? 'selected' : ''}`}
-                                                    onClick={(e) => { e.stopPropagation(); setSelectedClipId(clip.id); }}
-                                                    onMouseDown={(e) => {
-                                                        e.stopPropagation();
-                                                        setSelectedClipId(clip.id);
+                                            {track.clips.map(clip => {
+                                                const isAudio = track.type === 'audio';
+                                                const isVideo = track.type === 'video';
 
-                                                        // Update Playhead position on clip click
-                                                        if (timelineRef.current) {
-                                                            const rect = timelineRef.current.getBoundingClientRect();
-                                                            const clickX = (e.clientX - rect.left) + timelineRef.current.scrollLeft - 80;
-                                                            const newTime = Math.max(0, clickX / zoomLevel);
-                                                            setCurrentTime(newTime);
-                                                            if (videoRef.current) videoRef.current.currentTime = newTime;
-                                                        }
+                                                // Dynamic thumb count based on zoom & duration
+                                                const thumbCount = Math.max(1, Math.ceil((clip.duration * zoomLevel) / 80));
+                                                const thumbUrl = `/api/video-timeline-thumbs?path=${encodeURIComponent(clip.path)}&count=${thumbCount}&startTime=${clip.start}&duration=${clip.duration}&t=${clip.id}`;
+                                                const waveUrl = `/api/audio-waveform?path=${encodeURIComponent(clip.path)}&width=${Math.round(clip.duration * zoomLevel)}`;
 
-                                                        setIsDragging({
-                                                            type: 'clip',
-                                                            id: clip.id,
-                                                            startX: e.clientX,
-                                                            startOffset: clip.offset
-                                                        });
-                                                    }}
-                                                    style={{
-                                                        position: 'absolute',
-                                                        left: (clip.offset || 0) * zoomLevel,
-                                                        width: Math.max(1, (isFinite(clip.duration) ? clip.duration : 0.1) * zoomLevel),
-                                                        height: '100%',
-                                                        background: clip.id === selectedClipId ? 'rgba(229, 9, 20, 0.4)' : (track.type === 'audio' ? 'rgba(0, 113, 235, 0.2)' : 'rgba(229, 9, 20, 0.1)'),
-                                                        border: clip.id === selectedClipId ? '1px solid #e50914' : (track.type === 'audio' ? '1px solid #0071eb' : '1px solid #333'),
-                                                        borderRadius: 4,
-                                                        padding: '4px 8px',
-                                                        fontSize: '0.75rem',
-                                                        color: '#eee',
-                                                        cursor: isDragging?.id === clip.id ? 'grabbing' : 'grab',
-                                                        overflow: 'hidden',
-                                                        whiteSpace: 'nowrap',
-                                                        zIndex: isDragging?.id === clip.id ? 150 : 100,
-                                                        pointerEvents: isDragging?.id === clip.id ? 'none' : 'auto',
-                                                        userSelect: 'none',
-                                                        transition: isDragging ? 'none' : 'left 0.1s, width 0.1s',
-                                                        boxSizing: 'border-box'
-                                                    }}
-                                                >
-                                                    <div style={{ pointerEvents: 'none', display: 'flex', flexDirection: 'column', gap: 1 }}>
-                                                        <div style={{ fontWeight: 'bold', overflow: 'hidden', textOverflow: 'ellipsis' }}>{clip.name}</div>
-                                                        <div style={{ fontSize: '0.65rem', opacity: 0.8, display: 'flex', alignItems: 'center', gap: 5 }}>
-                                                            <span>{clip.duration.toFixed(1)}s</span>
+                                                return (
+                                                    <div
+                                                        key={clip.id}
+                                                        className={`clip-item ${clip.id === selectedClipId ? 'selected' : ''}`}
+                                                        onClick={(e) => { e.stopPropagation(); setSelectedClipId(clip.id); }}
+                                                        onMouseDown={(e) => {
+                                                            e.stopPropagation();
+                                                            setSelectedClipId(clip.id);
+
+                                                            // Update Playhead position on clip click
+                                                            if (timelineRef.current) {
+                                                                const rect = timelineRef.current.getBoundingClientRect();
+                                                                const clickX = (e.clientX - rect.left) + timelineRef.current.scrollLeft - 80;
+                                                                const newTime = Math.max(0, clickX / zoomLevel);
+                                                                setCurrentTime(newTime);
+                                                                if (videoRef.current) videoRef.current.currentTime = newTime;
+                                                            }
+
+                                                            setIsDragging({
+                                                                type: 'clip',
+                                                                id: clip.id,
+                                                                startX: e.clientX,
+                                                                startOffset: clip.offset
+                                                            });
+                                                        }}
+                                                        style={{
+                                                            position: 'absolute',
+                                                            left: (clip.offset || 0) * zoomLevel,
+                                                            width: Math.max(1, (isFinite(clip.duration) ? clip.duration : 0.1) * zoomLevel),
+                                                            height: '100%',
+                                                            cursor: isDragging?.id === clip.id ? 'grabbing' : 'grab',
+                                                            zIndex: isDragging?.id === clip.id ? 150 : 100,
+                                                            pointerEvents: isDragging?.id === clip.id ? 'none' : 'auto',
+                                                            userSelect: 'none',
+                                                            transition: isDragging ? 'none' : 'left 0.1s, width 0.1s',
+                                                            boxSizing: 'border-box',
+                                                            overflow: 'hidden'
+                                                        }}
+                                                    >
+                                                        {/* Visual Content */}
+                                                        {isVideo && clip.type === 'video' && (
+                                                            <div className="clip-thumbnails">
+                                                                <img src={thumbUrl} loading="lazy" alt="" style={{ width: '100%', height: '100%', objectFit: 'fill', display: 'block' }} />
+                                                            </div>
+                                                        )}
+
+                                                        {(isAudio || (isVideo && clip.type === 'video')) && (
+                                                            <div className="clip-waveform">
+                                                                <img src={waveUrl} loading="lazy" alt="" />
+                                                            </div>
+                                                        )}
+
+                                                        <div className="clip-header">
+                                                            <span>{clip.name}</span>
+                                                        </div>
+
+                                                        <div className="clip-info-tag">
+                                                            {clip.duration.toFixed(1)}s
                                                             {(clip.sourceDuration && Math.abs(clip.sourceDuration - clip.duration) > 0.05) && (
-                                                                <span style={{ color: '#ffc107', background: 'rgba(0,0,0,0.5)', padding: '0 4px', borderRadius: 2 }}>
+                                                                <span style={{ color: '#ffc107', marginLeft: 5 }}>
                                                                     {(clip.sourceDuration / clip.duration).toFixed(2)}x
                                                                 </span>
                                                             )}
                                                         </div>
-                                                    </div>
-                                                    {/* Resize Handles */}
-                                                    <div
-                                                        onMouseDown={(e) => {
-                                                            e.stopPropagation();
-                                                            setIsDragging({ type: 'resize-edge', side: 'left', startX: e.clientX, startOffset: clip.offset, startDuration: clip.duration, startIn: clip.start });
-                                                        }}
-                                                        style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 6, cursor: 'ew-resize', background: 'rgba(255,255,255,0.1)' }}
-                                                    />
-                                                    <div
-                                                        onMouseDown={(e) => {
-                                                            e.stopPropagation();
-                                                            setIsDragging({ type: 'resize-edge', side: 'right', startX: e.clientX, startDuration: clip.duration });
-                                                        }}
-                                                        style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 6, cursor: 'ew-resize', background: 'rgba(255,255,255,0.1)' }}
-                                                    />
 
-                                                </div>
-                                            ))}
+                                                        {/* Resize Handles */}
+                                                        <div
+                                                            onMouseDown={(e) => {
+                                                                e.stopPropagation();
+                                                                setIsDragging({ type: 'resize-edge', side: 'left', startX: e.clientX, startOffset: clip.offset, startDuration: clip.duration, startIn: clip.start });
+                                                            }}
+                                                            style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 8, cursor: 'ew-resize', zIndex: 20 }}
+                                                        />
+                                                        <div
+                                                            onMouseDown={(e) => {
+                                                                e.stopPropagation();
+                                                                setIsDragging({ type: 'resize-edge', side: 'right', startX: e.clientX, startDuration: clip.duration });
+                                                            }}
+                                                            style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 8, cursor: 'ew-resize', zIndex: 20 }}
+                                                        />
+                                                    </div>
+                                                );
+                                            })}
                                         </div>
                                     </div>
                                 ))}
