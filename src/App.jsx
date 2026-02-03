@@ -325,25 +325,25 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
 
     const [tracks, setTracks] = useState(() => {
         if (!item) return [{ id: 'v1', type: 'video', clips: [] }, { id: 'a1', type: 'audio', clips: [] }];
+        const isAudio = item.type.startsWith('audio/');
+
+        const initialClip = {
+            id: 'clip-0',
+            path: item.path,
+            name: item.name,
+            type: isAudio ? 'audio' : 'video',
+            start: 0,
+            duration: initialDuration > 0 ? initialDuration : 0.1,
+            sourceDuration: initialDuration > 0 ? initialDuration : 0.1,
+            offset: 0,
+            filters: { brightness: 100, contrast: 100, saturation: 100, gamma: 1.0 },
+            crop: { x: 0, y: 0, w: 100, h: 100 },
+            rotate: 0, flipH: false, flipV: false, volume: 100
+        };
+
         return [
-            {
-                id: 'v1', type: 'video', clips: [
-                    {
-                        id: 'clip-0',
-                        path: item.path,
-                        name: item.name,
-                        type: 'video',
-                        start: 0,
-                        duration: initialDuration > 0 ? initialDuration : 0.1,
-                        sourceDuration: initialDuration > 0 ? initialDuration : 0.1,
-                        offset: 0,
-                        filters: { brightness: 100, contrast: 100, saturation: 100, gamma: 1.0 },
-                        crop: { x: 0, y: 0, w: 100, h: 100 },
-                        rotate: 0, flipH: false, flipV: false, volume: 100
-                    }
-                ]
-            },
-            { id: 'a1', type: 'audio', clips: [] }
+            { id: 'v1', type: 'video', clips: isAudio ? [] : [initialClip] },
+            { id: 'a1', type: 'audio', clips: isAudio ? [initialClip] : [] }
         ];
     });
 
@@ -813,6 +813,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
         audioClips.forEach(clip => {
             if (!audioPlayers.current[clip.id]) {
                 const player = new Audio(`http://localhost:3001/media/${encodeURIComponent(clip.path)}`);
+                player.preload = 'auto'; // Preload audio for smoother playback
                 player.volume = (clip.volume || 100) / 100;
                 audioPlayers.current[clip.id] = player;
             } else {
@@ -829,7 +830,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
         });
     }, [tracks]);
 
-    // Constant Sync Effect
+    // Constant Sync Effect - Optimized for smooth audio playback
     useEffect(() => {
         const audioClips = tracks.flatMap(tr => tr.clips.filter(c => c.type === 'audio' || tr.id === 'a1'));
 
@@ -843,9 +844,18 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
 
             if (isInside) {
                 const targetTime = (clip.start || 0) + relTime;
-                if (isFinite(targetTime) && Math.abs(player.currentTime - targetTime) > 0.05) {
+                const timeDiff = Math.abs(player.currentTime - targetTime);
+
+                // Only seek if:
+                // 1. Not currently playing (to avoid interruptions during playback)
+                // 2. OR time difference is very large (> 0.3s, indicating a jump/seek)
+                const shouldSeek = !isPlaying && timeDiff > 0.05;
+                const largeJump = timeDiff > 0.3;
+
+                if (isFinite(targetTime) && (shouldSeek || largeJump)) {
                     player.currentTime = targetTime;
                 }
+
                 if (isPlaying || (isDragging?.type === 'playhead')) {
                     if (player.paused) player.play().catch(() => { });
                 } else {
@@ -2520,6 +2530,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                         style={{ width: '100%', boxSizing: 'border-box' }}
                                     >
                                         <option value="mp4">MP4</option>
+                                        <option value="mp3">MP3</option>
                                         <option value="mkv">MKV</option>
                                         <option value="mov">MOV</option>
                                         <option value="avi">AVI</option>
@@ -3873,8 +3884,8 @@ function App() {
                                         <div className="item-actions" onClick={e => e.stopPropagation()}>
 
                                             <button className="action-btn info-btn" data-tooltip={t.editInfoRename || 'Edit Info & Rename'} onClick={(e) => { e.stopPropagation(); openEditModal(item); }} style={{ color: '#0071eb' }}><Info size={14} /></button>
-                                            {(item.type.startsWith('image/') || item.type.startsWith('video/')) && (
-                                                <button className="action-btn edit-image-btn" data-tooltip={item.type.startsWith('image/') ? (t.editImage || 'Edit Image') : (t.editVideo || 'Edit Video')} onClick={(e) => {
+                                            {(item.type.startsWith('image/') || item.type.startsWith('video/') || item.type.startsWith('audio/')) && (
+                                                <button className="action-btn edit-image-btn" data-tooltip={item.type.startsWith('image/') ? (t.editImage || 'Edit Image') : (item.type.startsWith('audio/') ? (t.editAudio || 'Edit Audio') : (t.editVideo || 'Edit Video'))} onClick={(e) => {
                                                     e.stopPropagation();
                                                     if (item.type.startsWith('image/')) {
                                                         setEditImageItem(item);
