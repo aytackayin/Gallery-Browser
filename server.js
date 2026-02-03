@@ -1390,7 +1390,8 @@ app.post('/api/process-video', async (req, res) => {
                 while (tempSpeed < 0.5) { aFilters.push(`atempo=0.5`); tempSpeed /= 0.5; }
                 if (Math.abs(tempSpeed - 1.0) > 0.01) aFilters.push(`atempo=${tempSpeed}`);
 
-                aFilters.push(`volume=${(clip.volume || 100) / 100}`, `adelay=${delay}:all=1`);
+                const volumeVal = (typeof clip.volume === 'number') ? clip.volume : 100;
+                aFilters.push(`volume=${volumeVal / 100}`, `adelay=${delay}:all=1`);
 
                 filterComplex.push({
                     inputs: `${idx}:a`,
@@ -1418,7 +1419,8 @@ app.post('/api/process-video', async (req, res) => {
             while (tempSpeed < 0.5) { aFilters.push(`atempo=0.5`); tempSpeed /= 0.5; }
             if (Math.abs(tempSpeed - 1.0) > 0.01) aFilters.push(`atempo=${tempSpeed}`);
 
-            aFilters.push(`volume=${(clip.volume || 100) / 100}`, `adelay=${delay}:all=1`);
+            const volumeVal = (typeof clip.volume === 'number') ? clip.volume : 100;
+            aFilters.push(`volume=${volumeVal / 100}`, `adelay=${delay}:all=1`);
 
             filterComplex.push({
                 inputs: `${idx}:a`,
