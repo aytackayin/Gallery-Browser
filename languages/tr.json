@@ -126,5 +126,15 @@
     "loopVideos": "Videoları Tekrarla",
     "autoPlaySlides": "Slayt Gösterisi Modu (Sıradaki Medya)",
     "loopSlideshow": "Slayt Gösterisini Tekrarla",
-    "imageSlideDuration": "Resim Gösterim Süresi (saniye)"
+    "imageSlideDuration": "Resim Gösterim Süresi (saniye)",
+    "youtubeDownload": "YouTube'dan İndir",
+    "enterYoutubeUrl": "YouTube video veya liste adresi girin",
+    "fetchInfo": "Bilgileri Getir",
+    "downloadSelected": "Seçilenleri İndir",
+    "downloading": "İndiriliyor...",
+    "completed": "Tamamlandı",
+    "waiting": "Bekliyor",
+    "errorYouTube": "Bağlantı alınamadı veya yt-dlp hatası",
+    "activeDownloads": "Aktif İndirmeler",
+    "noActiveDownloads": "Aktif indirme yok"
 }

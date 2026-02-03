@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { Folder, X, Play, Pause, ChevronRight, Home, ChevronLeft, Image as ImageIcon, Video as VideoIcon, Search, Trash2, Info, Save, FolderInput, ChevronDown, ChevronUp, Settings, CheckCircle, Scissors, RotateCw, Sun, Contrast, Lock, Unlock, Maximize2, Volume2, Plus, Trash, Droplet, CornerUpLeft, Layers, Crop, Monitor, Camera } from 'lucide-react';
+import { Folder, X, Play, Pause, ChevronRight, Home, ChevronLeft, Image as ImageIcon, Video as VideoIcon, Search, Trash2, Info, Save, FolderInput, ChevronDown, ChevronUp, Settings, CheckCircle, Scissors, RotateCw, Sun, Contrast, Lock, Unlock, Maximize2, Volume2, Plus, Trash, Droplet, CornerUpLeft, Layers, Crop, Monitor, Camera, FolderPlus, FileText, Tag } from 'lucide-react';
 import Cropper from "react-cropper";
 import "cropperjs/dist/cropper.css";
 
@@ -2655,7 +2655,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
 
 
 
-const FolderNode = ({ name, path, level = 0, onSelect, selectedPath, expandedFolders, toggleExpand }) => {
+const FolderNode = ({ name, path, hasSubfolders, level = 0, onSelect, selectedPath, expandedFolders, toggleExpand, t }) => {
     const isExpanded = expandedFolders[path];
     const [children, setChildren] = useState([]);
     const [loaded, setLoaded] = useState(false);
@@ -2687,7 +2687,7 @@ const FolderNode = ({ name, path, level = 0, onSelect, selectedPath, expandedFol
                 }}
                 onClick={(e) => { e.stopPropagation(); onSelect(path); }}
             >
-                <div onClick={(e) => { e.stopPropagation(); toggleExpand(path); }} style={{ display: 'flex', alignItems: 'center', marginRight: 5 }}>
+                <div onClick={(e) => { e.stopPropagation(); if (hasSubfolders) toggleExpand(path); }} style={{ display: 'flex', alignItems: 'center', marginRight: 5, visibility: hasSubfolders ? 'visible' : 'hidden', width: 14 }}>
                     {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                 </div>
                 <Folder size={14} style={{ marginRight: 5, color: '#ff8c00' }} />
@@ -2700,11 +2700,13 @@ const FolderNode = ({ name, path, level = 0, onSelect, selectedPath, expandedFol
                             key={child.path}
                             name={child.name}
                             path={child.path}
+                            hasSubfolders={child.hasSubfolders}
                             level={level + 1}
                             onSelect={onSelect}
                             selectedPath={selectedPath}
                             expandedFolders={expandedFolders}
                             toggleExpand={toggleExpand}
+                            t={t}
                         />
                     ))}
                     {loaded && children.length === 0 && <div style={{ marginLeft: (level + 1) * 15 + 20, fontSize: '0.8rem', color: '#666' }}>{t?.empty || 'Empty'}</div>}
@@ -2747,6 +2749,10 @@ function App() {
     const [rootFolders, setRootFolders] = useState([]);
     const [moveConflict, setMoveConflict] = useState(false); // Çakışma durumu
 
+    const [newFolderModal, setNewFolderModal] = useState(false);
+    const [newFolderName, setNewFolderName] = useState('');
+    const [newFolderError, setNewFolderError] = useState('');
+
     // Batch Selection State
     const [selectedPaths, setSelectedPaths] = useState(new Set());
     const [lastSelectedPath, setLastSelectedPath] = useState(null); // Shift+Click için
@@ -2774,6 +2780,128 @@ function App() {
     const [editVideoItem, setEditVideoItem] = useState(null); // Standalone edit item
     const [editImageItem, setEditImageItem] = useState(null); // Standalone edit item
     const [refreshKey, setRefreshKey] = useState(Date.now());
+
+    // YouTube Download State
+    const [ytModal, setYtModal] = useState(false);
+    const [ytUrl, setYtUrl] = useState('');
+    const [ytInfo, setYtInfo] = useState(null); // { type, title, uploader, entries: [] }
+    const [ytLoading, setYtLoading] = useState(false);
+    const [ytSelectedUrls, setYtSelectedUrls] = useState(new Set());
+    const [ytDownloads, setYtDownloads] = useState([]); // Array of { id, title, percent, status }
+    const [ytMinimized, setYtMinimized] = useState(true);
+
+    // YouTube Fetch Info Handler
+    const handleYtFetchInfo = async () => {
+        if (!ytUrl) return;
+        setYtLoading(true);
+        setYtInfo(null);
+        try {
+            const res = await fetch(`/api/yt/info?url=${encodeURIComponent(ytUrl)}`);
+            const data = await res.json();
+            if (data.error) {
+                alert(t.errorYouTube || data.error);
+            } else {
+                setYtInfo(data);
+                if (data.type === 'video') {
+                    setYtSelectedUrls(new Set([data.url]));
+                } else if (data.entries) {
+                    setYtSelectedUrls(new Set(data.entries.map(e => e.url)));
+                }
+            }
+        } catch (e) {
+            alert(t.errorYouTube || "Error");
+        } finally {
+            setYtLoading(false);
+        }
+    };
+
+    // YouTube Download Handler
+    const handleYtDownload = () => {
+        if (!ytInfo || ytSelectedUrls.size === 0) return;
+
+        const selectedVideos = ytInfo.type === 'video'
+            ? [ytInfo]
+            : ytInfo.entries.filter(e => ytSelectedUrls.has(e.url));
+
+        const queryParams = new URLSearchParams({
+            videos: JSON.stringify(selectedVideos),
+            currentPath: currentPath
+        });
+
+        const eventSource = new EventSource(`/api/yt/download-stream?${queryParams.toString()}`);
+
+        eventSource.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+
+            if (data.type === 'started') {
+                const initialJobs = selectedVideos.map((v, idx) => ({
+                    id: `${data.processId}_${idx}`,
+                    title: v.title,
+                    percent: 0,
+                    status: 'waiting',
+                    processId: data.processId
+                }));
+                setYtDownloads(prev => [...prev, ...initialJobs]);
+                setYtModal(false);
+                setYtUrl('');
+                setYtInfo(null);
+            } else if (data.type === 'video_start') {
+                setYtDownloads(prev => prev.map((job, idx) =>
+                    (job.processId === data.processId && idx === data.index)
+                        ? { ...job, status: 'downloading' }
+                        : job
+                ));
+            } else if (data.type === 'progress') {
+                setYtDownloads(prev => prev.map((job, idx) =>
+                    (job.processId === data.processId && idx === data.index)
+                        ? { ...job, percent: data.percent, status: 'downloading' }
+                        : job
+                ));
+            } else if (data.type === 'video_success') {
+                setYtDownloads(prev => prev.map((job, idx) =>
+                    (job.processId === data.processId && idx === data.index)
+                        ? { ...job, percent: 100, status: 'completed' }
+                        : job
+                ));
+                fetchItems(currentPath); // Refresh to see the folder/video
+            } else if (data.type === 'video_error') {
+                setYtDownloads(prev => prev.map((job, idx) =>
+                    (job.processId === data.processId && idx === data.index)
+                        ? { ...job, status: 'error', errorMsg: data.error }
+                        : job
+                ));
+            } else if (data.type === 'all_success' || data.type === 'error') {
+                eventSource.close();
+                if (data.type === 'all_success') {
+                    // Only clear if no errors occurred
+                    setYtDownloads(prev => {
+                        const hasError = prev.some(j => j.processId === data.processId && j.status === 'error');
+                        if (!hasError) {
+                            setTimeout(() => {
+                                setYtDownloads(current => current.filter(j => j.processId !== data.processId));
+                            }, 5000);
+                        }
+                        return prev;
+                    });
+                }
+            }
+        };
+
+        eventSource.onerror = () => {
+            eventSource.close();
+        };
+    };
+
+    const cancelYtDownload = async (processId) => {
+        try {
+            await fetch('/api/yt/cancel', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ processId })
+            });
+            setYtDownloads(prev => prev.filter(job => job.processId !== processId));
+        } catch (e) { }
+    };
 
     // ... (Existing states remain)
 
@@ -3003,13 +3131,16 @@ function App() {
             const data = await res.json();
 
             if (data.success) {
-                const deletedSet = new Set(data.deleted);
+                const deletedSet = new Set(data.deleted || paths); // Fallback to all paths if data.deleted is missing
                 const newItems = items.filter(i => !deletedSet.has(i.path));
                 setItems(newItems);
                 setSelectedPaths(new Set());
                 setConfirmDelete(null);
 
-                if (data.failed.length > 0) {
+                // Refresh list from server to ensure sync
+                fetchItems(currentPath);
+
+                if (data.failed && data.failed.length > 0) {
                     alert(`Some items could not be deleted:\n${data.failed.map(f => f.path).join('\n')}`);
                 }
             } else {
@@ -3025,19 +3156,19 @@ function App() {
         setMoveModal({ batch: true, count: selectedPaths.size, name: `${selectedPaths.size} items` });
     };
 
-    const executeBatchMove = async (overwrite = false) => {
+    const executeBatchMove = async (overwrite = false, autoRename = false) => {
         if (!moveModal || !targetFolder) return;
         try {
             const paths = Array.from(selectedPaths);
             const res = await fetch('/api/batch-move', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ sourcePaths: paths, destFolderPath: targetFolder, overwrite })
+                body: JSON.stringify({ sourcePaths: paths, destFolderPath: targetFolder, overwrite, autoRename })
             });
             const data = await res.json();
 
             if (data.success) {
-                if (data.conflicts.length > 0 && !overwrite) {
+                if (data.conflicts && data.conflicts.length > 0 && !overwrite && !autoRename) {
                     setMoveConflict(true);
                     return;
                 }
@@ -3143,11 +3274,11 @@ function App() {
         } catch (e) { alert(t.deleteError); }
     };
 
-    const handleMoveItem = async (overwrite = false) => {
+    const handleMoveItem = async (overwrite = false, autoRename = false) => {
         if (!moveModal || !targetFolder) return;
 
         if (moveModal.batch) {
-            await executeBatchMove(overwrite);
+            await executeBatchMove(overwrite, autoRename);
             return;
         }
 
@@ -3155,7 +3286,7 @@ function App() {
             const res = await fetch('/api/move', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ sourcePath: moveModal.path, destFolderPath: targetFolder, overwrite })
+                body: JSON.stringify({ sourcePath: moveModal.path, destFolderPath: targetFolder, overwrite, autoRename })
             });
             const data = await res.json();
 
@@ -3190,7 +3321,19 @@ function App() {
 
     const openEditModal = async (item) => {
         setEditModal(item);
-        setEditName(item.name);
+
+        // Hiding extension in UI but keeping it for backend
+        if (item.type !== 'folder') {
+            const lastDot = item.name.lastIndexOf('.');
+            if (lastDot !== -1) {
+                setEditName(item.name.substring(0, lastDot));
+            } else {
+                setEditName(item.name);
+            }
+        } else {
+            setEditName(item.name);
+        }
+
         setEditInfo('');
         setEditMetadata(null);
         try {
@@ -3203,11 +3346,24 @@ function App() {
 
     const handleSaveEdit = async () => {
         if (!editModal || !editName.trim()) return;
+
+        // Re-append extension if it's a file
+        let finalName = editName.trim();
+        if (editModal.type !== 'folder') {
+            const lastDot = editModal.name.lastIndexOf('.');
+            if (lastDot !== -1) {
+                const ext = editModal.name.substring(lastDot);
+                if (!finalName.endsWith(ext)) {
+                    finalName += ext;
+                }
+            }
+        }
+
         try {
             const res = await fetch('/api/update', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ oldPath: editModal.path, newName: editName.trim(), info: editInfo })
+                body: JSON.stringify({ oldPath: editModal.path, newName: finalName, info: editInfo })
             });
             const data = await res.json();
             if (data.success) {
@@ -3232,6 +3388,31 @@ function App() {
 
     const toggleFolderExpand = (path) => {
         setExpandedFolders(prev => ({ ...prev, [path]: !prev[path] }));
+    };
+
+    const handleCreateFolder = async () => {
+        if (!newFolderName.trim()) return;
+        setNewFolderError('');
+        try {
+            const res = await fetch('/api/create-folder', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ parentPath: currentPath, folderName: newFolderName.trim() })
+            });
+            const data = await res.json();
+            if (data.success) {
+                setNewFolderModal(false);
+                setNewFolderName('');
+                setNewFolderError('');
+                fetchItems(currentPath);
+                setToast(t.folderCreated || 'Folder created');
+                setTimeout(() => setToast(null), 3000);
+            } else {
+                setNewFolderError(data.error || 'Failed to create folder');
+            }
+        } catch (e) {
+            setNewFolderError('Error creating folder');
+        }
     };
 
     const handleSaveEditedImage = async (dataUrl) => {
@@ -3462,6 +3643,17 @@ function App() {
 
                     <button
                         className="settings-btn"
+                        data-tooltip={t.youtubeDownload || 'YouTube Download'}
+                        data-tooltip-pos="bottom"
+                        data-tooltip-align="end"
+                        onClick={() => setYtModal(true)}
+                        style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 8 }}
+                    >
+                        <VideoIcon size={20} color="#aaa" />
+                    </button>
+
+                    <button
+                        className="settings-btn"
                         data-tooltip={t.settings || 'Settings'}
                         data-tooltip-pos="bottom"
                         data-tooltip-align="end"
@@ -3515,7 +3707,7 @@ function App() {
                             )}
                         </div>
 
-                        {selectedPaths.size > 0 && (
+                        {selectedPaths.size > 0 ? (
                             <div className="batch-actions" style={{ display: 'flex', gap: 10 }}>
                                 <button className="btn" onClick={handleBatchMove} style={{ padding: '5px 15px', display: 'flex', alignItems: 'center', gap: 5, backgroundColor: '#ff8c00', border: 'none', color: 'white' }}>
                                     <FolderInput size={16} /> {t.move || 'Move'} ({selectedPaths.size})
@@ -3524,6 +3716,10 @@ function App() {
                                     <Trash2 size={16} /> {t.delete || 'Delete'} ({selectedPaths.size})
                                 </button>
                             </div>
+                        ) : (
+                            <button className="btn btn-primary" onClick={() => setNewFolderModal(true)} style={{ padding: '5px 15px', display: 'flex', alignItems: 'center', gap: 5 }}>
+                                <FolderPlus size={16} /> {t.newFolder || 'New Folder'}
+                            </button>
                         )}
                     </div>
 
@@ -3686,6 +3882,16 @@ function App() {
                                                 <span style={{ fontWeight: 500 }}>{editMetadata.duration}</span>
                                             </div>
                                         )}
+                                        {editModal.name.includes('.') && (
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                <FileText size={15} color="#0071eb" />
+                                                <span style={{ fontWeight: 500 }}>{editModal.name.split('.').pop().toUpperCase()}</span>
+                                            </div>
+                                        )}
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                            <Tag size={15} color="#aaa" />
+                                            <span style={{ fontWeight: 500, fontSize: '0.75rem' }}>{editModal.type}</span>
+                                        </div>
                                     </div>
                                 )}
                                 <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: 5, color: '#aaa' }}>{t.name || 'Name'}</label>
@@ -3726,9 +3932,10 @@ function App() {
                                 <div className="modal-body" style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
                                     <FolderInput size={64} color="#e50914" />
                                     <h3 style={{ margin: '20px 0' }}>{t.fileConflict || 'File Conflict!'}</h3>
-                                    <p style={{ color: '#aaa', marginBottom: 30 }}>{t.conflictMessage || 'Some files already exist in the destination. Overwrite them?'}</p>
-                                    <div style={{ display: 'flex', gap: 10 }}>
-                                        <button className="btn btn-danger" onClick={() => handleMoveItem(true)}>{t.yesOverwrite || 'Yes, Overwrite All'}</button>
+                                    <p style={{ color: '#aaa', marginBottom: 30 }}>{t.conflictMessage || 'Some files already exist in the destination. What do you want to do?'}</p>
+                                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
+                                        <button className="btn btn-primary" onClick={() => handleMoveItem(false, true)}>{t.keepBoth || 'Keep Both (Auto Rename)'}</button>
+                                        <button className="btn btn-danger" onClick={() => handleMoveItem(true, false)}>{t.yesOverwrite || 'Yes, Overwrite All'}</button>
                                         <button className="btn btn-grey" onClick={() => { setMoveModal(null); setMoveConflict(false); resetAndClose(); }}>{t.cancel || 'Cancel'}</button>
                                     </div>
                                 </div>
@@ -3750,7 +3957,7 @@ function App() {
                                             {t.root || 'Root'}
                                         </div>
                                         {rootFolders.map(folder => (
-                                            <FolderNode key={folder.path} name={folder.name} path={folder.path} onSelect={setTargetFolder} selectedPath={targetFolder} expandedFolders={expandedFolders} toggleExpand={toggleFolderExpand} />
+                                            <FolderNode key={folder.path} name={folder.name} path={folder.path} hasSubfolders={folder.hasSubfolders} onSelect={setTargetFolder} selectedPath={targetFolder} expandedFolders={expandedFolders} toggleExpand={toggleFolderExpand} t={t} />
                                         ))}
                                     </div>
                                     <div className="modal-footer">
@@ -4056,6 +4263,37 @@ function App() {
             }
 
 
+            {newFolderModal && (
+                <div className="modal-overlay" onClick={() => { setNewFolderModal(false); setNewFolderError(''); }}>
+                    <div className="modal info-modal" onClick={e => e.stopPropagation()}>
+                        <div className="modal-header">
+                            <h3>{t.newFolder || 'Yeni Klasör Oluştur'}</h3>
+                            <button onClick={() => { setNewFolderModal(false); setNewFolderError(''); }}><X size={20} /></button>
+                        </div>
+                        <div className="modal-body">
+                            <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: 5, color: '#aaa' }}>{t.folderName || 'Klasör İsmi'}</label>
+                            <input
+                                type="text"
+                                value={newFolderName}
+                                onChange={(e) => { setNewFolderName(e.target.value); setNewFolderError(''); }}
+                                className={`modal-input ${newFolderError ? 'input-error' : ''}`}
+                                autoFocus
+                                onKeyDown={e => e.key === 'Enter' && handleCreateFolder()}
+                            />
+                            {newFolderError && (
+                                <div style={{ color: '#e50914', fontSize: '0.85rem', marginTop: 8, display: 'flex', alignItems: 'center', gap: 5 }}>
+                                    <X size={14} /> {newFolderError}
+                                </div>
+                            )}
+                        </div>
+                        <div className="modal-footer">
+                            <button className="btn btn-primary" onClick={handleCreateFolder}>{t.create || 'Oluştur'}</button>
+                            <button className="btn btn-grey" onClick={() => { setNewFolderModal(false); setNewFolderError(''); }}>{t.cancel || 'İptal'}</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {
                 toast && (
                     <div className="toast-notification">
@@ -4100,7 +4338,133 @@ function App() {
                     />
                 )
             }
+            {
+                ytModal && (
+                    <div className="modal-overlay" onClick={() => { setYtModal(false); setYtInfo(null); }}>
+                        <div className="modal yt-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 500 }}>
+                            <div className="modal-header">
+                                <h3>{t.youtubeDownload || 'YouTube Download'}</h3>
+                                <button onClick={() => { setYtModal(false); setYtInfo(null); }}><X size={20} /></button>
+                            </div>
+                            <div className="modal-body">
+                                <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: 5, color: '#aaa' }}>{t.enterYoutubeUrl || 'Enter YouTube URL'}</label>
+                                <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
+                                    <input
+                                        type="text"
+                                        value={ytUrl}
+                                        onChange={(e) => setYtUrl(e.target.value)}
+                                        className="modal-input"
+                                        placeholder="https://www.youtube.com/watch?v=..."
+                                    />
+                                    <button className="btn btn-primary" onClick={handleYtFetchInfo} disabled={ytLoading}>
+                                        {ytLoading ? <RotateCw size={16} className="spin" /> : <Search size={16} />}
+                                    </button>
+                                </div>
+
+                                {ytInfo && (
+                                    <div className="yt-info-preview" style={{ background: 'rgba(255,255,255,0.05)', padding: 15, borderRadius: 8 }}>
+                                        <h4 style={{ margin: '0 0 10px 0' }}>{ytInfo.title}</h4>
+                                        <p style={{ fontSize: '0.8rem', color: '#888', marginBottom: 15 }}>{ytInfo.uploader}</p>
+
+                                        {ytInfo.type === 'playlist' && (
+                                            <div className="yt-playlist-entries" style={{ maxHeight: 200, overflowY: 'auto', border: '1px solid #333', borderRadius: 4, padding: 5 }}>
+                                                {ytInfo.entries.map((entry, idx) => (
+                                                    <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 0', borderBottom: '1px solid #222' }}>
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={ytSelectedUrls.has(entry.url)}
+                                                            onChange={(e) => {
+                                                                const newSet = new Set(ytSelectedUrls);
+                                                                if (e.target.checked) newSet.add(entry.url);
+                                                                else newSet.delete(entry.url);
+                                                                setYtSelectedUrls(newSet);
+                                                            }}
+                                                        />
+                                                        <span style={{ fontSize: '0.85rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{entry.title}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+
+                                        <button
+                                            className="btn btn-primary"
+                                            style={{ width: '100%', marginTop: 15 }}
+                                            onClick={handleYtDownload}
+                                            disabled={ytSelectedUrls.size === 0}
+                                        >
+                                            <Play size={16} style={{ marginRight: 10 }} /> {t.downloadSelected || 'Download Selected'} ({ytSelectedUrls.size})
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )
+            }
+
+            {ytDownloads.length > 0 && (
+                <div
+                    className={`yt-progress-container ${ytMinimized ? 'minimized' : 'maximized'}`}
+                    onMouseEnter={() => setYtMinimized(false)}
+                    onMouseLeave={() => setYtMinimized(true)}
+                >
+                    <div className="yt-progress-header">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <RotateCw size={16} className={ytDownloads.some(d => d.status === 'downloading') ? 'spin' : ''} />
+                            <span style={{ fontSize: '0.8rem' }}>{t.activeDownloads || 'Active Downloads'} ({ytDownloads.filter(d => d.status !== 'completed').length})</span>
+                        </div>
+                        <button className="minimize-btn" onClick={(e) => { e.stopPropagation(); setYtMinimized(!ytMinimized); }} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#fff', padding: 4 }}>
+                            {ytMinimized ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                        </button>
+                    </div>
+
+                    {!ytMinimized && (
+                        <div className="yt-progress-list" style={{ maxHeight: 300, overflowY: 'auto', padding: 10 }}>
+                            {ytDownloads.map((job) => (
+                                <div key={job.id} className="yt-progress-item" style={{ marginBottom: 12, paddingBottom: 8, borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                                    <div className="yt-job-info" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                                        <span className="yt-job-title" style={{ fontSize: '0.75rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '70%', color: '#eee' }}>{job.title}</span>
+                                        <span className={`yt-job-status ${job.status}`} style={{ fontSize: '10px', padding: '1px 5px', borderRadius: 3, background: job.status === 'completed' ? '#46d369' : (job.status === 'error' ? '#e50914' : '#ff8c00'), color: '#fff' }}>
+                                            {t[job.status] || job.status}
+                                        </span>
+                                    </div>
+                                    <div className="yt-progress-bar-bg" style={{ height: 4, background: 'rgba(255,255,255,0.1)', borderRadius: 2, overflow: 'hidden' }}>
+                                        <div className={`yt-progress-bar-fill ${job.status}`} style={{ width: `${job.percent}%`, height: '100%', background: job.status === 'completed' ? '#46d369' : (job.status === 'error' ? '#e50914' : 'var(--netflix-red)'), transition: 'width 0.3s' }}></div>
+                                    </div>
+                                    {job.status === 'error' && job.errorMsg && (
+                                        <div style={{ color: '#e50914', fontSize: '9px', marginTop: 4, fontStyle: 'italic' }}>
+                                            {job.errorMsg}
+                                        </div>
+                                    )}
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
+                                        <span style={{ fontSize: '10px', color: '#666' }}>{Math.round(job.percent)}%</span>
+                                        <div style={{ display: 'flex', gap: 5 }}>
+                                            {job.status !== 'completed' && job.status !== 'error' && (
+                                                <button className="cancel-mini-btn" title={t.cancel || "Cancel"} onClick={() => cancelYtDownload(job.processId)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#888', display: 'flex', padding: 2 }}>
+                                                    <X size={12} />
+                                                </button>
+                                            )}
+                                            {(job.status === 'completed' || job.status === 'error') && (
+                                                <button onClick={() => setYtDownloads(prev => prev.filter(j => j.id !== job.id))} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#666', fontSize: '10px' }}>
+                                                    {t.clear || 'Clear'}
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {ytMinimized && ytDownloads.some(d => d.status === 'downloading') && (
+                        <div className="yt-mini-progress" style={{ height: 2, background: 'rgba(255,255,255,0.1)' }}>
+                            <div className="yt-mini-fill" style={{ width: `${ytDownloads.reduce((acc, curr) => acc + curr.percent, 0) / ytDownloads.length}%`, height: '100%', background: 'var(--netflix-red)' }}></div>
+                        </div>
+                    )}
+                </div>
+            )}
         </div >
     );
 }
+
 export default App;

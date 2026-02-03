@@ -1815,3 +1815,65 @@ video::-moz-list-bullet {
   color: var(--netflix-red);
   font-weight: bold;
 }
+
+/* YOUTUBE DOWNLOAD SYSTEM */
+.yt-progress-container {
+  position: fixed;
+  bottom: 80px;
+  right: 20px;
+  width: 280px;
+  background: rgba(20, 20, 20, 0.95);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  z-index: 9999;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+}
+
+.yt-progress-container.minimized {
+  width: 200px;
+  height: 40px;
+  opacity: 0.8;
+}
+
+.yt-progress-container.maximized {
+  width: 320px;
+  opacity: 1;
+}
+
+.yt-progress-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 15px;
+  background: rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  color: #eee;
+  font-weight: 600;
+}
+
+.yt-progress-list {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.yt-progress-item {
+  padding: 10px 15px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}

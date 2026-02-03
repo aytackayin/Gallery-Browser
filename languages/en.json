@@ -126,5 +126,15 @@
     "loopVideos": "Loop Videos",
     "autoPlaySlides": "Auto Play Slides (Next Media)",
     "loopSlideshow": "Loop Slideshow",
-    "imageSlideDuration": "Image Slide Duration (seconds)"
+    "imageSlideDuration": "Image Slide Duration (seconds)",
+    "youtubeDownload": "YouTube Download",
+    "enterYoutubeUrl": "Enter YouTube video or playlist URL",
+    "fetchInfo": "Fetch Info",
+    "downloadSelected": "Download Selected",
+    "downloading": "Downloading...",
+    "completed": "Completed",
+    "waiting": "Waiting",
+    "errorYouTube": "Could not fetch info or yt-dlp error",
+    "activeDownloads": "Active Downloads",
+    "noActiveDownloads": "No active downloads"
 }

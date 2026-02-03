@@ -11,13 +11,15 @@ const __dirname = path.dirname(__filename);
 
 import ffmpeg from 'fluent-ffmpeg';
 import crypto from 'crypto';
+import { spawn } from 'child_process';
 
 const app = express();
 const PORT = 3001;
 
 // Global process tracking for video editing
 const activeProcesses = new Map();
-const activeThumbProcesses = new Set();
+const activeThumbProcesses = new Map(); // path -> proc
+const activeYtProcesses = new Map(); // processId -> proc
 
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
@@ -96,6 +98,19 @@ const getThumbPath = (itemPath) => {
     return path.join(thumbDir, `${hash}.jpg`);
 };
 
+const findUniquePath = (fullPath) => {
+    if (!fs.existsSync(fullPath)) return fullPath;
+    const dir = path.dirname(fullPath);
+    const ext = path.extname(fullPath);
+    const name = path.basename(fullPath, ext);
+    let counter = 1;
+    while (true) {
+        const newPath = path.join(dir, `${name} (${counter})${ext}`);
+        if (!fs.existsSync(newPath)) return newPath;
+        counter++;
+    }
+};
+
 app.get('/api/thumb', async (req, res) => {
     const itemRelPath = req.query.path;
     const fullPath = path.join(rootGalleryPath, itemRelPath);
@@ -109,44 +124,55 @@ app.get('/api/thumb', async (req, res) => {
 
     try {
         const type = mime.lookup(fullPath) || '';
+        const tHash = crypto.createHash('md5').update(itemRelPath).digest('hex');
+        db.prepare("INSERT OR REPLACE INTO thumb_map (path, hash) VALUES (?, ?)").run(itemRelPath, tHash);
+
+        const proc = ffmpeg(fullPath);
+        activeThumbProcesses.set(itemRelPath, proc);
+
         if (type.startsWith('image/')) {
-            // Register to map
-            db.prepare("INSERT OR REPLACE INTO thumb_map (path, hash) VALUES (?, ?)").run(itemRelPath, crypto.createHash('md5').update(itemRelPath).digest('hex'));
-
-            ffmpeg(fullPath)
-                .screenshots({
-                    timestamps: [0],
-                    folder: path.dirname(thumbPath),
-                    filename: path.basename(thumbPath),
-                    size: '400x?'
+            proc.screenshots({
+                timestamps: [0],
+                folder: path.dirname(thumbPath),
+                filename: path.basename(thumbPath),
+                size: '400x?'
+            })
+                .on('end', () => {
+                    activeThumbProcesses.delete(itemRelPath);
+                    res.sendFile(thumbPath);
                 })
-                .on('end', () => res.sendFile(thumbPath))
-                .on('error', () => res.sendFile(fullPath)); // Hata olursa orijinali gönder
+                .on('error', () => {
+                    activeThumbProcesses.delete(itemRelPath);
+                    res.sendFile(fullPath);
+                });
         } else if (type.startsWith('video/')) {
-            // Register to map
-            db.prepare("INSERT OR REPLACE INTO thumb_map (path, hash) VALUES (?, ?)").run(itemRelPath, crypto.createHash('md5').update(itemRelPath).digest('hex'));
-
-            // Get middle of video for better thumb
             ffmpeg.ffprobe(fullPath, (err, metadata) => {
                 let seek = 0;
                 if (!err && metadata && metadata.format.duration) {
                     seek = Math.floor(metadata.format.duration / 2);
                 }
 
-                ffmpeg(fullPath)
-                    .screenshots({
-                        timestamps: [seek],
-                        folder: path.dirname(thumbPath),
-                        filename: path.basename(thumbPath),
-                        size: '400x?'
+                proc.screenshots({
+                    timestamps: [seek],
+                    folder: path.dirname(thumbPath),
+                    filename: path.basename(thumbPath),
+                    size: '400x?'
+                })
+                    .on('end', () => {
+                        activeThumbProcesses.delete(itemRelPath);
+                        res.sendFile(thumbPath);
                     })
-                    .on('end', () => res.sendFile(thumbPath))
-                    .on('error', () => res.status(500).end());
+                    .on('error', () => {
+                        activeThumbProcesses.delete(itemRelPath);
+                        res.status(500).end();
+                    });
             });
         } else {
+            activeThumbProcesses.delete(itemRelPath);
             res.status(400).end();
         }
     } catch (e) {
+        activeThumbProcesses.delete(itemRelPath);
         res.status(500).end();
     }
 });
@@ -198,7 +224,20 @@ app.get('/api/scan', (req, res) => {
                     db.prepare("INSERT OR IGNORE INTO thumb_map (path, hash) VALUES (?, ?)").run(relPath, crypto.createHash('md5').update(relPath).digest('hex'));
                 }
 
-                return { name: item.name, path: relPath, type: item.isDirectory() ? 'folder' : (mime.lookup(item.name) || 'unknown') };
+                let hasSubfolders = false;
+                if (item.isDirectory()) {
+                    try {
+                        const subItems = fs.readdirSync(fullPath, { withFileTypes: true });
+                        hasSubfolders = subItems.some(si => si.isDirectory() && !EXCLUDED_DIRS.includes(si.name));
+                    } catch (e) { }
+                }
+
+                return {
+                    name: item.name,
+                    path: relPath,
+                    type: item.isDirectory() ? 'folder' : (mime.lookup(item.name) || 'unknown'),
+                    hasSubfolders
+                };
             })
             .filter(item => {
                 if (item.type === 'folder') return true;
@@ -219,6 +258,28 @@ app.get('/api/scan', (req, res) => {
             translations: settings.translations
         });
     } catch (error) { res.status(500).json({ error: error.message }); }
+});
+
+app.post('/api/create-folder', (req, res) => {
+    const { parentPath, folderName } = req.body;
+    if (!folderName) return res.status(400).json({ error: "Klasör ismi gerekli" });
+
+    const fullParentPath = path.join(rootGalleryPath, parentPath);
+    const fullNewPath = path.join(fullParentPath, folderName);
+
+    if (!fullNewPath.toLowerCase().startsWith(rootGalleryPath.toLowerCase())) {
+        return res.status(403).json({ error: "Yasak" });
+    }
+
+    try {
+        if (fs.existsSync(fullNewPath)) {
+            return res.status(409).json({ error: "Klasör zaten var" });
+        }
+        fs.mkdirSync(fullNewPath, { recursive: true });
+        res.json({ success: true, path: path.relative(rootGalleryPath, fullNewPath).replace(/\\/g, '/') });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
 });
 
 app.get('/api/search', (req, res) => {
@@ -347,7 +408,7 @@ app.get('/api/video-timeline-thumbs', async (req, res) => {
         const fps = (totalCount > 1 && dur > 0) ? (totalCount / dur) : 1;
 
         const proc = ffmpeg(fullPath);
-        activeThumbProcesses.add(proc);
+        activeThumbProcesses.set(itemPath, proc);
 
         // EXTRA FAST SETTINGS
         proc.inputOptions([
@@ -373,7 +434,7 @@ app.get('/api/video-timeline-thumbs', async (req, res) => {
         });
 
         proc.on('end', () => {
-            activeThumbProcesses.delete(proc);
+            activeThumbProcesses.delete(itemPath);
             if (fs.existsSync(cachePath)) {
                 res.sendFile(cachePath);
             } else {
@@ -382,18 +443,18 @@ app.get('/api/video-timeline-thumbs', async (req, res) => {
         });
 
         proc.on('error', (err) => {
-            activeThumbProcesses.delete(proc);
+            activeThumbProcesses.delete(itemPath);
             if (!res.headersSent) res.status(500).end();
         });
 
         // CRITICAL: Immediately kill the process if the client closes the connection
         req.on('close', () => {
-            if (activeThumbProcesses.has(proc)) {
+            if (activeThumbProcesses.has(itemPath)) {
                 try {
                     // Try to kill the process group or the process itself
-                    proc.kill('SIGKILL');
+                    activeThumbProcesses.get(itemPath).kill('SIGKILL');
                 } catch (e) { }
-                activeThumbProcesses.delete(proc);
+                activeThumbProcesses.delete(itemPath);
             }
         });
 
@@ -405,6 +466,23 @@ app.get('/api/video-timeline-thumbs', async (req, res) => {
 });
 
 // Audio Waveform Generation
+const killRelatedProcesses = (normalizedPath) => {
+    const folderPath = normalizedPath.endsWith('/') ? normalizedPath : normalizedPath + '/';
+
+    // Kill video editing processes
+    activeProcesses.forEach((proc, id) => {
+        // Unfortunately activeProcesses doesn't store path easily, but usually it's one per session
+    });
+
+    // Kill thumb processes
+    activeThumbProcesses.forEach((proc, p) => {
+        if (p === normalizedPath || p.startsWith(folderPath)) {
+            try { proc.kill('SIGKILL'); } catch (e) { }
+            activeThumbProcesses.delete(p);
+        }
+    });
+};
+
 app.get('/api/audio-waveform', async (req, res) => {
     try {
         const { path: itemPath, width = 100, height = 45, color = '0x46d369', startTime = 0, duration = 0 } = req.query;
@@ -426,6 +504,7 @@ app.get('/api/audio-waveform', async (req, res) => {
         }
 
         const proc = ffmpeg(fullPath);
+        activeThumbProcesses.set(itemPath, proc);
 
         // Audio fast seek and duration
         proc.inputOptions([`-ss ${start}`]);
@@ -438,10 +517,8 @@ app.get('/api/audio-waveform', async (req, res) => {
             .noAudio()
             .output(cachePath);
 
-        activeThumbProcesses.add(proc);
-
         proc.on('end', () => {
-            activeThumbProcesses.delete(proc);
+            activeThumbProcesses.delete(itemPath);
             if (fs.existsSync(cachePath)) {
                 res.sendFile(cachePath);
             } else {
@@ -449,14 +526,14 @@ app.get('/api/audio-waveform', async (req, res) => {
             }
         })
             .on('error', (err) => {
-                activeThumbProcesses.delete(proc);
+                activeThumbProcesses.delete(itemPath);
                 if (!res.headersSent) res.status(500).end();
             });
 
         req.on('close', () => {
-            if (activeThumbProcesses.has(proc)) {
-                try { proc.kill('SIGKILL'); } catch (e) { }
-                activeThumbProcesses.delete(proc);
+            if (activeThumbProcesses.has(itemPath)) {
+                try { activeThumbProcesses.get(itemPath).kill('SIGKILL'); } catch (e) { }
+                activeThumbProcesses.delete(itemPath);
             }
         });
 
@@ -477,38 +554,47 @@ app.delete('/api/delete', (req, res) => {
     const itemPath = req.query.path;
     const absolutePath = path.join(rootGalleryPath, itemPath);
     if (!absolutePath.toLowerCase().startsWith(rootGalleryPath.toLowerCase())) return res.status(403).json({ error: "Yasak" });
+
     try {
+        const normalizedItemPath = itemPath.replace(/\\/g, '/');
+        const folderPath = normalizedItemPath.endsWith('/') ? normalizedItemPath : normalizedItemPath + '/';
+
+        // 1. Kill any active processes related to this path
+        killRelatedProcesses(normalizedItemPath);
+
+        // 2. Database Cleanup First (Success likely, unless DB locked)
+        const relatedThumbs = db.prepare("SELECT hash FROM thumb_map WHERE path = ? OR path LIKE ?").all(normalizedItemPath, folderPath + '%');
+        relatedThumbs.forEach(t => {
+            const tPath = path.join(thumbDir, `${t.hash}.jpg`);
+            if (fs.existsSync(tPath)) try { fs.unlinkSync(tPath); } catch (e) { }
+        });
+        db.prepare("DELETE FROM thumb_map WHERE path = ? OR path LIKE ?").run(normalizedItemPath, folderPath + '%');
+        db.prepare("DELETE FROM item_info WHERE path = ? OR path LIKE ?").run(normalizedItemPath, folderPath + '%');
+
+        // 3. Filesystem Cleanup
         if (fs.existsSync(absolutePath)) {
             if (fs.lstatSync(absolutePath).isDirectory()) {
-                fs.rmSync(absolutePath, { recursive: true, force: true });
-                // Delete all thumbs in this folder
-                const folderPath = itemPath.endsWith('/') ? itemPath : itemPath + '/';
-                const relatedThumbs = db.prepare("SELECT hash FROM thumb_map WHERE path LIKE ?").all(folderPath + '%');
-                relatedThumbs.forEach(t => {
-                    const tPath = path.join(thumbDir, `${t.hash}.jpg`);
-                    if (fs.existsSync(tPath)) try { fs.unlinkSync(tPath); } catch (e) { }
-                });
-                db.prepare("DELETE FROM thumb_map WHERE path LIKE ?").run(folderPath + '%');
+                // Be extra careful with recursive delete on Windows
+                fs.rmSync(absolutePath, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
             } else {
                 fs.unlinkSync(absolutePath);
-                // Delete single thumb
-                const tPath = getThumbPath(itemPath);
-                if (fs.existsSync(tPath)) try { fs.unlinkSync(tPath); } catch (e) { }
-                db.prepare("DELETE FROM thumb_map WHERE path = ?").run(itemPath);
             }
-            db.prepare("DELETE FROM item_info WHERE path = ?").run(itemPath);
-            res.json({ success: true });
-        } else { res.status(404).json({ error: "Bulunamadı" }); }
-    } catch (e) { res.status(500).json({ error: e.message }); }
+        }
+
+        res.json({ success: true });
+    } catch (e) {
+        console.error("Delete error:", e);
+        res.status(500).json({ error: "Delete failed: " + e.message });
+    }
 });
 
 app.post('/api/move', (req, res) => {
-    const { sourcePath, destFolderPath, overwrite } = req.body;
+    const { sourcePath, destFolderPath, overwrite, autoRename } = req.body;
     const fullSource = path.join(rootGalleryPath, sourcePath);
     const fullDestFolder = path.join(rootGalleryPath, destFolderPath);
     const fileName = path.basename(sourcePath);
-    const fullDest = path.join(fullDestFolder, fileName);
-    const newRelPath = path.join(destFolderPath, fileName).replace(/\\/g, '/');
+    let fullDest = path.join(fullDestFolder, fileName);
+    let newRelPath = path.join(destFolderPath, fileName).replace(/\\/g, '/');
 
     if (!fullSource.toLowerCase().startsWith(rootGalleryPath.toLowerCase()) ||
         !fullDestFolder.toLowerCase().startsWith(rootGalleryPath.toLowerCase())) {
@@ -520,22 +606,38 @@ app.post('/api/move', (req, res) => {
             if (!fs.existsSync(fullDestFolder)) {
                 return res.status(404).json({ error: "Hedef klasör bulunamadı" });
             }
+
+            // Eğer kaynak ve hedef aynıysa (isimlendirme aynı, sadece üzerine yaz denmişse)
+            if (fullSource.toLowerCase() === fullDest.toLowerCase() && !autoRename) {
+                // Hiçbir şey yapma, başarılı dön
+                return res.json({ success: true, newPath: sourcePath.replace(/\\/g, '/') });
+            }
+
             if (fs.existsSync(fullDest)) {
-                if (!overwrite) {
+                if (autoRename) {
+                    fullDest = findUniquePath(fullDest);
+                    newRelPath = path.relative(rootGalleryPath, fullDest).replace(/\\/g, '/');
+                } else if (!overwrite) {
                     return res.status(409).json({ error: "Dosya zaten var", code: 'CONFLICT' });
+                } else {
+                    // Overwrite: Hedef dosyayı sil
+                    try {
+                        if (fs.lstatSync(fullDest).isDirectory()) {
+                            fs.rmSync(fullDest, { recursive: true, force: true });
+                        } else {
+                            fs.unlinkSync(fullDest);
+                        }
+                    } catch (e) { }
                 }
-                // Overwrite: Hedef dosyayı sil
-                try { fs.unlinkSync(fullDest); } catch (e) { }
             }
 
             fs.renameSync(fullSource, fullDest);
 
             // Veritabanını güncelle
-            // Eski kaydı güncelle, eğer hedefte zaten kayıt varsa (overwrite durumunda) onu silmemiz gerekebilir ama
-            // rename işlemi üstüne yazdığı için hedefteki path'in id'si kalabilir ya da çakışma olabilir.
-            // Basitlik adına: Varsa eski hedef kaydı sil, sonra güncelle.
-            db.prepare("DELETE FROM item_info WHERE path = ?").run(newRelPath);
-            db.prepare("UPDATE item_info SET path = ? WHERE path = ?").run(newRelPath, sourcePath);
+            if (!autoRename || (autoRename && fullSource !== fullDest)) {
+                db.prepare("DELETE FROM item_info WHERE path = ?").run(newRelPath);
+                db.prepare("UPDATE item_info SET path = ? WHERE path = ?").run(newRelPath, sourcePath);
+            }
 
             res.json({ success: true, newPath: newRelPath });
         } else {
@@ -634,6 +736,14 @@ app.post('/api/update', (req, res) => {
 
     try {
         if (fs.existsSync(fullOldPath)) {
+            if (fullOldPath.toLowerCase() === fullNewPath.toLowerCase()) {
+                // Sadece info güncelle
+                if (info !== undefined) {
+                    db.prepare("INSERT OR REPLACE INTO item_info (path, info) VALUES (?, ?)").run(oldPath, info || '');
+                }
+                return res.json({ success: true, newPath: oldPath });
+            }
+
             if (fs.existsSync(fullNewPath)) {
                 return res.status(409).json({ error: "Bu isimde dosya zaten var" });
             }
@@ -659,47 +769,51 @@ app.post('/api/batch-delete', (req, res) => {
     const { paths } = req.body;
     if (!Array.isArray(paths)) return res.status(400).json({ error: "Invalid input" });
 
-    let deleted = [];
+    let deletedCount = 0;
     let failed = [];
 
     paths.forEach(p => {
-        const fullPath = path.join(rootGalleryPath, p);
-        if (!fullPath.toLowerCase().startsWith(rootGalleryPath.toLowerCase())) {
+        const absolutePath = path.join(rootGalleryPath, p);
+        if (!absolutePath.toLowerCase().startsWith(rootGalleryPath.toLowerCase())) {
             failed.push({ path: p, error: "Access denied" });
             return;
         }
+
         try {
-            if (fs.existsSync(fullPath)) {
-                if (fs.lstatSync(fullPath).isDirectory()) {
-                    fs.rmSync(fullPath, { recursive: true, force: true });
-                    const folderPath = p.endsWith('/') ? p : p + '/';
-                    const relatedThumbs = db.prepare("SELECT hash FROM thumb_map WHERE path LIKE ?").all(folderPath + '%');
-                    relatedThumbs.forEach(t => {
-                        const tPath = path.join(thumbDir, `${t.hash}.jpg`);
-                        if (fs.existsSync(tPath)) try { fs.unlinkSync(tPath); } catch (e) { }
-                    });
-                    db.prepare("DELETE FROM thumb_map WHERE path LIKE ?").run(folderPath + '%');
+            const normalizedPath = p.replace(/\\/g, '/');
+            const folderPath = normalizedPath.endsWith('/') ? normalizedPath : normalizedPath + '/';
+
+            // 1. Kill related procs
+            killRelatedProcesses(normalizedPath);
+
+            // 2. DB and Thumbs cleanup
+            const relatedThumbs = db.prepare("SELECT hash FROM thumb_map WHERE path = ? OR path LIKE ?").all(normalizedPath, folderPath + '%');
+            relatedThumbs.forEach(t => {
+                const tPath = path.join(thumbDir, `${t.hash}.jpg`);
+                if (fs.existsSync(tPath)) try { fs.unlinkSync(tPath); } catch (e) { }
+            });
+            db.prepare("DELETE FROM thumb_map WHERE path = ? OR path LIKE ?").run(normalizedPath, folderPath + '%');
+            db.prepare("DELETE FROM item_info WHERE path = ? OR path LIKE ?").run(normalizedPath, folderPath + '%');
+
+            // 3. Filesystem
+            if (fs.existsSync(absolutePath)) {
+                if (fs.lstatSync(absolutePath).isDirectory()) {
+                    fs.rmSync(absolutePath, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
                 } else {
-                    fs.unlinkSync(fullPath);
-                    const tPath = getThumbPath(p);
-                    if (fs.existsSync(tPath)) try { fs.unlinkSync(tPath); } catch (e) { }
-                    db.prepare("DELETE FROM thumb_map WHERE path = ?").run(p);
+                    fs.unlinkSync(absolutePath);
                 }
-                const relativePath = p.replace(/\\/g, '/');
-                db.prepare("DELETE FROM item_info WHERE path = ?").run(relativePath);
-                deleted.push(p);
-            } else {
-                failed.push({ path: p, error: "Not found" });
             }
+            deletedCount++;
         } catch (e) {
             failed.push({ path: p, error: e.message });
         }
     });
-    res.json({ success: true, deleted, failed });
+
+    res.json({ success: true, count: deletedCount, failed });
 });
 
 app.post('/api/batch-move', (req, res) => {
-    const { sourcePaths, destFolderPath, overwrite } = req.body;
+    const { sourcePaths, destFolderPath, overwrite, autoRename } = req.body;
     if (!Array.isArray(sourcePaths) || !destFolderPath) return res.status(400).json({ error: "Invalid input" });
 
     const fullDestDir = path.join(rootGalleryPath, destFolderPath);
@@ -712,8 +826,8 @@ app.post('/api/batch-move', (req, res) => {
     sourcePaths.forEach(src => {
         const fullSrcPath = path.join(rootGalleryPath, src);
         const fileName = path.basename(src);
-        const fullDestPath = path.join(fullDestDir, fileName);
-        const newRelPath = path.join(destFolderPath, fileName).replace(/\\/g, '/');
+        let fullDestPath = path.join(fullDestDir, fileName);
+        let newRelPath = path.join(destFolderPath, fileName).replace(/\\/g, '/');
 
         if (!fullSrcPath.toLowerCase().startsWith(rootGalleryPath.toLowerCase())) {
             failed.push({ path: src, error: "Access denied" });
@@ -727,18 +841,22 @@ app.post('/api/batch-move', (req, res) => {
             }
 
             if (fs.existsSync(fullDestPath)) {
-                if (!overwrite) {
+                if (autoRename) {
+                    fullDestPath = findUniquePath(fullDestPath);
+                    newRelPath = path.relative(rootGalleryPath, fullDestPath).replace(/\\/g, '/');
+                } else if (!overwrite) {
                     conflicts.push(src);
                     return;
-                }
-                // Overwrite: Hedefi sil
-                if (fs.lstatSync(fullDestPath).isDirectory()) {
-                    fs.rmSync(fullDestPath, { recursive: true, force: true });
                 } else {
-                    fs.unlinkSync(fullDestPath);
+                    // Overwrite: Hedefi sil
+                    if (fs.lstatSync(fullDestPath).isDirectory()) {
+                        fs.rmSync(fullDestPath, { recursive: true, force: true });
+                    } else {
+                        fs.unlinkSync(fullDestPath);
+                    }
+                    // Eski info'yu sil
+                    db.prepare("DELETE FROM item_info WHERE path = ?").run(newRelPath);
                 }
-                // Eski info'yu sil
-                db.prepare("DELETE FROM item_info WHERE path = ?").run(newRelPath);
             }
 
             fs.renameSync(fullSrcPath, fullDestPath);
@@ -1395,7 +1513,7 @@ app.listen(PORT, () => {
 app.post('/api/clear-timeline-cache', (req, res) => {
     try {
         // Kill all active thumbnail processes
-        activeThumbProcesses.forEach(proc => {
+        activeThumbProcesses.forEach((proc, p) => {
             try { proc.kill('SIGKILL'); } catch (e) { }
         });
         activeThumbProcesses.clear();
@@ -1411,5 +1529,239 @@ app.post('/api/clear-timeline-cache', (req, res) => {
         res.json({ success: true });
     } catch (e) {
         res.status(500).json({ error: e.message });
+    }
+});
+
+// Helper to get yt-dlp path
+const getYtDlpPath = () => path.join(process.cwd(), 'yt-dlp.exe');
+
+app.get('/api/yt/info', async (req, res) => {
+    try {
+        const { url } = req.query;
+        if (!url) return res.status(400).json({ error: "URL is required" });
+
+        const ytDlpPath = getYtDlpPath();
+        const proc = spawn(ytDlpPath, ['--dump-json', '--flat-playlist', url]);
+
+        let output = '';
+        let errorOutput = '';
+
+        proc.stdout.on('data', (data) => { output += data.toString(); });
+        proc.stderr.on('data', (data) => { errorOutput += data.toString(); });
+
+        proc.on('close', (code) => {
+            if (code !== 0) {
+                return res.status(500).json({ error: errorOutput || "yt-dlp error" });
+            }
+
+            try {
+                // If it's a playlist, dump-json returns multiple objects separated by newlines
+                const lines = output.trim().split('\n');
+                const results = lines.map(line => JSON.parse(line));
+
+                if (results.length === 1 && results[0]._type !== 'playlist') {
+                    // Single video
+                    const vid = results[0];
+                    res.json({
+                        type: 'video',
+                        title: vid.title,
+                        uploader: vid.uploader || vid.channel || vid.uploader_id || "YouTube",
+                        uploader_id: vid.uploader_id || "",
+                        uploader_url: vid.uploader_url || vid.channel_url || "",
+                        url: vid.webpage_url || url,
+                        thumbnails: vid.thumbnails
+                    });
+                } else {
+                    // Playlist
+                    const playlist = results.find(r => r._type === 'playlist') || { title: 'Unknown Playlist', entries: results.filter(r => r._type !== 'playlist') };
+                    const entries = results.filter(r => r.url || r.webpage_url);
+
+                    res.json({
+                        type: 'playlist',
+                        title: playlist.title || "YouTube List",
+                        uploader: playlist.uploader || playlist.channel || "",
+                        uploader_id: playlist.uploader_id || "",
+                        uploader_url: playlist.uploader_url || playlist.channel_url || "",
+                        entries: entries.map(e => ({
+                            title: e.title,
+                            url: e.url || e.webpage_url,
+                            uploader: e.uploader || e.channel || playlist.uploader || playlist.channel || "YouTube",
+                            uploader_id: e.uploader_id || playlist.uploader_id || "",
+                            uploader_url: e.uploader_url || playlist.uploader_url || ""
+                        }))
+                    });
+                }
+            } catch (e) {
+                res.status(500).json({ error: "JSON parse error: " + e.message });
+            }
+        });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.get('/api/yt/download-stream', (req, res) => {
+    try {
+        const { videos: videosJson, currentPath } = req.query;
+        const videos = JSON.parse(videosJson);
+        const processId = `yt_${Date.now()}`;
+
+        // SSE Keep-alive and timeout prevention
+        req.socket.setTimeout(0);
+        req.socket.setNoDelay(true);
+        req.socket.setKeepAlive(true);
+
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+
+        const sendUpdate = (data) => {
+            if (res.writableEnded) return;
+            res.write(`data: ${JSON.stringify(data)}\n\n`);
+        };
+
+        // Heartbeat to keep connection alive every 20 seconds
+        const heartbeat = setInterval(() => {
+            sendUpdate({ type: 'heartbeat', timestamp: Date.now() });
+        }, 20000);
+
+        sendUpdate({ type: 'started', processId });
+
+        (async () => {
+            for (let i = 0; i < videos.length; i++) {
+                const video = videos[i];
+                const uploaderClean = (video.uploader_id ? video.uploader_id.replace(/^@/, '') : (video.uploader || 'YouTube')).replace(/[\\/:*?"<>|]/g, '_');
+                const targetDir = path.join(rootGalleryPath, currentPath, uploaderClean);
+
+                if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
+
+                sendUpdate({ type: 'video_start', index: i, title: video.title, processId });
+
+                const ytDlpPath = getYtDlpPath();
+                // Format: filename will be the title
+                const outputTemplate = path.join(targetDir, '%(title)s.%(ext)s');
+
+                const args = [
+                    '--newline',
+                    '--progress',
+                    '--no-playlist',
+                    '--ignore-errors',
+                    '--no-check-certificates',
+                    '--no-cache-dir',
+                    '--no-mtime',
+                    '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    '--referer', 'https://www.youtube.com/',
+                    '--extractor-args', 'youtube:player_client=android',
+                    '--ffmpeg-location', 'C:\\ffmpeg\\bin',
+                    '--merge-output-format', 'mp4',
+                    '--retries', '10',
+                    '--fragment-retries', '10',
+                    '--concurrent-fragments', '3',
+                    '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+                    '-o', outputTemplate,
+                    video.url
+                ];
+
+                const proc = spawn(ytDlpPath, args);
+                activeYtProcesses.set(processId, proc);
+
+                await new Promise((resolve) => {
+                    let lastError = '';
+
+                    proc.stdout.on('data', (data) => {
+                        const line = data.toString();
+                        const match = line.match(/\[download\]\s+(\d+\.\d+)%/);
+                        if (match) {
+                            const percent = parseFloat(match[1]);
+                            sendUpdate({ type: 'progress', index: i, percent, processId });
+                        }
+                    });
+
+                    proc.stderr.on('data', (data) => {
+                        lastError += data.toString();
+                        // Sometimes progress is in stderr
+                        const line = data.toString();
+                        const match = line.match(/\[download\]\s+(\d+\.\d+)%/);
+                        if (match) {
+                            const percent = parseFloat(match[1]);
+                            sendUpdate({ type: 'progress', index: i, percent, processId });
+                        }
+                    });
+
+                    proc.on('error', (err) => {
+                        lastError = err.message;
+                    });
+
+                    proc.on('close', (code) => {
+                        activeYtProcesses.delete(processId);
+                        if (code === 0) {
+                            const uploaderName = video.uploader || video.channel || 'YouTube';
+                            let uploaderUrl = video.uploader_url;
+                            if (!uploaderUrl && video.uploader_id) {
+                                uploaderUrl = `https://www.youtube.com/@${video.uploader_id.replace('@', '')}`;
+                            }
+
+                            const infoNote = `${uploaderName}\n${uploaderUrl || ''}\n${video.url}`;
+
+                            // Find the downloaded file to save note in DB
+                            try {
+                                const files = fs.readdirSync(targetDir);
+                                const sortedFiles = files
+                                    .map(f => ({ name: f, time: fs.statSync(path.join(targetDir, f)).mtime.getTime() }))
+                                    .sort((a, b) => b.time - a.time);
+
+                                if (sortedFiles.length > 0) {
+                                    const fileName = sortedFiles[0].name;
+                                    const absPath = path.join(targetDir, fileName);
+                                    // Use path.relative to get the key for item_info table and normalize slashes
+                                    const relPath = path.relative(rootGalleryPath, absPath).replace(/\\/g, '/');
+
+                                    const stmt = db.prepare('INSERT OR REPLACE INTO item_info (path, info) VALUES (?, ?)');
+                                    stmt.run(relPath, infoNote || "");
+                                }
+                            } catch (e) {
+                                console.error("Database note save error:", e);
+                            }
+
+                            sendUpdate({ type: 'video_success', index: i, processId });
+                        } else {
+                            const errorMsg = lastError ? lastError.trim().split('\n').pop() : "Process exited with code " + code;
+                            sendUpdate({ type: 'video_error', index: i, error: errorMsg, processId });
+                        }
+                        resolve();
+                    });
+                });
+
+                if (!activeYtProcesses.get(processId)) break; // Was cancelled
+            }
+            clearInterval(heartbeat);
+            sendUpdate({ type: 'all_success', processId });
+            res.end();
+        })();
+
+        req.on('close', () => {
+            clearInterval(heartbeat);
+            const proc = activeYtProcesses.get(processId);
+            if (proc) {
+                proc.kill('SIGKILL');
+                activeYtProcesses.delete(processId);
+            }
+        });
+
+    } catch (e) {
+        res.write(`data: ${JSON.stringify({ type: 'error', error: e.message })}\n\n`);
+        res.end();
+    }
+});
+
+app.post('/api/yt/cancel', (req, res) => {
+    const { processId } = req.body;
+    const proc = activeYtProcesses.get(processId);
+    if (proc) {
+        proc.kill('SIGKILL');
+        activeYtProcesses.delete(processId);
+        res.json({ success: true });
+    } else {
+        res.status(404).json({ error: "Process not found" });
     }
 });
