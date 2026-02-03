@@ -1,4 +1,5 @@
 import { AudioWaveformCanvas } from './utils/WaveformGenerator';
+import { VideoThumbnailCanvas } from './utils/VideoThumbnailGenerator';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { Folder, X, Play, Pause, ChevronRight, Home, ChevronLeft, Image as ImageIcon, Video as VideoIcon, Search, Trash2, Info, Save, FolderInput, ChevronDown, ChevronUp, Settings, CheckCircle, Scissors, RotateCw, Sun, Contrast, Lock, Unlock, Maximize2, Volume2, Plus, Trash, Droplet, CornerUpLeft, Layers, Crop, Monitor, Camera, FolderPlus, FileText, Tag } from 'lucide-react';
 import Cropper from "react-cropper";
@@ -835,25 +836,32 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
         return () => cancelAnimationFrame(frame);
     }, [isPlaying, timelineDuration]);
 
-    // Sync Video Playhead to Timeline
+    // Sync Video Playhead to Timeline - Main Preview Video (Optimized)
     useEffect(() => {
         const video = videoRef.current;
         if (!video) return;
 
         if (activeVClip && activeVClip.type === 'video') {
-            const clipDur = activeVClip.duration || 1; // Prevent division by zero
+            const clipDur = activeVClip.duration || 1;
             const speed = (activeVClip.sourceDuration || clipDur) / clipDur;
             const targetTime = activeVClip.start + (currentTime - activeVClip.offset) * speed;
+            const timeDiff = Math.abs(video.currentTime - targetTime);
 
-            if (isFinite(targetTime) && Math.abs(video.currentTime - targetTime) > 0.05) {
+            // Only seek if:
+            // 1. Not currently playing (to avoid interruptions during playback)
+            // 2. OR time difference is very large (> 0.3s, indicating a jump/seek)
+            const shouldSeek = !isPlaying && timeDiff > 0.05;
+            const largeJump = timeDiff > 0.3;
+
+            if (isFinite(targetTime) && (shouldSeek || largeJump)) {
                 video.currentTime = targetTime;
             }
+
             if (isPlaying || (isDragging?.type === 'playhead')) {
                 if (video.paused) video.play().catch(() => { });
             } else {
                 if (!video.paused) video.pause();
             }
-            // Sync playback rate for preview (Corrected: playbackRate = Footage / Space)
             const videoSpeed = (activeVClip.sourceDuration || clipDur) / clipDur;
             if (Math.abs(video.playbackRate - videoSpeed) > 0.05) {
                 video.playbackRate = Math.max(0.1, Math.min(16, videoSpeed));
@@ -2392,23 +2400,24 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
 
                                                                     if (!isVisible) return <div key={i} style={{ flex: `0 0 ${chunkWidth}px`, width: chunkWidth, height: '100%' }} />;
 
-                                                                    // Constant URL for this 2s segment - Height fixed at 45px
-                                                                    const tUrl = `/api/video-timeline-thumbs?path=${encodeURIComponent(clip.path)}&count=1&width=${thumbWidth}&height=${thumbHeight}&startTime=${chunkStart}&duration=${chunkDuration}&t=v3`;
-
+                                                                    // Client-side thumbnail generation
                                                                     return (
-                                                                        <img
+                                                                        <div
                                                                             key={i}
-                                                                            src={tUrl}
-                                                                            loading="lazy"
-                                                                            alt=""
                                                                             style={{
                                                                                 flex: `0 0 ${chunkWidth}px`,
                                                                                 width: chunkWidth,
                                                                                 height: '100%',
-                                                                                objectFit: 'cover',
-                                                                                display: 'block'
+                                                                                overflow: 'hidden'
                                                                             }}
-                                                                        />
+                                                                        >
+                                                                            <VideoThumbnailCanvas
+                                                                                videoPath={clip.path}
+                                                                                startTime={chunkStart}
+                                                                                width={thumbWidth}
+                                                                                height={thumbHeight}
+                                                                            />
+                                                                        </div>
                                                                     );
                                                                 })}
                                                             </div>
