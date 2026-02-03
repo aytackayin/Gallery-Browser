@@ -3724,6 +3724,20 @@ function App() {
                     </div>
 
                     <div className="media-grid">
+                        {!isSearching && currentPath !== '.' && (
+                            <div
+                                className="media-card is-folder back-card"
+                                onClick={() => fetchItems(currentPath.split('/').slice(0, -1).join('/') || '.')}
+                                style={{ cursor: 'pointer' }}
+                            >
+                                <div className="folder-icon" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+                                    <CornerUpLeft size={48} color="var(--netflix-red)" />
+                                </div>
+                                <div className="item-footer" style={{ justifyContent: 'center' }}>
+                                    <span style={{ fontWeight: 'bold' }}>{t.back || 'Back'}</span>
+                                </div>
+                            </div>
+                        )}
                         {items.slice(0, visibleCount).map((item) => {
                             const isFolder = item.type === 'folder';
                             const mediaIdx = !isFolder ? sortedMediaOnly.indexOf(item) : -1;

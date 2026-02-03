@@ -26,8 +26,9 @@
     "close": "Close",
     "editInfoRename": "Info",
     "fileConflict": "File Conflict!",
-    "conflictMessage": "Some files already exist in the destination. Overwrite them?",
+    "conflictMessage": "Some files already exist in the destination. What do you want to do?",
     "yesOverwrite": "Yes, Overwrite All",
+    "keepBoth": "Keep Both (Auto Rename)",
     "selectDestination": "Select destination folder for",
     "selectedItems": "selected items",
     "root": "Root",
@@ -136,5 +137,11 @@
     "waiting": "Waiting",
     "errorYouTube": "Could not fetch info or yt-dlp error",
     "activeDownloads": "Active Downloads",
-    "noActiveDownloads": "No active downloads"
+    "noActiveDownloads": "No active downloads",
+    "error": "Error",
+    "folderCreated": "Folder created",
+    "newFolder": "New Folder",
+    "folderName": "Folder Name",
+    "create": "Create",
+    "cleanupSuccess": "Cleanup complete! Removed {n} items."
 }
