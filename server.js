@@ -419,7 +419,7 @@ app.get('/api/video-timeline-thumbs', async (req, res) => {
         const start = parseFloat(startTime);
         const dur = parseFloat(duration);
 
-        const hash = crypto.createHash('md5').update(`${itemPath}_thumbs_${totalCount}_${w}_${h}_${start}_${dur}`).digest('hex');
+        const hash = crypto.createHash('md5').update(`${itemPath}_thumbs_${totalCount}_${w}_${h}_${start}_${dur}_v20`).digest('hex');
         const cachePath = path.join(timelineCacheDir, `strip_${hash}.jpg`);
 
         if (fs.existsSync(cachePath)) {
@@ -517,49 +517,104 @@ app.get('/api/audio-waveform', async (req, res) => {
         const start = parseFloat(startTime);
         const dur = parseFloat(duration);
 
-        const hash = crypto.createHash('md5').update(`${itemPath}_wave_${w}_${h}_${color}_${start}_${dur}`).digest('hex');
+        const hash = crypto.createHash('md5').update(`${itemPath}_wave_${w}_${h}_${color}_${start}_${dur}_v30`).digest('hex');
         const cachePath = path.join(timelineCacheDir, `wave_${hash}.png`);
 
         if (fs.existsSync(cachePath)) {
             return res.sendFile(cachePath);
         }
+        // Use hash as unique key to prevent race conditions
+        const processKey = hash;
+
+        // Robust seeking strategy V30 (Native Fluent Methods):
+        // 1. Use fluent-ffmpeg's native .seekInput() and .duration() methods.
+        // 2. This handles the flag placement (-ss before -i) automatically and correctly.
 
         const proc = ffmpeg(fullPath);
-        activeThumbProcesses.set(itemPath, proc);
 
-        // Audio fast seek and duration
-        proc.inputOptions([`-ss ${start}`]);
-        if (dur > 0) proc.inputOptions([`-t ${dur + 0.5}`]);
+        proc.seekInput(start);
+        proc.duration(dur);
 
+        // Filters
         proc.complexFilter([
-            `aformat=channel_layouts=mono,showwavespic=s=${w}x${h}:colors=${color}`
-        ])
-            .frames(1)
+            `aresample=44100`,
+            `asetpts=PTS-STARTPTS`,
+            `aformat=channel_layouts=mono`,
+            `showwavespic=s=${w}x${h}:colors=${color}`
+        ]);
+
+        // Output
+        proc.frames(1)
             .noAudio()
             .output(cachePath);
 
+        activeThumbProcesses.set(processKey, proc);
+
+        proc.on('start', (cmd) => {
+            console.log(`[Waveform V30] CMD: ${cmd}`);
+        });
+
+        proc.on('stderr', (stderrLine) => {
+            console.log('FFmpeg Stderr:', stderrLine); // ENABLED LOGGING TO SEE ERROR
+        });
+
         proc.on('end', () => {
-            activeThumbProcesses.delete(itemPath);
+            activeThumbProcesses.delete(processKey);
             if (fs.existsSync(cachePath)) {
                 res.sendFile(cachePath);
             } else {
+                console.error("[Waveform V30] Miss: Output file not found.");
                 if (!res.headersSent) res.status(500).end();
             }
         })
-            .on('error', (err) => {
-                activeThumbProcesses.delete(itemPath);
+            .on('error', (err, stdout, stderr) => {
+                console.error(`[Waveform V30] Error:`, err.message);
+                // console.error("Stderr:", stderr); 
+                activeThumbProcesses.delete(processKey);
                 if (!res.headersSent) res.status(500).end();
             });
 
         req.on('close', () => {
-            if (activeThumbProcesses.has(itemPath)) {
-                try { activeThumbProcesses.get(itemPath).kill('SIGKILL'); } catch (e) { }
-                activeThumbProcesses.delete(itemPath);
+            if (activeThumbProcesses.has(processKey)) {
+                // console.log(`[Waveform V25] Aborted by client: ${itemPath}`);
+                try { activeThumbProcesses.get(processKey).kill('SIGKILL'); } catch (e) { }
+                activeThumbProcesses.delete(processKey);
             }
         });
 
         proc.run();
 
+    } catch (e) {
+        console.error("[Waveform V25] Exception:", e);
+        if (!res.headersSent) res.status(500).end();
+    }
+});
+
+// File streaming endpoint for Web Audio API waveform decoding
+app.get('/api/file', (req, res) => {
+    try {
+        const itemPath = req.query.path;
+        if (!itemPath) return res.status(400).end();
+
+        const fullPath = path.join(rootGalleryPath, itemPath);
+
+        // Security check
+        if (!fullPath.toLowerCase().startsWith(rootGalleryPath.toLowerCase())) {
+            return res.status(403).end();
+        }
+
+        if (!fs.existsSync(fullPath)) return res.status(404).end();
+
+        const stat = fs.statSync(fullPath);
+        const mimeType = mime.lookup(fullPath) || 'application/octet-stream';
+
+        res.set({
+            'Content-Type': mimeType,
+            'Content-Length': stat.size,
+            'Accept-Ranges': 'bytes'
+        });
+
+        fs.createReadStream(fullPath).pipe(res);
     } catch (e) {
         if (!res.headersSent) res.status(500).end();
     }

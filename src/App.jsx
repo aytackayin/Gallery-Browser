@@ -1,3 +1,4 @@
+import { AudioWaveformCanvas } from './utils/WaveformGenerator';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { Folder, X, Play, Pause, ChevronRight, Home, ChevronLeft, Image as ImageIcon, Video as VideoIcon, Search, Trash2, Info, Save, FolderInput, ChevronDown, ChevronUp, Settings, CheckCircle, Scissors, RotateCw, Sun, Contrast, Lock, Unlock, Maximize2, Volume2, Plus, Trash, Droplet, CornerUpLeft, Layers, Crop, Monitor, Camera, FolderPlus, FileText, Tag } from 'lucide-react';
 import Cropper from "react-cropper";
@@ -312,7 +313,36 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
     const [isProcessing, setIsProcessing] = useState(false);
     const [canvasSize, setCanvasSize] = useState({ w: 1920, h: 1080 });
     const [originalSize, setOriginalSize] = useState(null);
-    const [snapLines, setSnapLines] = useState([]);
+    const [audioBuffers, setAudioBuffers] = useState({});
+    const audioContextRef = useRef(null);
+
+    // Load Audio Buffers for Client Side Waveforms
+    const loadAudioBuffer = async (path) => {
+        // Skip if already loaded or loading
+        if (audioBuffers[path]) return audioBuffers[path];
+
+        try {
+            // Create AudioContext lazily
+            if (!audioContextRef.current) {
+                audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
+            }
+
+            // Fetch audio file
+            const response = await fetch(`/api/file?path=${encodeURIComponent(path)}`);
+            if (!response.ok) throw new Error('Failed to fetch audio file');
+
+            const arrayBuffer = await response.arrayBuffer();
+            const audioBuffer = await audioContextRef.current.decodeAudioData(arrayBuffer);
+
+            // Update state with the new buffer
+            setAudioBuffers(prev => ({ ...prev, [path]: audioBuffer }));
+            return audioBuffer;
+        } catch (error) {
+            // Silent fail - waveform will show loading state
+            return null;
+        }
+    };
+
     const [showHelp, setShowHelp] = useState(false);
     const VIDEO_WIDTH = canvasSize.w;
     const VIDEO_HEIGHT = canvasSize.h;
@@ -358,6 +388,33 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
         }
     }, [initialDuration]);
 
+    // Load audio buffer for initial audio file
+    useEffect(() => {
+        const loadInitialAudioBuffer = async () => {
+            if (!item || !item.path) return;
+            if (!item.type?.startsWith('audio/')) return;
+            if (audioBuffers[item.path]) return;
+
+            try {
+                if (!audioContextRef.current) {
+                    audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
+                }
+
+                const response = await fetch(`/api/file?path=${encodeURIComponent(item.path)}`);
+                if (!response.ok) return;
+
+                const arrayBuffer = await response.arrayBuffer();
+                const audioBuffer = await audioContextRef.current.decodeAudioData(arrayBuffer);
+
+                setAudioBuffers(prev => ({ ...prev, [item.path]: audioBuffer }));
+            } catch (error) {
+                // Silent fail
+            }
+        };
+
+        loadInitialAudioBuffer();
+    }, [item]);
+
     const [selectedClipId, setSelectedClipId] = useState('clip-0');
     const [activeTool, setActiveTool] = useState('select'); // select, split, delete
     const [isDragging, setIsDragging] = useState(null);
@@ -376,6 +433,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
     const [pendingSaveOptions, setPendingSaveOptions] = useState(null);
     const timelineRef = useRef(null);
     const [dragTrackIndex, setDragTrackIndex] = useState(null);
+    const [snapLines, setSnapLines] = useState([]);
 
     const handleDragStart = (idx) => setDragTrackIndex(idx);
     const handleDragOver = (e, targetIdx) => {
@@ -1086,6 +1144,12 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
         setTracks(prev => prev.map(t => t.id === trackId ? { ...t, clips: [...t.clips, newClip] } : t));
         setPickerTarget(null);
         setSelectedClipId(newClip.id);
+
+        // Load audio buffer for waveform if this is an audio clip
+        const isAudio = mediaItem.type?.startsWith('audio/') || mediaItem.path.match(/\.(mp3|wav|ogg|m4a|aac|flac)$/i);
+        if (isAudio) {
+            loadAudioBuffer(mediaItem.path);
+        }
     };
 
 
@@ -2352,39 +2416,61 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
 
                                                         {isAudio && (
                                                             <div className="clip-waveform" style={{ display: 'flex', width: '100%', height: '100%', position: 'absolute', top: 0, left: 0 }}>
-                                                                {Array.from({ length: numChunks }).map((_, i) => {
-                                                                    const chunkStart = clip.start + (i * SECONDS_PER_CHUNK);
-                                                                    const chunkDuration = Math.min(SECONDS_PER_CHUNK, clip.duration - (i * SECONDS_PER_CHUNK));
+                                                                {!audioBuffers[clip.path] ? (
+                                                                    // Loading state - show shimmer effect
+                                                                    Array.from({ length: numChunks }).map((_, i) => {
+                                                                        const chunkStart = clip.start + (i * SECONDS_PER_CHUNK);
+                                                                        const chunkDuration = Math.min(SECONDS_PER_CHUNK, clip.duration - (i * SECONDS_PER_CHUNK));
+                                                                        const chunkWidth = chunkDuration * zoomLevel;
+                                                                        return (
+                                                                            <div
+                                                                                key={i}
+                                                                                style={{
+                                                                                    flex: `0 0 ${chunkWidth}px`,
+                                                                                    width: chunkWidth,
+                                                                                    height: '100%',
+                                                                                    background: 'linear-gradient(90deg, rgba(70,211,105,0.1) 0%, rgba(70,211,105,0.3) 50%, rgba(70,211,105,0.1) 100%)',
+                                                                                    backgroundSize: '200% 100%',
+                                                                                    animation: 'shimmer 1.5s infinite',
+                                                                                    display: 'flex',
+                                                                                    alignItems: 'center',
+                                                                                    justifyContent: 'center'
+                                                                                }}
+                                                                            >
+                                                                                <span style={{ fontSize: '0.6rem', color: 'rgba(70,211,105,0.6)', opacity: 0.8 }}>
+                                                                                    {i === 0 ? '♪' : ''}
+                                                                                </span>
+                                                                            </div>
+                                                                        );
+                                                                    })
+                                                                ) : (
+                                                                    Array.from({ length: numChunks }).map((_, i) => {
+                                                                        const chunkStart = clip.start + (i * SECONDS_PER_CHUNK);
+                                                                        const chunkDuration = Math.min(SECONDS_PER_CHUNK, clip.duration - (i * SECONDS_PER_CHUNK));
+                                                                        const clipLeft = (clip.offset || 0) * zoomLevel;
+                                                                        const chunkLeft = clipLeft + (i * SECONDS_PER_CHUNK * zoomLevel);
+                                                                        const chunkWidth = chunkDuration * zoomLevel;
 
-                                                                    const clipLeft = (clip.offset || 0) * zoomLevel;
-                                                                    const chunkLeft = clipLeft + (i * SECONDS_PER_CHUNK * zoomLevel);
-                                                                    const chunkWidth = chunkDuration * zoomLevel;
+                                                                        // Visibility check
+                                                                        const viewportWidth = timelineRef.current?.clientWidth || 2000;
+                                                                        const isVisible = (chunkLeft + chunkWidth > timelineScroll - 500) &&
+                                                                            (chunkLeft < timelineScroll + viewportWidth + 500);
 
-                                                                    // Visibility check
-                                                                    const viewportWidth = timelineRef.current?.clientWidth || 2000;
-                                                                    const isVisible = (chunkLeft + chunkWidth > timelineScroll - 500) &&
-                                                                        (chunkLeft < timelineScroll + viewportWidth + 500);
+                                                                        if (!isVisible) return <div key={i} style={{ flex: `0 0 ${chunkWidth}px`, width: chunkWidth, height: '100%' }} />;
 
-                                                                    if (!isVisible) return <div key={i} style={{ flex: `0 0 ${chunkWidth}px`, width: chunkWidth, height: '100%' }} />;
-
-                                                                    const wUrl = `/api/audio-waveform?path=${encodeURIComponent(clip.path)}&width=100&height=45&startTime=${chunkStart}&duration=${chunkDuration}&t=w2`;
-
-                                                                    return (
-                                                                        <img
-                                                                            key={i}
-                                                                            src={wUrl}
-                                                                            loading="lazy"
-                                                                            alt=""
-                                                                            style={{
-                                                                                flex: `0 0 ${chunkWidth}px`,
-                                                                                width: chunkWidth,
-                                                                                height: '100%',
-                                                                                objectFit: 'fill',
-                                                                                display: 'block'
-                                                                            }}
-                                                                        />
-                                                                    );
-                                                                })}
+                                                                        return (
+                                                                            <div key={i} style={{ flex: `0 0 ${chunkWidth}px`, width: chunkWidth, height: '100%' }}>
+                                                                                <AudioWaveformCanvas
+                                                                                    buffer={audioBuffers[clip.path]}
+                                                                                    startTime={chunkStart} // Determine offset in original file
+                                                                                    duration={chunkDuration}
+                                                                                    width={Math.ceil(chunkWidth)}
+                                                                                    height={45}
+                                                                                    color="#00ff00"
+                                                                                />
+                                                                            </div>
+                                                                        );
+                                                                    }))}
                                                             </div>
                                                         )}
 
