@@ -1819,7 +1819,7 @@ video::-moz-list-bullet {
 /* YOUTUBE DOWNLOAD SYSTEM */
 .yt-progress-container {
   position: fixed;
-  bottom: 80px;
+  bottom: 20px;
   right: 20px;
   width: 280px;
   background: rgba(20, 20, 20, 0.95);
@@ -1830,11 +1830,14 @@ video::-moz-list-bullet {
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   overflow: hidden;
+  display: flex;
+  flex-direction: column-reverse;
+  /* Header at bottom-ish logic if needed, but flex-col is better */
+  flex-direction: column;
 }
 
 .yt-progress-container.minimized {
   width: 200px;
-  height: 40px;
   opacity: 0.8;
 }
 

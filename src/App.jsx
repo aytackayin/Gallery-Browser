@@ -2741,6 +2741,7 @@ function App() {
     const [editName, setEditName] = useState('');
     const [editInfo, setEditInfo] = useState('');
     const [editMetadata, setEditMetadata] = useState(null);
+    const [editModalError, setEditModalError] = useState('');
 
     // Taşıma State'i
     const [moveModal, setMoveModal] = useState(null); // Taşınacak dosya
@@ -2805,7 +2806,21 @@ function App() {
                 if (data.type === 'video') {
                     setYtSelectedUrls(new Set([data.url]));
                 } else if (data.entries) {
-                    setYtSelectedUrls(new Set(data.entries.map(e => e.url)));
+                    // Filter out deleted videos
+                    const validEntries = data.entries.filter(e =>
+                        e.title && !e.title.toLowerCase().includes('[deleted video]')
+                    );
+
+                    // Update data entries to only include valid ones
+                    data.entries = validEntries;
+                    setYtInfo(data);
+
+                    // Auto-select non-private videos
+                    const initialSelected = validEntries
+                        .filter(e => e.title && !e.title.toLowerCase().includes('[private video]'))
+                        .map(e => e.url);
+
+                    setYtSelectedUrls(new Set(initialSelected));
                 }
             }
         } catch (e) {
@@ -2846,27 +2861,27 @@ function App() {
                 setYtUrl('');
                 setYtInfo(null);
             } else if (data.type === 'video_start') {
-                setYtDownloads(prev => prev.map((job, idx) =>
-                    (job.processId === data.processId && idx === data.index)
+                setYtDownloads(prev => prev.map(job =>
+                    job.id === `${data.processId}_${data.index}`
                         ? { ...job, status: 'downloading' }
                         : job
                 ));
             } else if (data.type === 'progress') {
-                setYtDownloads(prev => prev.map((job, idx) =>
-                    (job.processId === data.processId && idx === data.index)
+                setYtDownloads(prev => prev.map(job =>
+                    job.id === `${data.processId}_${data.index}`
                         ? { ...job, percent: data.percent, status: 'downloading' }
                         : job
                 ));
             } else if (data.type === 'video_success') {
-                setYtDownloads(prev => prev.map((job, idx) =>
-                    (job.processId === data.processId && idx === data.index)
+                setYtDownloads(prev => prev.map(job =>
+                    job.id === `${data.processId}_${data.index}`
                         ? { ...job, percent: 100, status: 'completed' }
                         : job
                 ));
                 fetchItems(currentPath); // Refresh to see the folder/video
             } else if (data.type === 'video_error') {
-                setYtDownloads(prev => prev.map((job, idx) =>
-                    (job.processId === data.processId && idx === data.index)
+                setYtDownloads(prev => prev.map(job =>
+                    job.id === `${data.processId}_${data.index}`
                         ? { ...job, status: 'error', errorMsg: data.error }
                         : job
                 ));
@@ -3025,9 +3040,21 @@ function App() {
             if (e.key === 'PageDown' && !zoomMode) { e.preventDefault(); navigateMedia(1); }
             else if (e.key === 'PageUp' && !zoomMode) { e.preventDefault(); navigateMedia(-1); }
             else if (e.key === 'Escape') {
-                if (showEditor) setShowEditor(false);
-                else if (moveModal) { setMoveModal(null); setMoveConflict(false); }
-                else if (editModal) setEditModal(null);
+                if (showEditor) {
+                    const item = editImageItem || selectedMedia;
+                    if (item) setLastActivePath(item.path);
+                    setShowEditor(false);
+                    setEditImageItem(null);
+                }
+                else if (showVideoEditor) {
+                    const item = editVideoItem || selectedMedia;
+                    if (item) setLastActivePath(item.path);
+                    setShowVideoEditor(false);
+                    setEditVideoItem(null);
+                    setSelectedMediaIndex(-1);
+                }
+                else if (moveModal) closeMoveModal();
+                else if (editModal) closeEditModal();
                 else { resetAndClose(); setConfirmDelete(null); }
             }
         };
@@ -3274,6 +3301,18 @@ function App() {
         } catch (e) { alert(t.deleteError); }
     };
 
+    const closeEditModal = () => {
+        if (editModal) setLastActivePath(editModal.path);
+        setEditModal(null);
+        setEditModalError('');
+    };
+
+    const closeMoveModal = () => {
+        if (moveModal) setLastActivePath(moveModal.path);
+        setMoveModal(null);
+        setMoveConflict(false);
+    };
+
     const handleMoveItem = async (overwrite = false, autoRename = false) => {
         if (!moveModal || !targetFolder) return;
 
@@ -3306,6 +3345,11 @@ function App() {
                 } else {
                     fetchItems(currentPath);
                 }
+                if (data.newPath) {
+                    setLastActivePath(data.newPath);
+                } else {
+                    setLastActivePath(movedPath);
+                }
                 setMoveModal(null);
                 setTargetFolder(null);
                 setMoveConflict(false);
@@ -3333,7 +3377,7 @@ function App() {
         } else {
             setEditName(item.name);
         }
-
+        setEditModalError('');
         setEditInfo('');
         setEditMetadata(null);
         try {
@@ -3346,6 +3390,7 @@ function App() {
 
     const handleSaveEdit = async () => {
         if (!editModal || !editName.trim()) return;
+        setEditModalError('');
 
         // Re-append extension if it's a file
         let finalName = editName.trim();
@@ -3377,12 +3422,14 @@ function App() {
                 } else {
                     fetchItems(currentPath);
                 }
+                setLastActivePath(data.newPath || oldPath);
                 setEditModal(null);
+                setEditModalError('');
             } else {
-                alert(data.error || 'Update failed');
+                setEditModalError(data.error || 'Update failed');
             }
         } catch (e) {
-            alert('Error updating file');
+            setEditModalError('Error updating file');
         }
     };
 
@@ -3428,6 +3475,7 @@ function App() {
             const data = await res.json();
             if (data.success) {
                 setRefreshKey(Date.now());
+                setLastActivePath(currentItem.path);
                 setShowEditor(false);
                 setEditImageItem(null);
                 setToast(t.imageSaved || 'Image saved successfully');
@@ -3450,6 +3498,7 @@ function App() {
             // Video processing is already done by VideoEditor's handleSave
             // Just update UI and refresh gallery
             setRefreshKey(Date.now());
+            setLastActivePath(currentItem.path);
             setShowVideoEditor(false);
             setEditVideoItem(null);
             setSelectedMediaIndex(-1);
@@ -3641,27 +3690,29 @@ function App() {
                         )}
                     </div>
 
-                    <button
-                        className="settings-btn"
-                        data-tooltip={t.youtubeDownload || 'YouTube Download'}
-                        data-tooltip-pos="bottom"
-                        data-tooltip-align="end"
-                        onClick={() => setYtModal(true)}
-                        style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 8 }}
-                    >
-                        <VideoIcon size={20} color="#aaa" />
-                    </button>
+                    <div className="navbar-actions" style={{ display: 'flex', alignItems: 'center', gap: 5, marginLeft: 'auto' }}>
+                        <button
+                            className="settings-btn"
+                            data-tooltip={t.youtubeDownload || 'YouTube Download'}
+                            data-tooltip-pos="bottom"
+                            data-tooltip-align="end"
+                            onClick={() => setYtModal(true)}
+                            style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 8, display: 'flex', alignItems: 'center' }}
+                        >
+                            <VideoIcon size={20} color="#aaa" />
+                        </button>
 
-                    <button
-                        className="settings-btn"
-                        data-tooltip={t.settings || 'Settings'}
-                        data-tooltip-pos="bottom"
-                        data-tooltip-align="end"
-                        onClick={() => setSettingsModal(true)}
-                        style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 8 }}
-                    >
-                        <Settings size={20} color="#aaa" />
-                    </button>
+                        <button
+                            className="settings-btn"
+                            data-tooltip={t.settings || 'Settings'}
+                            data-tooltip-pos="bottom"
+                            data-tooltip-align="end"
+                            onClick={() => setSettingsModal(true)}
+                            style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 8, display: 'flex', alignItems: 'center' }}
+                        >
+                            <Settings size={20} color="#aaa" />
+                        </button>
+                    </div>
                 </div>
 
                 <div className="breadcrumb">
@@ -3858,11 +3909,11 @@ function App() {
 
             {
                 editModal && (
-                    <div className="modal-overlay" onClick={() => setEditModal(null)}>
+                    <div className="modal-overlay" onClick={closeEditModal}>
                         <div className="modal info-modal" onClick={e => e.stopPropagation()}>
                             <div className="modal-header">
                                 <h3>{t.editItem || 'Edit Item'}</h3>
-                                <button onClick={() => setEditModal(null)}><X size={20} /></button>
+                                <button onClick={closeEditModal}><X size={20} /></button>
                             </div>
                             <div className="modal-body">
                                 {editMetadata && (
@@ -3912,10 +3963,15 @@ function App() {
                                 <input
                                     type="text"
                                     value={editName}
-                                    onChange={(e) => setEditName(e.target.value)}
-                                    className="modal-input"
-                                    style={{ marginBottom: 20 }}
+                                    onChange={(e) => { setEditName(e.target.value); setEditModalError(''); }}
+                                    className={`modal-input ${editModalError ? 'input-error' : ''}`}
+                                    style={{ marginBottom: editModalError ? 10 : 20 }}
                                 />
+                                {editModalError && (
+                                    <div style={{ color: '#e50914', fontSize: '0.85rem', marginBottom: 20, marginTop: -5, display: 'flex', alignItems: 'center', gap: 5 }}>
+                                        <X size={14} /> {editModalError}
+                                    </div>
+                                )}
 
                                 <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: 5, color: '#aaa' }}>{t.notesDetails || 'Notes / Details'}</label>
                                 <textarea
@@ -3935,7 +3991,7 @@ function App() {
 
             {
                 moveModal && (
-                    <div className="modal-overlay" style={{ zIndex: 6000 }} onClick={() => { setMoveModal(null); setMoveConflict(false); }}>
+                    <div className="modal-overlay" style={{ zIndex: 6000 }} onClick={closeMoveModal}>
                         <div className="modal move-modal" onClick={e => e.stopPropagation()} style={{ height: '70vh', display: 'flex', flexDirection: 'column' }}>
                             <div className="modal-header">
                                 <h3>{moveModal.batch ? (t.moveItems || 'Move {count} Items').replace('{count}', moveModal.count) : (t.moveItem || 'Move Item')}</h3>
@@ -3978,7 +4034,7 @@ function App() {
                                         <button className="btn btn-primary" disabled={targetFolder === null} onClick={() => handleMoveItem(false)}>
                                             <FolderInput size={16} /> {t.move || 'Move'}
                                         </button>
-                                        <button className="btn btn-grey" onClick={() => setMoveModal(null)}>{t.cancel}</button>
+                                        <button className="btn btn-grey" onClick={closeMoveModal}>{t.cancel}</button>
                                     </div>
                                 </>
                             )}
@@ -4326,7 +4382,12 @@ function App() {
                     <ImageEditor
                         item={editImageItem || selectedMedia}
                         t={t}
-                        onClose={() => { setShowEditor(false); setEditImageItem(null); }}
+                        onClose={() => {
+                            const item = editImageItem || selectedMedia;
+                            if (item) setLastActivePath(item.path);
+                            setShowEditor(false);
+                            setEditImageItem(null);
+                        }}
                         onSave={handleSaveEditedImage}
                     />
                 )
@@ -4340,6 +4401,8 @@ function App() {
                         t={t}
                         refreshKey={refreshKey}
                         onClose={() => {
+                            const item = editVideoItem || selectedMedia;
+                            if (item) setLastActivePath(item.path);
                             setShowVideoEditor(false);
                             setEditVideoItem(null);
                             setSelectedMediaIndex(-1);
@@ -4377,8 +4440,31 @@ function App() {
 
                                 {ytInfo && (
                                     <div className="yt-info-preview" style={{ background: 'rgba(255,255,255,0.05)', padding: 15, borderRadius: 8 }}>
-                                        <h4 style={{ margin: '0 0 10px 0' }}>{ytInfo.title}</h4>
-                                        <p style={{ fontSize: '0.8rem', color: '#888', marginBottom: 15 }}>{ytInfo.uploader}</p>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                            <div style={{ flex: 1, marginRight: 10 }}>
+                                                <h4 style={{ margin: '0 0 5px 0' }}>{ytInfo.title}</h4>
+                                                <p style={{ fontSize: '0.8rem', color: '#888', marginBottom: 15 }}>{ytInfo.uploader}</p>
+                                            </div>
+                                            {ytInfo.type === 'playlist' && (
+                                                <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2, cursor: 'pointer' }}>
+                                                    <span style={{ fontSize: '0.75rem', color: '#aaa' }}>{t.selectAll || 'Select All'}</span>
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={ytInfo.entries.length > 0 && ytInfo.entries.filter(ent => ent.title && !ent.title.toLowerCase().includes('[private video]')).every(e => ytSelectedUrls.has(e.url))}
+                                                        onChange={(e) => {
+                                                            if (e.target.checked) {
+                                                                const nonPrivate = ytInfo.entries
+                                                                    .filter(ent => ent.title && !ent.title.toLowerCase().includes('[private video]'))
+                                                                    .map(ent => ent.url);
+                                                                setYtSelectedUrls(new Set(nonPrivate));
+                                                            } else {
+                                                                setYtSelectedUrls(new Set());
+                                                            }
+                                                        }}
+                                                    />
+                                                </label>
+                                            )}
+                                        </div>
 
                                         {ytInfo.type === 'playlist' && (
                                             <div className="yt-playlist-entries" style={{ maxHeight: 200, overflowY: 'auto', border: '1px solid #333', borderRadius: 4, padding: 5 }}>
@@ -4422,16 +4508,6 @@ function App() {
                     onMouseEnter={() => setYtMinimized(false)}
                     onMouseLeave={() => setYtMinimized(true)}
                 >
-                    <div className="yt-progress-header">
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <RotateCw size={16} className={ytDownloads.some(d => d.status === 'downloading') ? 'spin' : ''} />
-                            <span style={{ fontSize: '0.8rem' }}>{t.activeDownloads || 'Active Downloads'} ({ytDownloads.filter(d => d.status !== 'completed').length})</span>
-                        </div>
-                        <button className="minimize-btn" onClick={(e) => { e.stopPropagation(); setYtMinimized(!ytMinimized); }} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#fff', padding: 4 }}>
-                            {ytMinimized ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                        </button>
-                    </div>
-
                     {!ytMinimized && (
                         <div className="yt-progress-list" style={{ maxHeight: 300, overflowY: 'auto', padding: 10 }}>
                             {ytDownloads.map((job) => (
@@ -4459,7 +4535,13 @@ function App() {
                                                 </button>
                                             )}
                                             {(job.status === 'completed' || job.status === 'error') && (
-                                                <button onClick={() => setYtDownloads(prev => prev.filter(j => j.id !== job.id))} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#666', fontSize: '10px' }}>
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setYtDownloads(prev => prev.filter(j => j.id !== job.id));
+                                                    }}
+                                                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#666', fontSize: '10px' }}
+                                                >
                                                     {t.clear || 'Clear'}
                                                 </button>
                                             )}
@@ -4469,6 +4551,16 @@ function App() {
                             ))}
                         </div>
                     )}
+
+                    <div className="yt-progress-header">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <RotateCw size={16} className={ytDownloads.some(d => d.status === 'downloading') ? 'spin' : ''} />
+                            <span style={{ fontSize: '0.8rem' }}>{t.activeDownloads || 'Active Downloads'} ({ytDownloads.filter(d => d.status !== 'completed').length})</span>
+                        </div>
+                        <button className="minimize-btn" onClick={(e) => { e.stopPropagation(); setYtMinimized(!ytMinimized); }} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#fff', padding: 4 }}>
+                            {ytMinimized ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                        </button>
+                    </div>
 
                     {ytMinimized && ytDownloads.some(d => d.status === 'downloading') && (
                         <div className="yt-mini-progress" style={{ height: 2, background: 'rgba(255,255,255,0.1)' }}>

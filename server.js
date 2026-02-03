@@ -1633,13 +1633,14 @@ app.get('/api/yt/download-stream', (req, res) => {
                 const uploaderClean = (video.uploader_id ? video.uploader_id.replace(/^@/, '') : (video.uploader || 'YouTube')).replace(/[\\/:*?"<>|]/g, '_');
                 const targetDir = path.join(rootGalleryPath, currentPath, uploaderClean);
 
-                if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
 
                 sendUpdate({ type: 'video_start', index: i, title: video.title, processId });
 
                 const ytDlpPath = getYtDlpPath();
-                // Format: filename will be the title
                 const outputTemplate = path.join(targetDir, '%(title)s.%(ext)s');
+
+                // Only create directory if we are actually about to start downloading
+                if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
 
                 const args = [
                     '--newline',
@@ -1693,7 +1694,6 @@ app.get('/api/yt/download-stream', (req, res) => {
                     });
 
                     proc.on('close', (code) => {
-                        activeYtProcesses.delete(processId);
                         if (code === 0) {
                             const uploaderName = video.uploader || video.channel || 'YouTube';
                             let uploaderUrl = video.uploader_url;
@@ -1713,7 +1713,6 @@ app.get('/api/yt/download-stream', (req, res) => {
                                 if (sortedFiles.length > 0) {
                                     const fileName = sortedFiles[0].name;
                                     const absPath = path.join(targetDir, fileName);
-                                    // Use path.relative to get the key for item_info table and normalize slashes
                                     const relPath = path.relative(rootGalleryPath, absPath).replace(/\\/g, '/');
 
                                     const stmt = db.prepare('INSERT OR REPLACE INTO item_info (path, info) VALUES (?, ?)');
@@ -1727,6 +1726,13 @@ app.get('/api/yt/download-stream', (req, res) => {
                         } else {
                             const errorMsg = lastError ? lastError.trim().split('\n').pop() : "Process exited with code " + code;
                             sendUpdate({ type: 'video_error', index: i, error: errorMsg, processId });
+
+                            // Cleanup empty folder if it was created and nothing was downloaded
+                            try {
+                                if (fs.existsSync(targetDir) && fs.readdirSync(targetDir).length === 0) {
+                                    fs.rmdirSync(targetDir);
+                                }
+                            } catch (e) { }
                         }
                         resolve();
                     });
@@ -1734,6 +1740,7 @@ app.get('/api/yt/download-stream', (req, res) => {
 
                 if (!activeYtProcesses.get(processId)) break; // Was cancelled
             }
+            activeYtProcesses.delete(processId);
             clearInterval(heartbeat);
             sendUpdate({ type: 'all_success', processId });
             res.end();
