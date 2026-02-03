@@ -2790,6 +2790,7 @@ function App() {
     const [ytSelectedUrls, setYtSelectedUrls] = useState(new Set());
     const [ytDownloads, setYtDownloads] = useState([]); // Array of { id, title, percent, status }
     const [ytMinimized, setYtMinimized] = useState(true);
+    const [ytAsAudio, setYtAsAudio] = useState(false);
 
     // YouTube Fetch Info Handler
     const handleYtFetchInfo = async () => {
@@ -2840,7 +2841,8 @@ function App() {
 
         const queryParams = new URLSearchParams({
             videos: JSON.stringify(selectedVideos),
-            currentPath: currentPath
+            currentPath: currentPath,
+            asAudio: ytAsAudio
         });
 
         const eventSource = new EventSource(`/api/yt/download-stream?${queryParams.toString()}`);
@@ -2860,6 +2862,7 @@ function App() {
                 setYtModal(false);
                 setYtUrl('');
                 setYtInfo(null);
+                setYtAsAudio(false);
             } else if (data.type === 'video_start') {
                 setYtDownloads(prev => prev.map(job =>
                     job.id === `${data.processId}_${data.index}`
@@ -3696,7 +3699,7 @@ function App() {
                             data-tooltip={t.youtubeDownload || 'YouTube Download'}
                             data-tooltip-pos="bottom"
                             data-tooltip-align="end"
-                            onClick={() => setYtModal(true)}
+                            onClick={() => { setYtAsAudio(false); setYtModal(true); }}
                             style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 8, display: 'flex', alignItems: 'center' }}
                         >
                             <VideoIcon size={20} color="#aaa" />
@@ -3822,13 +3825,19 @@ function App() {
                                         </div>
                                     ) : (
                                         <div className="media-wrapper">
-                                            <img
-                                                src={getThumbUrl(item.path)}
-                                                className="media-thumbnail"
-                                                loading="lazy"
-                                                alt={item.name}
-                                                onError={(e) => { e.target.onerror = null; e.target.src = getMediaUrl(item.path); }}
-                                            />
+                                            {item.type.startsWith('audio/') ? (
+                                                <div style={{ width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', background: '#1a1a1a' }}>
+                                                    <Volume2 size={48} color="#444" />
+                                                </div>
+                                            ) : (
+                                                <img
+                                                    src={getThumbUrl(item.path)}
+                                                    className="media-thumbnail"
+                                                    loading="lazy"
+                                                    alt={item.name}
+                                                    onError={(e) => { e.target.onerror = null; e.target.src = getMediaUrl(item.path); }}
+                                                />
+                                            )}
                                             {item.type.startsWith('video/') && (
                                                 <div className="play-overlay" style={{
                                                     position: 'absolute',
@@ -4113,6 +4122,20 @@ function App() {
                                         e.stopPropagation();
                                     }}
                                 />
+                            ) : selectedMedia.type.startsWith('audio/') ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 30 }}>
+                                    <div style={{ width: 200, height: 200, borderRadius: '50%', background: 'rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'center', alignItems: 'center', border: '2px solid rgba(255,255,255,0.1)' }}>
+                                        <Volume2 size={80} color="var(--netflix-red)" />
+                                    </div>
+                                    <h2 style={{ color: '#fff', fontSize: '1.2rem', textAlign: 'center', maxWidth: '80%' }}>{selectedMedia.name}</h2>
+                                    <audio
+                                        autoPlay={autoPlaySetting}
+                                        controls
+                                        src={getMediaUrl(selectedMedia.path)}
+                                        style={{ width: 400 }}
+                                        onEnded={() => autoPlaySlides && navigateMedia(1)}
+                                    />
+                                </div>
                             ) : (
                                 <>
                                     <video
@@ -4417,11 +4440,11 @@ function App() {
             }
             {
                 ytModal && (
-                    <div className="modal-overlay" onClick={() => { setYtModal(false); setYtInfo(null); }}>
+                    <div className="modal-overlay" onClick={() => { setYtModal(false); setYtInfo(null); setYtAsAudio(false); }}>
                         <div className="modal yt-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 500 }}>
                             <div className="modal-header">
                                 <h3>{t.youtubeDownload || 'YouTube Download'}</h3>
-                                <button onClick={() => { setYtModal(false); setYtInfo(null); }}><X size={20} /></button>
+                                <button onClick={() => { setYtModal(false); setYtInfo(null); setYtAsAudio(false); }}><X size={20} /></button>
                             </div>
                             <div className="modal-body">
                                 <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: 5, color: '#aaa' }}>{t.enterYoutubeUrl || 'Enter YouTube URL'}</label>
@@ -4485,6 +4508,19 @@ function App() {
                                                 ))}
                                             </div>
                                         )}
+
+                                        <div style={{ marginTop: 15, display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(255,255,255,0.03)', padding: '8px 12px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.05)' }}>
+                                            <input
+                                                type="checkbox"
+                                                id="yt-as-audio"
+                                                checked={ytAsAudio}
+                                                onChange={(e) => setYtAsAudio(e.target.checked)}
+                                                style={{ width: 16, height: 16, accentColor: 'var(--netflix-red)' }}
+                                            />
+                                            <label htmlFor="yt-as-audio" style={{ fontSize: '0.85rem', cursor: 'pointer', color: '#ccc' }}>
+                                                {t.downloadAsMp3 || 'Download as MP3'}
+                                            </label>
+                                        </div>
 
                                         <button
                                             className="btn btn-primary"

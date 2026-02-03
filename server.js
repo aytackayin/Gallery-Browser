@@ -211,9 +211,8 @@ const getAllItems = (dir, baseDir, allFiles = [], showAudio = false) => {
             const relPath = path.relative(baseDir, res).replace(/\\/g, '/');
             const isDir = file.isDirectory();
             const type = isDir ? 'folder' : (mime.lookup(file.name) || 'unknown');
-            const isMedia = type.startsWith('image/') || type.startsWith('video/');
-            const isAudio = type.startsWith('audio/');
-            if (isDir || isMedia || (showAudio && isAudio)) {
+            const isMedia = type.startsWith('image/') || type.startsWith('video/') || type.startsWith('audio/');
+            if (isDir || isMedia) {
                 allFiles.push({ name: file.name, path: relPath, type });
             }
             if (isDir) getAllItems(res, baseDir, allFiles, showAudio);
@@ -264,8 +263,7 @@ app.get('/api/scan', (req, res) => {
             })
             .filter(item => {
                 if (item.type === 'folder') return true;
-                if (item.type.startsWith('image/') || item.type.startsWith('video/')) return true;
-                if (showAudio && item.type.startsWith('audio/')) return true;
+                if (item.type.startsWith('image/') || item.type.startsWith('video/') || item.type.startsWith('audio/')) return true;
                 return false;
             })
             .sort((a, b) => (b.type === 'folder' ? 1 : -1) - (a.type === 'folder' ? 1 : -1) || a.name.localeCompare(b.name));
@@ -1625,7 +1623,8 @@ app.get('/api/yt/info', async (req, res) => {
 
 app.get('/api/yt/download-stream', (req, res) => {
     try {
-        const { videos: videosJson, currentPath } = req.query;
+        const { videos: videosJson, currentPath, asAudio: asAudioParam } = req.query;
+        const asAudio = asAudioParam === 'true';
         const videos = JSON.parse(videosJson);
         const processId = `yt_${Date.now()}`;
 
@@ -1654,8 +1653,11 @@ app.get('/api/yt/download-stream', (req, res) => {
             for (let i = 0; i < videos.length; i++) {
                 const video = videos[i];
                 const uploaderClean = (video.uploader_id ? video.uploader_id.replace(/^@/, '') : (video.uploader || 'YouTube')).replace(/[\\/:*?"<>|]/g, '_');
-                const targetDir = path.join(rootGalleryPath, currentPath, uploaderClean);
 
+                // If asAudio is true, don't use uploader subfolder
+                const targetDir = asAudio
+                    ? path.join(rootGalleryPath, currentPath)
+                    : path.join(rootGalleryPath, currentPath, uploaderClean);
 
                 sendUpdate({ type: 'video_start', index: i, title: video.title, processId });
 
@@ -1677,14 +1679,22 @@ app.get('/api/yt/download-stream', (req, res) => {
                     '--referer', 'https://www.youtube.com/',
                     '--extractor-args', 'youtube:player_client=android',
                     '--ffmpeg-location', 'C:\\ffmpeg\\bin',
-                    '--merge-output-format', 'mp4',
-                    '--retries', '10',
-                    '--fragment-retries', '10',
-                    '--concurrent-fragments', '3',
-                    '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
-                    '-o', outputTemplate,
-                    video.url
                 ];
+
+                if (asAudio) {
+                    args.push(
+                        '--extract-audio',
+                        '--audio-format', 'mp3',
+                        '--audio-quality', '0'
+                    );
+                } else {
+                    args.push(
+                        '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+                        '--merge-output-format', 'mp4'
+                    );
+                }
+
+                args.push('-o', outputTemplate, video.url);
 
                 const proc = spawn(ytDlpPath, args);
                 activeYtProcesses.set(processId, proc);
