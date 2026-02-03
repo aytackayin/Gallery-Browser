@@ -1,14 +1,17 @@
 import React, { useEffect, useRef, useState } from 'react';
 
 /**
- * Client-Side Video Thumbnail Generator
+ * Client-Side Video Thumbnail Generator (Enhanced Precision)
  * Generates thumbnails from video files using HTML5 Video + Canvas API
+ * with improved seeking accuracy and frame capture timing
  */
 export const VideoThumbnailCanvas = ({ videoPath, startTime, width, height, onLoad }) => {
     const canvasRef = useRef(null);
     const videoRef = useRef(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(false);
+    const seekAttempts = useRef(0);
+    const targetTimeRef = useRef(startTime);
 
     useEffect(() => {
         if (!videoPath || !canvasRef.current) return;
@@ -19,18 +22,32 @@ export const VideoThumbnailCanvas = ({ videoPath, startTime, width, height, onLo
         videoRef.current = video;
 
         video.crossOrigin = 'anonymous';
-        video.preload = 'metadata';
+        video.preload = 'auto'; // Changed from 'metadata' to 'auto' for better frame accuracy
         video.muted = true;
+        video.playsInline = true;
 
         let hasDrawn = false;
+        seekAttempts.current = 0;
+        targetTimeRef.current = startTime;
 
         const drawFrame = () => {
             if (hasDrawn) return;
+
+            // Verify we're at the correct time (within 0.1s tolerance)
+            const timeDiff = Math.abs(video.currentTime - targetTimeRef.current);
+            if (timeDiff > 0.15 && seekAttempts.current < 3) {
+                // Not accurate enough, try seeking again
+                seekAttempts.current++;
+                video.currentTime = targetTimeRef.current;
+                return;
+            }
+
             hasDrawn = true;
 
             try {
-                // Clear canvas
-                ctx.clearRect(0, 0, width, height);
+                // Clear canvas with black background
+                ctx.fillStyle = '#000';
+                ctx.fillRect(0, 0, width, height);
 
                 // Draw video frame
                 ctx.drawImage(video, 0, 0, width, height);
@@ -44,38 +61,57 @@ export const VideoThumbnailCanvas = ({ videoPath, startTime, width, height, onLo
         };
 
         const handleSeeked = () => {
-            drawFrame();
+            // Wait a bit for the frame to be fully decoded
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    drawFrame();
+                });
+            });
         };
 
-        const handleLoadedMetadata = () => {
-            // Ensure startTime is within video duration
+        const handleLoadedData = () => {
+            // Video data is loaded, now we can seek accurately
             const seekTime = Math.min(Math.max(0, startTime || 0), video.duration - 0.1);
+            targetTimeRef.current = seekTime;
             video.currentTime = seekTime;
         };
 
-        const handleError = () => {
+        const handleCanPlay = () => {
+            // Ensure we're ready to capture frames
+            if (!hasDrawn && video.readyState >= 2) {
+                const seekTime = Math.min(Math.max(0, startTime || 0), video.duration - 0.1);
+                targetTimeRef.current = seekTime;
+                video.currentTime = seekTime;
+            }
+        };
+
+        const handleError = (e) => {
             setError(true);
             setIsLoading(false);
         };
 
-        video.addEventListener('loadedmetadata', handleLoadedMetadata);
+        video.addEventListener('loadeddata', handleLoadedData);
+        video.addEventListener('canplay', handleCanPlay);
         video.addEventListener('seeked', handleSeeked);
         video.addEventListener('error', handleError);
 
         // Start loading
         video.src = `http://localhost:3001/media/${encodeURIComponent(videoPath)}`;
+        video.load(); // Explicitly trigger load
 
         return () => {
-            video.removeEventListener('loadedmetadata', handleLoadedMetadata);
+            video.removeEventListener('loadeddata', handleLoadedData);
+            video.removeEventListener('canplay', handleCanPlay);
             video.removeEventListener('seeked', handleSeeked);
             video.removeEventListener('error', handleError);
+            video.pause();
             video.src = '';
             videoRef.current = null;
         };
     }, [videoPath, startTime, width, height, onLoad]);
 
     return (
-        <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+        <div style={{ position: 'relative', width: '100%', height: '100%', backgroundColor: '#000' }}>
             <canvas
                 ref={canvasRef}
                 width={width}

@@ -2336,12 +2336,12 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                                 const isAudio = track.type === 'audio';
                                                 const isVideo = track.type === 'video';
 
-                                                // PROFESSIONAL TEMPORAL CHUNKING
-                                                const SECONDS_PER_CHUNK = 2;
+                                                // PROFESSIONAL TEMPORAL CHUNKING - Reduced to 1s for better precision
+                                                const SECONDS_PER_CHUNK = 1;
                                                 const numChunks = Math.max(1, Math.ceil(clip.duration / SECONDS_PER_CHUNK));
 
-                                                const thumbHeight = 45;
-                                                const thumbWidth = 80;
+                                                const thumbHeight = 68; // Increased from 45 for better quality
+                                                const thumbWidth = 120; // Increased from 80 for better quality
 
                                                 return (
                                                     <div
