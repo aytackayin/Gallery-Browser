@@ -1,5 +1,5 @@
 import { AudioWaveformCanvas } from './utils/WaveformGenerator';
-import { VideoThumbnailCanvas } from './utils/VideoThumbnailGenerator';
+import { VideoThumbnailCanvas, clearVideoThumbnailCache } from './utils/VideoThumbnailGenerator';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { Folder, X, Play, Pause, ChevronRight, Home, ChevronLeft, Image as ImageIcon, Video as VideoIcon, Search, Trash2, Info, Save, FolderInput, ChevronDown, ChevronUp, Settings, CheckCircle, Scissors, RotateCw, Sun, Contrast, Lock, Unlock, Maximize2, Volume2, Plus, Trash, Droplet, CornerUpLeft, Layers, Crop, Monitor, Camera, FolderPlus, FileText, Tag } from 'lucide-react';
 import Cropper from "react-cropper";
@@ -1064,6 +1064,9 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
 
             // Clean up temporary timeline cache on exit (kills FFmpeg processes and deletes files)
             fetch('http://localhost:3001/api/clear-timeline-cache', { method: 'POST', keepalive: true }).catch(() => { });
+
+            // Clean up video thumbnail cache (releases video elements and revokes blob URLs)
+            clearVideoThumbnailCache();
         };
     }, []); // Only bind once
 
