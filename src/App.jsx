@@ -693,17 +693,47 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
             if (e.shiftKey) return;
 
             e.preventDefault(); // Browser zoom'u burada kesin olarak bloke edilir
+
+            // Calculate mouse position relative to timeline content (before zoom)
+            const rect = timeline.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left; // Mouse position in viewport
+            const scrollLeft = timeline.scrollLeft;
+            const mouseXInContent = scrollLeft + mouseX - 80; // Mouse position in content (minus track header)
+            const timeAtMouse = mouseXInContent / zoomLevel; // Time position under mouse
+
             if (e.ctrlKey) {
                 // Ctrl + Scroll: Precision Zoom
                 const delta = e.deltaY < 0 ? 1 : -1;
-                setZoomLevel(prev => Math.max(5, Math.min(200, prev + delta)));
+                const newZoomLevel = Math.max(5, Math.min(200, zoomLevel + delta));
+
+                // Calculate new scroll position to keep time under mouse
+                const newMouseXInContent = timeAtMouse * newZoomLevel;
+                const newScrollLeft = newMouseXInContent - mouseX + 80;
+
+                setZoomLevel(newZoomLevel);
+
+                // Apply new scroll position after zoom level updates
+                requestAnimationFrame(() => {
+                    timeline.scrollLeft = Math.max(0, newScrollLeft);
+                });
             } else if (e.altKey) {
                 // Alt + Scroll: Vertical Scroll (Layers)
                 timeline.scrollTop += e.deltaY;
             } else {
                 // Normal Scroll: Regular Zoom
                 const delta = e.deltaY < 0 ? 5 : -5;
-                setZoomLevel(prev => Math.max(5, Math.min(200, prev + delta)));
+                const newZoomLevel = Math.max(5, Math.min(200, zoomLevel + delta));
+
+                // Calculate new scroll position to keep time under mouse
+                const newMouseXInContent = timeAtMouse * newZoomLevel;
+                const newScrollLeft = newMouseXInContent - mouseX + 80;
+
+                setZoomLevel(newZoomLevel);
+
+                // Apply new scroll position after zoom level updates
+                requestAnimationFrame(() => {
+                    timeline.scrollLeft = Math.max(0, newScrollLeft);
+                });
             }
         };
 
