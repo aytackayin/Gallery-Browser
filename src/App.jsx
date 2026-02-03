@@ -1,6 +1,6 @@
 import { AudioWaveformCanvas } from './utils/WaveformGenerator';
 import { VideoThumbnailCanvas, clearVideoThumbnailCache } from './utils/VideoThumbnailGenerator';
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import { Folder, X, Play, Pause, ChevronRight, Home, ChevronLeft, Image as ImageIcon, Video as VideoIcon, Search, Trash2, Info, Save, FolderInput, ChevronDown, ChevronUp, Settings, CheckCircle, Scissors, RotateCw, Sun, Contrast, Lock, Unlock, Maximize2, Volume2, Plus, Trash, Droplet, CornerUpLeft, Layers, Crop, Monitor, Camera, FolderPlus, FileText, Tag } from 'lucide-react';
 import Cropper from "react-cropper";
 import "cropperjs/dist/cropper.css";
@@ -435,6 +435,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
     const timelineRef = useRef(null);
     const [dragTrackIndex, setDragTrackIndex] = useState(null);
     const [snapLines, setSnapLines] = useState([]);
+    const lastZoomPoint = useRef({ time: null, x: null });
 
     const handleDragStart = (idx) => setDragTrackIndex(idx);
     const handleDragOver = (e, targetIdx) => {
@@ -683,6 +684,15 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
         fetchDuration();
     }, [item.path, propRefreshKey]);
 
+    // Zoom sonrası scroll konumunu sabitlemek için useLayoutEffect (Render'dan hemen sonra, DOM boyutu güncellenmişken çalışır)
+    useLayoutEffect(() => {
+        if (lastZoomPoint.current.time !== null && timelineRef.current) {
+            const { time, x } = lastZoomPoint.current;
+            const newScrollLeft = (time * zoomLevel) - x + 80;
+            timelineRef.current.scrollLeft = newScrollLeft;
+        }
+    }, [zoomLevel]);
+
     // Düşük seviyeli Wheel listener (Browser Zoom'unu her şartta engellemek için)
     useEffect(() => {
         const timeline = timelineRef.current;
@@ -692,54 +702,38 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
             // Sadece shift basılıyken tarayıcıya (yatay kaydırma için) izin ver
             if (e.shiftKey) return;
 
-            e.preventDefault(); // Browser zoom'u burada kesin olarak bloke edilir
+            e.preventDefault(); // Browser zoom'unu engelle
 
-            // Calculate mouse position relative to timeline content (before zoom)
+            // Mouse konumunu yakala
             const rect = timeline.getBoundingClientRect();
-            const mouseX = e.clientX - rect.left; // Mouse position in viewport
+            const mouseX = e.clientX - rect.left;
             const scrollLeft = timeline.scrollLeft;
-            const mouseXInContent = scrollLeft + mouseX - 80; // Mouse position in content (minus track header)
-            const timeAtMouse = mouseXInContent / zoomLevel; // Time position under mouse
+            const mouseXInContent = scrollLeft + mouseX - 80;
+            const timeAtMouse = mouseXInContent / zoomLevel;
 
             if (e.ctrlKey) {
-                // Ctrl + Scroll: Precision Zoom
-                const delta = e.deltaY < 0 ? 1 : -1;
-                const newZoomLevel = Math.max(5, Math.min(200, zoomLevel + delta));
+                // Ctrl + Scroll: Hassas Zoom (%)
+                const zoomFactor = e.deltaY < 0 ? 1.05 : 0.95;
+                const newZoomLevel = Math.max(1, Math.min(1000, zoomLevel * zoomFactor));
 
-                // Calculate new scroll position to keep time under mouse
-                const newMouseXInContent = timeAtMouse * newZoomLevel;
-                const newScrollLeft = newMouseXInContent - mouseX + 80;
-
+                lastZoomPoint.current = { time: timeAtMouse, x: mouseX };
                 setZoomLevel(newZoomLevel);
-
-                // Apply new scroll position after zoom level updates
-                requestAnimationFrame(() => {
-                    timeline.scrollLeft = Math.max(0, newScrollLeft);
-                });
             } else if (e.altKey) {
-                // Alt + Scroll: Vertical Scroll (Layers)
+                // Alt + Scroll: Dikey Kaydırma (Katmanlar)
                 timeline.scrollTop += e.deltaY;
             } else {
-                // Normal Scroll: Regular Zoom
-                const delta = e.deltaY < 0 ? 5 : -5;
-                const newZoomLevel = Math.max(5, Math.min(200, zoomLevel + delta));
+                // Normal Scroll: Hızlı Zoom (%)
+                const zoomFactor = e.deltaY < 0 ? 1.2 : 0.8;
+                const newZoomLevel = Math.max(1, Math.min(1000, zoomLevel * zoomFactor));
 
-                // Calculate new scroll position to keep time under mouse
-                const newMouseXInContent = timeAtMouse * newZoomLevel;
-                const newScrollLeft = newMouseXInContent - mouseX + 80;
-
+                lastZoomPoint.current = { time: timeAtMouse, x: mouseX };
                 setZoomLevel(newZoomLevel);
-
-                // Apply new scroll position after zoom level updates
-                requestAnimationFrame(() => {
-                    timeline.scrollLeft = Math.max(0, newScrollLeft);
-                });
             }
         };
 
         timeline.addEventListener('wheel', handleManualWheel, { passive: false });
         return () => timeline.removeEventListener('wheel', handleManualWheel);
-    }, [timelineDuration, zoomLevel]);
+    }, [zoomLevel]);
 
     // Video Viewport Wheel handler for Scale/Zoom
     useEffect(() => {
