@@ -884,8 +884,8 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
         const viewportWidth = timeline.clientWidth;
 
         // Define margins (how close to edge before scrolling)
-        const leftMargin = 100; // Start scrolling when playhead is 100px from left edge
-        const rightMargin = 100; // Start scrolling when playhead is 100px from right edge
+        const leftMargin = 150; // Start scrolling when playhead is 150px from left edge
+        const rightMargin = 150; // Start scrolling when playhead is 150px from right edge
 
         // Calculate visible range (accounting for the 80px track header)
         const visibleStart = scrollLeft;
@@ -904,10 +904,8 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
 
         // Only scroll if needed and if we're playing or dragging playhead
         if (newScrollLeft !== scrollLeft && (isPlaying || isDragging?.type === 'playhead')) {
-            timeline.scrollTo({
-                left: newScrollLeft,
-                behavior: isPlaying ? 'smooth' : 'auto' // Smooth during playback, instant during drag
-            });
+            // Use instant scroll for immediate response (smooth was too slow)
+            timeline.scrollLeft = newScrollLeft;
         }
     }, [currentTime, zoomLevel, isPlaying, isDragging]);
 
