@@ -111,6 +111,29 @@ const findUniquePath = (fullPath) => {
     }
 };
 
+const syncDatabasePaths = (oldRelPath, newRelPath) => {
+    const isFolder = oldRelPath.endsWith('/') || (fs.existsSync(path.join(rootGalleryPath, newRelPath)) && fs.lstatSync(path.join(rootGalleryPath, newRelPath)).isDirectory());
+    const oldPathForQuery = oldRelPath.replace(/\\/g, '/');
+    const newPathForQuery = newRelPath.replace(/\\/g, '/');
+
+    if (isFolder) {
+        const oldPrefix = oldPathForQuery.endsWith('/') ? oldPathForQuery : oldPathForQuery + '/';
+        const newPrefix = newPathForQuery.endsWith('/') ? newPathForQuery : newPathForQuery + '/';
+
+        // 1. Update item_info for the folder itself and all children
+        db.prepare("UPDATE item_info SET path = ? || SUBSTR(path, ?) WHERE path = ? OR path LIKE ?")
+            .run(newPrefix, oldPrefix.length + 1, oldPathForQuery, oldPrefix + '%');
+
+        // 2. Update thumb_map for the folder and all children
+        db.prepare("UPDATE thumb_map SET path = ? || SUBSTR(path, ?) WHERE path = ? OR path LIKE ?")
+            .run(newPrefix, oldPrefix.length + 1, oldPathForQuery, oldPrefix + '%');
+    } else {
+        // Single file update
+        db.prepare("UPDATE item_info SET path = ? WHERE path = ?").run(newPathForQuery, oldPathForQuery);
+        db.prepare("UPDATE thumb_map SET path = ? WHERE path = ?").run(newPathForQuery, oldPathForQuery);
+    }
+};
+
 app.get('/api/thumb', async (req, res) => {
     const itemRelPath = req.query.path;
     const fullPath = path.join(rootGalleryPath, itemRelPath);
@@ -633,10 +656,9 @@ app.post('/api/move', (req, res) => {
 
             fs.renameSync(fullSource, fullDest);
 
-            // Veritabanını güncelle
-            if (!autoRename || (autoRename && fullSource !== fullDest)) {
-                db.prepare("DELETE FROM item_info WHERE path = ?").run(newRelPath);
-                db.prepare("UPDATE item_info SET path = ? WHERE path = ?").run(newRelPath, sourcePath);
+            // Veritabanını Tam Senkronize Et (Folder & File)
+            if (!autoRename || (autoRename && sourcePath !== newRelPath)) {
+                syncDatabasePaths(sourcePath, newRelPath);
             }
 
             res.json({ success: true, newPath: newRelPath });
@@ -749,10 +771,11 @@ app.post('/api/update', (req, res) => {
             }
             fs.renameSync(fullOldPath, fullNewPath);
 
-            // Path'i güncelle
-            db.prepare("UPDATE item_info SET path = ? WHERE path = ?").run(newRelPath, oldPath);
-            // Info'yu güncelle (Varsa)
-            if (info !== undefined) {
+            // Veritabanını Tam Senkronize Et (Folder & File)
+            syncDatabasePaths(oldPath, newRelPath);
+
+            // Info'yu güncelle (Eğer not girilmişse üzerine yaz)
+            if (info !== undefined && info !== null) {
                 db.prepare("INSERT OR REPLACE INTO item_info (path, info) VALUES (?, ?)").run(newRelPath, info);
             }
 
@@ -861,9 +884,9 @@ app.post('/api/batch-move', (req, res) => {
 
             fs.renameSync(fullSrcPath, fullDestPath);
 
-            // DB güncelle
+            // DB Tam Senkronizasyon
             const oldRelPath = src.replace(/\\/g, '/');
-            db.prepare("UPDATE item_info SET path = ? WHERE path = ?").run(newRelPath, oldRelPath);
+            syncDatabasePaths(oldRelPath, newRelPath);
             moved.push(src);
 
         } catch (e) {
