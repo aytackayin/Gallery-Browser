@@ -871,6 +871,46 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
         }
     }, [currentTime, activeVClip, isPlaying, isDragging]);
 
+    // Auto-scroll Timeline to Keep Playhead Visible
+    useEffect(() => {
+        const timeline = timelineRef.current;
+        if (!timeline) return;
+
+        // Calculate playhead position in pixels (relative to timeline content)
+        const playheadPos = currentTime * zoomLevel;
+
+        // Get current scroll position and viewport width
+        const scrollLeft = timeline.scrollLeft;
+        const viewportWidth = timeline.clientWidth;
+
+        // Define margins (how close to edge before scrolling)
+        const leftMargin = 100; // Start scrolling when playhead is 100px from left edge
+        const rightMargin = 100; // Start scrolling when playhead is 100px from right edge
+
+        // Calculate visible range (accounting for the 80px track header)
+        const visibleStart = scrollLeft;
+        const visibleEnd = scrollLeft + viewportWidth - 80; // Subtract track header width
+
+        // Check if playhead is outside visible area or too close to edges
+        let newScrollLeft = scrollLeft;
+
+        if (playheadPos < visibleStart + leftMargin) {
+            // Playhead is too close to or past the left edge
+            newScrollLeft = Math.max(0, playheadPos - leftMargin);
+        } else if (playheadPos > visibleEnd - rightMargin) {
+            // Playhead is too close to or past the right edge
+            newScrollLeft = playheadPos - viewportWidth + rightMargin + 80;
+        }
+
+        // Only scroll if needed and if we're playing or dragging playhead
+        if (newScrollLeft !== scrollLeft && (isPlaying || isDragging?.type === 'playhead')) {
+            timeline.scrollTo({
+                left: newScrollLeft,
+                behavior: isPlaying ? 'smooth' : 'auto' // Smooth during playback, instant during drag
+            });
+        }
+    }, [currentTime, zoomLevel, isPlaying, isDragging]);
+
     // Background Audio Sync Effect
     useEffect(() => {
         const audioClips = tracks.flatMap(tr => tr.clips.filter(c => c.type === 'audio' || tr.id === 'a1'));
