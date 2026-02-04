@@ -1,7 +1,7 @@
 import { AudioWaveformCanvas } from './utils/WaveformGenerator';
 import { VideoThumbnailCanvas, clearVideoThumbnailCache } from './utils/VideoThumbnailGenerator';
-import { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
-import { Folder, X, Play, Pause, ChevronRight, Home, ChevronLeft, Image as ImageIcon, Video as VideoIcon, Search, Trash2, Info, Save, FolderInput, ChevronDown, ChevronUp, Settings, CheckCircle, Scissors, RotateCw, Sun, Contrast, Lock, Unlock, Maximize2, Volume2, Plus, Trash, Droplet, CornerUpLeft, Layers, Crop, Monitor, Camera, FolderPlus, FileText, Tag, SkipBack, SkipForward, ChevronsLeft, ChevronsRight } from 'lucide-react';
+import { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from 'react';
+import { Folder, X, Play, Pause, ChevronRight, Home, ChevronLeft, Image as ImageIcon, Video as VideoIcon, Search, Trash2, Info, Save, FolderInput, ChevronDown, ChevronUp, Settings, CheckCircle, Scissors, RotateCw, Sun, Contrast, Lock, Unlock, Maximize2, Volume2, Plus, Trash, Droplet, CornerUpLeft, Layers, Crop, Monitor, Camera, FolderPlus, FileText, Tag, SkipBack, SkipForward, ChevronsLeft, ChevronsRight, Undo, Redo, History } from 'lucide-react';
 import Cropper from "react-cropper";
 import "cropperjs/dist/cropper.css";
 
@@ -387,6 +387,94 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
         ];
     });
 
+    const [history, setHistory] = useState({ stack: [], index: -1 });
+    const [showHistory, setShowHistory] = useState(false);
+    const [historyPos, setHistoryPos] = useState({ x: 320, y: 150 });
+    const [isDraggingHistory, setIsDraggingHistory] = useState(false);
+
+    const pushHistory = useCallback((name, customTracks = null, customCanvas = null) => {
+        const tracksToSave = customTracks || tracks;
+        const canvasToSave = customCanvas || canvasSize;
+        setHistory(prev => {
+            const newStack = (prev.index < prev.stack.length - 1)
+                ? prev.stack.slice(0, prev.index + 1)
+                : [...prev.stack];
+
+            newStack.push({
+                tracks: JSON.parse(JSON.stringify(tracksToSave)),
+                canvasSize: JSON.parse(JSON.stringify(canvasToSave)),
+                name: t[name] || name,
+                timestamp: new Date().toLocaleTimeString().split(' ')[0]
+            });
+
+            if (newStack.length > 50) newStack.shift();
+            return { stack: newStack, index: newStack.length - 1 };
+        });
+    }, [tracks, canvasSize, t]);
+
+    const undo = useCallback(() => {
+        if (history.index > 0) {
+            const prevIdx = history.index - 1;
+            const targetState = history.stack[prevIdx];
+            setTracks(JSON.parse(JSON.stringify(targetState.tracks)));
+            if (targetState.canvasSize) setCanvasSize(JSON.parse(JSON.stringify(targetState.canvasSize)));
+            setHistory(prev => ({ ...prev, index: prevIdx }));
+        }
+    }, [history.index, history.stack]);
+
+    const redo = useCallback(() => {
+        if (history.index < history.stack.length - 1) {
+            const nextIdx = history.index + 1;
+            const targetState = history.stack[nextIdx];
+            setTracks(JSON.parse(JSON.stringify(targetState.tracks)));
+            if (targetState.canvasSize) setCanvasSize(JSON.parse(JSON.stringify(targetState.canvasSize)));
+            setHistory(prev => ({ ...prev, index: nextIdx }));
+        }
+    }, [history.index, history.stack]);
+
+    const jumpToHistory = (idx) => {
+        if (idx >= 0 && idx < history.stack.length) {
+            const targetState = history.stack[idx];
+            setTracks(JSON.parse(JSON.stringify(targetState.tracks)));
+            if (targetState.canvasSize) setCanvasSize(JSON.parse(JSON.stringify(targetState.canvasSize)));
+            setHistory(prev => ({ ...prev, index: idx }));
+        }
+    };
+
+    // Initialize history when editor opens
+    useEffect(() => {
+        if (history.stack.length === 0) {
+            setHistory({
+                stack: [{
+                    tracks: JSON.parse(JSON.stringify(tracks)),
+                    canvasSize: JSON.parse(JSON.stringify(canvasSize)),
+                    name: t.initialState || 'Initial State',
+                    timestamp: new Date().toLocaleTimeString().split(' ')[0]
+                }],
+                index: 0
+            });
+        }
+        return () => {
+            // Clear history when editor closes (component unmounts)
+            setHistory({ stack: [], index: -1 });
+        };
+    }, []);
+
+    // Keyboard Shortcuts for Undo/Redo
+    useEffect(() => {
+        const handleKeys = (e) => {
+            if (e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === 'z') {
+                e.preventDefault();
+                undo();
+            } else if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'z') {
+                e.preventDefault();
+                redo();
+            }
+        };
+        window.addEventListener('keydown', handleKeys);
+        return () => window.removeEventListener('keydown', handleKeys);
+    }, [undo, redo]);
+
     // Use initialDuration to avoid state conflict
     useEffect(() => {
         if (initialDuration > 0) {
@@ -562,6 +650,15 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
         })));
     };
 
+    const historyUpdateClip = (name, clipId, updates) => {
+        const updatedTracks = tracks.map(track => ({
+            ...track,
+            clips: track.clips.map(c => c.id === clipId ? { ...c, ...updates } : c)
+        }));
+        setTracks(updatedTracks);
+        pushHistory(name, updatedTracks);
+    };
+
     const filteredPickerItems = useMemo(() => {
         if (!pickerTarget) return [];
         const targetTrack = tracks.find(t => t.id === pickerTarget.trackId);
@@ -583,20 +680,20 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
     }, [pickerItems, pickerTarget, tracks]);
 
     const addTrack = (type) => {
-        setTracks(prev => {
-            const sameType = prev.filter(t => t.type === type);
-            const newId = `${type === 'video' ? 'v' : 'a'}${sameType.length + 1}`;
-            const firstIdx = prev.findIndex(t => t.type === type);
-            const newTrack = { id: newId, type, clips: [] };
+        const sameType = tracks.filter(t => t.type === type);
+        const newId = `${type === 'video' ? 'v' : 'a'}${sameType.length + 1}`;
+        const firstIdx = tracks.findIndex(t => t.type === type);
+        const newTrack = { id: newId, type, clips: [] };
 
-            if (firstIdx === -1) {
-                return type === 'video' ? [newTrack, ...prev] : [...prev, newTrack];
-            }
-
-            const newTracks = [...prev];
-            newTracks.splice(firstIdx, 0, newTrack);
-            return newTracks;
-        });
+        let newTracksArr;
+        if (firstIdx === -1) {
+            newTracksArr = type === 'video' ? [newTrack, ...tracks] : [...tracks, newTrack];
+        } else {
+            newTracksArr = [...tracks];
+            newTracksArr.splice(firstIdx, 0, newTrack);
+        }
+        setTracks(newTracksArr);
+        pushHistory('actionAddTrack', newTracksArr);
     };
 
     const removeTrack = (trackId) => {
@@ -1136,7 +1233,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
             offset: cur
         };
 
-        setTracks(prev => prev.map(track => {
+        const updatedTracks = trks.map(track => {
             if (track.clips.some(c => c.id === clip.id)) {
                 const index = track.clips.findIndex(c => c.id === clip.id);
                 const updatedClips = [...track.clips];
@@ -1145,18 +1242,23 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                 return { ...track, clips: updatedClips };
             }
             return track;
-        }));
+        });
+
+        setTracks(updatedTracks);
         setSelectedClipId(newClipId);
+        pushHistory('actionSplit', updatedTracks);
     };
 
     const handleDelete = () => {
-        const { selectedClipId: selId } = stateRef.current;
+        const { selectedClipId: selId, tracks: trks } = stateRef.current;
         if (!selId) return;
-        setTracks(prev => prev.map(track => ({
+        const updatedTracks = trks.map(track => ({
             ...track,
             clips: track.clips.filter(c => c.id !== selId)
-        })));
+        }));
+        setTracks(updatedTracks);
         setSelectedClipId(null);
+        pushHistory('actionDelete', updatedTracks);
     };
 
     const setAspectRatio = (ratio) => {
@@ -1187,14 +1289,16 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
             newH = 1080;
         }
 
-        setCanvasSize({ w: newW, h: newH });
+        const newSize = { w: newW, h: newH };
+        setCanvasSize(newSize);
+        pushHistory('actionTransform', null, newSize);
         setActiveTool('crop'); // Canvas Resize Tool
     };
 
     const selectedClip = getSelectedClip();
 
     const packClips = (targetTrackId = null) => {
-        setTracks(prev => prev.map(track => {
+        const updatedTracks = tracks.map(track => {
             if (targetTrackId && track.id !== targetTrackId) return track;
             let currentOffset = 0;
             const newClips = [...track.clips]
@@ -1205,7 +1309,9 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                     return updated;
                 });
             return { ...track, clips: newClips };
-        }));
+        });
+        setTracks(updatedTracks);
+        pushHistory('actionPack', updatedTracks);
     };
 
     const fetchPickerItems = async (path) => {
@@ -1270,6 +1376,10 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
         if (isAudio) {
             loadAudioBuffer(mediaItem.path);
         }
+
+        // Push History
+        const updatedTracks = tracks.map(t => t.id === trackId ? { ...t, clips: [...t.clips, newClip] } : t);
+        pushHistory('actionAddMedia', updatedTracks);
     };
 
 
@@ -1548,6 +1658,13 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
     };
 
     const handleMouseMove = (e) => {
+        if (isDraggingHistory) {
+            setHistoryPos(prev => ({
+                x: prev.x + e.movementX,
+                y: prev.y + e.movementY
+            }));
+            return;
+        }
         if (!isDragging) return;
 
         if (isDragging.type === 'canvas-resize') {
@@ -1868,10 +1985,26 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
     };
 
     const handleMouseUp = (e) => {
+        if (isDraggingHistory) {
+            setIsDraggingHistory(false);
+            return;
+        }
+
         // Daha güvenli mantık: Sadece bizim başlattığımız bir sürükleme işlemi varsa müdahale et.
         // Diğer tüm durumlarda (buton tıklamaları, sliderlar, inputlar) tarayıcıyı rahat bırak.
         if (e && isDragging) {
             e.preventDefault();
+
+            // Record history for discrete drag operations
+            let actionName = null;
+            if (isDragging.type === 'timeline-clip-move') actionName = 'actionMove';
+            else if (isDragging.type === 'timeline-clip-resize') actionName = 'actionResize';
+            else if (isDragging.type === 'canvas-pan') actionName = 'actionTransform';
+            else if (isDragging.type === 'crop') actionName = 'actionTransform';
+
+            if (actionName) {
+                pushHistory(actionName);
+            }
         }
         setIsDragging(null);
         setSnapLines([]);
@@ -1900,6 +2033,15 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                         <h4 style={{ margin: 0, color: 'var(--text-primary)' }}>{t.editVideo || 'Pro Video Editor'}</h4>
                     </div>
                     <div style={{ display: 'flex', gap: 10 }}>
+                        <button className="btn btn-grey" style={{ background: 'var(--bg-card)', color: history.index > 0 ? 'var(--text-primary)' : '#555', border: '1px solid var(--border-color)', opacity: history.index > 0 ? 1 : 0.5 }} onClick={undo} disabled={history.index <= 0} data-tooltip={t.undo || 'Undo'} data-tooltip-pos="bottom" data-tooltip-align="end">
+                            <Undo size={18} />
+                        </button>
+                        <button className="btn btn-grey" style={{ background: 'var(--bg-card)', color: history.index < history.stack.length - 1 ? 'var(--text-primary)' : '#555', border: '1px solid var(--border-color)', opacity: history.index < history.stack.length - 1 ? 1 : 0.5 }} onClick={redo} disabled={history.index >= history.stack.length - 1} data-tooltip={t.redo || 'Redo'} data-tooltip-pos="bottom" data-tooltip-align="end">
+                            <Redo size={18} />
+                        </button>
+                        <button className={`btn btn-grey ${showHistory ? 'active' : ''}`} style={{ background: showHistory ? 'var(--netflix-red)' : 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border-color)' }} onClick={() => setShowHistory(!showHistory)} data-tooltip={t.history || 'History'} data-tooltip-pos="bottom" data-tooltip-align="end">
+                            <History size={18} />
+                        </button>
                         <button className="btn btn-grey" style={{ background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border-color)' }} onClick={() => setShowHelp(true)} data-tooltip={t.help || 'Help'} data-tooltip-pos="bottom" data-tooltip-align="end">
                             <Info size={18} />
                         </button>
@@ -1913,6 +2055,72 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                         <button className="btn btn-grey" style={{ background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border-color)' }} onClick={onClose} disabled={isProcessing} data-tooltip={t.close || 'Close'} data-tooltip-pos="bottom" data-tooltip-align="end"><X size={20} /></button>
                     </div>
                 </div>
+
+                {showHistory && (
+                    <div
+                        style={{
+                            position: 'absolute',
+                            top: historyPos.y,
+                            left: historyPos.x,
+                            width: 220,
+                            background: 'var(--bg-card)',
+                            border: '1px solid var(--border-color)',
+                            borderRadius: 8,
+                            zIndex: 9000,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
+                            userSelect: 'none'
+                        }}
+                    >
+                        <div
+                            style={{
+                                padding: '8px 12px',
+                                background: 'var(--bg-secondary)',
+                                borderBottom: '1px solid var(--border-color)',
+                                cursor: 'grab',
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                borderTopLeftRadius: 8,
+                                borderTopRightRadius: 8
+                            }}
+                            onMouseDown={(e) => {
+                                e.stopPropagation();
+                                setIsDraggingHistory(true);
+                            }}
+                        >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <History size={14} color="var(--netflix-red)" />
+                                <span style={{ fontSize: '0.7rem', fontWeight: 'bold', letterSpacing: '0.5px' }}>{t.historyPanel || 'HISTORY'}</span>
+                            </div>
+                            <X size={14} style={{ cursor: 'pointer', opacity: 0.6 }} onClick={() => setShowHistory(false)} />
+                        </div>
+                        <div style={{ maxHeight: 300, overflowY: 'auto', padding: '4px 0' }}>
+                            {history.stack.map((item, idx) => (
+                                <div
+                                    key={idx}
+                                    onClick={() => jumpToHistory(idx)}
+                                    style={{
+                                        padding: '7px 12px',
+                                        fontSize: '0.65rem',
+                                        cursor: 'pointer',
+                                        background: idx === history.index ? 'rgba(229, 9, 20, 0.2)' : 'transparent',
+                                        color: idx === history.index ? 'var(--netflix-red)' : (idx > history.index ? '#666' : 'var(--text-primary)'),
+                                        borderLeft: idx === history.index ? '2px solid var(--netflix-red)' : '2px solid transparent',
+                                        display: 'flex',
+                                        justifyContent: 'space-between',
+                                        alignItems: 'center',
+                                        transition: 'all 0.2s'
+                                    }}
+                                >
+                                    <span style={{ fontWeight: idx === history.index ? 'bold' : 'normal' }}>{item.name}</span>
+                                    <span style={{ opacity: 0.4, fontSize: '0.6rem' }}>{item.timestamp}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
 
                 <div className="editor-grid" style={{
                     display: 'grid',
@@ -1938,86 +2146,103 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                             style={{ width: 45, background: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: 'var(--netflix-red)', fontSize: '0.65rem', padding: '1px 3px', borderRadius: 3, textAlign: 'center' }} />
                                     </div>
                                     <input type="range" min="0" max="200" value={selectedClip.filters?.brightness ?? 100} style={{ height: 3 }}
+                                        onMouseUp={() => pushHistory('actionFilter')}
                                         onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, brightness: parseInt(e.target.value) } })} />
                                 </div>
                                 <div className="control-item" style={{ gap: 2 }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                         <label style={{ fontSize: '0.65rem', opacity: 0.8, color: 'var(--text-primary)' }}>{t.contrast || 'Contrast'}</label>
                                         <input type="number" value={selectedClip.filters?.contrast ?? 100}
+                                            onBlur={() => pushHistory('actionFilter')}
                                             onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, contrast: parseInt(e.target.value) || 0 } })}
                                             style={{ width: 45, background: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: 'var(--netflix-red)', fontSize: '0.65rem', padding: '1px 3px', borderRadius: 3, textAlign: 'center' }} />
                                     </div>
                                     <input type="range" min="0" max="200" value={selectedClip.filters?.contrast ?? 100} style={{ height: 3 }}
+                                        onMouseUp={() => pushHistory('actionFilter')}
                                         onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, contrast: parseInt(e.target.value) } })} />
                                 </div>
                                 <div className="control-item" style={{ gap: 2 }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                         <label style={{ fontSize: '0.65rem', opacity: 0.8, color: 'var(--text-primary)' }}>{t.saturation || 'Saturation'}</label>
                                         <input type="number" value={selectedClip.filters?.saturation ?? 100}
+                                            onBlur={() => pushHistory('actionFilter')}
                                             onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, saturation: parseInt(e.target.value) || 0 } })}
                                             style={{ width: 45, background: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: 'var(--netflix-red)', fontSize: '0.65rem', padding: '1px 3px', borderRadius: 3, textAlign: 'center' }} />
                                     </div>
                                     <input type="range" min="0" max="200" value={selectedClip.filters?.saturation ?? 100} style={{ height: 3 }}
+                                        onMouseUp={() => pushHistory('actionFilter')}
                                         onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, saturation: parseInt(e.target.value) } })} />
                                 </div>
                                 <div className="control-item" style={{ gap: 2 }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                         <label style={{ fontSize: '0.65rem', opacity: 0.8, color: 'var(--text-primary)' }}>{t.exposure || 'Exposure'}</label>
                                         <input type="number" value={selectedClip.filters?.exposure ?? 100}
+                                            onBlur={() => pushHistory('actionFilter')}
                                             onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, exposure: parseInt(e.target.value) || 0 } })}
                                             style={{ width: 45, background: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: 'var(--netflix-red)', fontSize: '0.65rem', padding: '1px 3px', borderRadius: 3, textAlign: 'center' }} />
                                     </div>
                                     <input type="range" min="0" max="200" value={selectedClip.filters?.exposure ?? 100} style={{ height: 3 }}
+                                        onMouseUp={() => pushHistory('actionFilter')}
                                         onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, exposure: parseInt(e.target.value) } })} />
                                 </div>
                                 <div className="control-item" style={{ gap: 2 }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                         <label style={{ fontSize: '0.65rem', opacity: 0.8, color: 'var(--text-primary)' }}>{t.temperature || 'Temperature'}</label>
                                         <input type="number" value={selectedClip.filters?.temperature ?? 0}
+                                            onBlur={() => pushHistory('actionFilter')}
                                             onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, temperature: parseInt(e.target.value) || 0 } })}
                                             style={{ width: 45, background: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: 'var(--netflix-red)', fontSize: '0.65rem', padding: '1px 3px', borderRadius: 3, textAlign: 'center' }} />
                                     </div>
                                     <input type="range" min="-100" max="100" value={selectedClip.filters?.temperature ?? 0} style={{ height: 3 }}
+                                        onMouseUp={() => pushHistory('actionFilter')}
                                         onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, temperature: parseInt(e.target.value) } })} />
                                 </div>
                                 <div className="control-item" style={{ gap: 2 }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                         <label style={{ fontSize: '0.65rem', opacity: 0.8, color: 'var(--text-primary)' }}>{t.tint || 'Tint'}</label>
                                         <input type="number" value={selectedClip.filters?.tint ?? 0}
+                                            onBlur={() => pushHistory('actionFilter')}
                                             onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, tint: parseInt(e.target.value) || 0 } })}
                                             style={{ width: 45, background: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: 'var(--netflix-red)', fontSize: '0.65rem', padding: '1px 3px', borderRadius: 3, textAlign: 'center' }} />
                                     </div>
                                     <input type="range" min="-100" max="100" value={selectedClip.filters?.tint ?? 0} style={{ height: 3 }}
+                                        onMouseUp={() => pushHistory('actionFilter')}
                                         onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, tint: parseInt(e.target.value) } })} />
                                 </div>
                                 <div className="control-item" style={{ gap: 2 }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                         <label style={{ fontSize: '0.65rem', opacity: 0.8, color: 'var(--text-primary)' }}>{t.vibrance || 'Vibrance'}</label>
                                         <input type="number" value={selectedClip.filters?.vibrance ?? 0}
+                                            onBlur={() => pushHistory('actionFilter')}
                                             onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, vibrance: parseInt(e.target.value) || 0 } })}
                                             style={{ width: 45, background: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: 'var(--netflix-red)', fontSize: '0.65rem', padding: '1px 3px', borderRadius: 3, textAlign: 'center' }} />
                                     </div>
                                     <input type="range" min="-100" max="100" value={selectedClip.filters?.vibrance ?? 0} style={{ height: 3 }}
+                                        onMouseUp={() => pushHistory('actionFilter')}
                                         onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, vibrance: parseInt(e.target.value) } })} />
                                 </div>
                                 <div className="control-item" style={{ gap: 2 }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                         <label style={{ fontSize: '0.65rem', opacity: 0.8, color: 'var(--text-primary)' }}>{t.clarity || 'Clarity'}</label>
                                         <input type="number" value={selectedClip.filters?.clarity ?? 0}
+                                            onBlur={() => pushHistory('actionFilter')}
                                             onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, clarity: parseInt(e.target.value) || 0 } })}
                                             style={{ width: 45, background: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: 'var(--netflix-red)', fontSize: '0.65rem', padding: '1px 3px', borderRadius: 3, textAlign: 'center' }} />
                                     </div>
                                     <input type="range" min="0" max="100" value={selectedClip.filters?.clarity ?? 0} style={{ height: 3 }}
+                                        onMouseUp={() => pushHistory('actionFilter')}
                                         onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, clarity: parseInt(e.target.value) } })} />
                                 </div>
                                 <div className="control-item" style={{ gap: 2 }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                         <label style={{ fontSize: '0.65rem', opacity: 0.8, color: 'var(--text-primary)' }}>{t.hue || 'Hue'}</label>
                                         <input type="number" value={selectedClip.filters?.hue ?? 0}
+                                            onBlur={() => pushHistory('actionFilter')}
                                             onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, hue: parseInt(e.target.value) || 0 } })}
                                             style={{ width: 45, background: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: 'var(--netflix-red)', fontSize: '0.65rem', padding: '1px 3px', borderRadius: 3, textAlign: 'center' }} />
                                     </div>
                                     <input type="range" min="-180" max="180" value={selectedClip.filters?.hue ?? 0} style={{ height: 3 }}
+                                        onMouseUp={() => pushHistory('actionFilter')}
                                         onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, hue: parseInt(e.target.value) } })} />
                                 </div>
 
@@ -2034,6 +2259,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                                             type="range" min="-100" max="100"
                                                             value={selectedClip.filters?.colorBalance?.[type]?.[color] ?? 0}
                                                             style={{ height: 2, accentColor: color === 'r' ? '#f00' : (color === 'g' ? '#0f0' : '#00f') }}
+                                                            onMouseUp={() => pushHistory('actionFilter')}
                                                             onChange={e => {
                                                                 const newVal = parseInt(e.target.value);
                                                                 const newCB = { ...selectedClip.filters.colorBalance };
@@ -2051,7 +2277,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                     <label style={{ fontSize: '0.65rem', opacity: 0.8 }}>CURVES PRESET</label>
                                     <select
                                         value={selectedClip.filters?.curves ?? 'none'}
-                                        onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, curves: e.target.value } })}
+                                        onChange={e => historyUpdateClip('actionFilter', selectedClipId, { filters: { ...selectedClip.filters, curves: e.target.value } })}
                                         style={{ width: '100%', background: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', fontSize: '0.7rem', padding: '3px', borderRadius: 3 }}
                                     >
                                         <option value="none">None</option>
@@ -2071,6 +2297,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                         <label style={{ fontSize: '0.65rem', opacity: 0.8, color: 'var(--text-primary)' }}>{t.volume || 'Volume'}</label>
                                         <input type="number" value={selectedClip.volume ?? 100}
+                                            onBlur={() => pushHistory('actionVolume')}
                                             onChange={e => {
                                                 const vol = parseInt(e.target.value) || 0;
                                                 updateClip(selectedClipId, { volume: vol });
@@ -2079,6 +2306,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                             style={{ width: 45, background: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: 'var(--netflix-red)', fontSize: '0.65rem', padding: '1px 3px', borderRadius: 3, textAlign: 'center' }} />
                                     </div>
                                     <input type="range" min="0" max="200" value={selectedClip.volume ?? 100} style={{ height: 3 }}
+                                        onMouseUp={() => pushHistory('actionVolume')}
                                         onChange={e => {
                                             const vol = parseInt(e.target.value);
                                             updateClip(selectedClipId, { volume: vol });
@@ -2089,16 +2317,19 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                         <label style={{ fontSize: '0.65rem', opacity: 0.8, color: 'var(--text-primary)' }}>{t.scale || 'Scale'}</label>
                                         <input type="number" step="0.01" value={isFinite(selectedClip.transform?.scale) ? parseFloat(selectedClip.transform.scale).toFixed(2) : "1.00"}
+                                            onBlur={() => pushHistory('actionTransform')}
                                             onChange={e => updateClip(selectedClipId, { transform: { ...(selectedClip.transform || { x: 0, y: 0 }), scale: parseFloat(e.target.value) || 1 } })}
                                             style={{ width: 45, background: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: 'var(--netflix-red)', fontSize: '0.65rem', padding: '1px 3px', borderRadius: 3, textAlign: 'center' }} />
                                     </div>
                                     <input type="range" min="0.1" max="10" step="0.01" value={isFinite(selectedClip.transform?.scale) ? selectedClip.transform.scale : 1} style={{ height: 3 }}
+                                        onMouseUp={() => pushHistory('actionTransform')}
                                         onChange={e => updateClip(selectedClipId, { transform: { ...(selectedClip.transform || { x: 0, y: 0 }), scale: parseFloat(e.target.value) || 1 } })} />
                                 </div>
                                 <div className="control-item" style={{ gap: 2 }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                         <label style={{ fontSize: '0.65rem', opacity: 0.8, color: 'var(--text-primary)' }}>{t.playbackSpeed || 'Speed'}</label>
                                         <input type="number" step="0.01"
+                                            onBlur={() => pushHistory('actionSpeed')}
                                             value={(selectedClip.duration > 0 && isFinite(selectedClip.sourceDuration / selectedClip.duration)) ? (selectedClip.sourceDuration / selectedClip.duration).toFixed(2) : "1.00"}
                                             onChange={e => {
                                                 const newSpeed = Math.max(0.1, parseFloat(e.target.value) || 1);
@@ -2111,6 +2342,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                     <input type="range" min="0.1" max="5" step="0.01"
                                         value={(selectedClip.duration > 0 && isFinite(selectedClip.sourceDuration / selectedClip.duration)) ? (selectedClip.sourceDuration / selectedClip.duration) : 1}
                                         style={{ height: 3 }}
+                                        onMouseUp={() => pushHistory('actionSpeed')}
                                         onChange={e => {
                                             const newSpeed = Math.max(0.1, parseFloat(e.target.value) || 1);
                                             const sourceDur = selectedClip.sourceDuration || selectedClip.duration || 1;
@@ -2118,22 +2350,22 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                             updateClip(selectedClipId, { duration: isFinite(newTimelineDur) ? newTimelineDur : 1, sourceDuration: sourceDur });
                                         }} />
                                 </div>
-                                <button className="action-btn" style={{ width: '100%', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', justifyContent: 'center', fontSize: '0.8rem', padding: '6px' }} onClick={() => updateClip(selectedClipId, { filters: { brightness: 100, contrast: 100, saturation: 100, exposure: 100, temperature: 0, tint: 0, vibrance: 0, hue: 0, clarity: 0, gamma: 1.0, colorBalance: { shadows: { r: 0, g: 0, b: 0 }, midtones: { r: 0, g: 0, b: 0 }, highlights: { r: 0, g: 0, b: 0 } }, curves: 'none' }, volume: 100 })}>
+                                <button className="action-btn" style={{ width: '100%', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', justifyContent: 'center', fontSize: '0.8rem', padding: '6px' }} onClick={() => historyUpdateClip('actionReset', selectedClipId, { filters: { brightness: 100, contrast: 100, saturation: 100, exposure: 100, temperature: 0, tint: 0, vibrance: 0, hue: 0, clarity: 0, gamma: 1.0, colorBalance: { shadows: { r: 0, g: 0, b: 0 }, midtones: { r: 0, g: 0, b: 0 }, highlights: { r: 0, g: 0, b: 0 } }, curves: 'none' }, volume: 100 })}>
                                     <RotateCw size={14} style={{ marginRight: 8 }} /> {t.resetFilters || 'Reset Filters'}
                                 </button>
 
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 5 }}>
                                     <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', justifyContent: 'flex-start' }}>
-                                        <button className="action-btn" style={{ width: 34, height: 34, background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} onClick={() => updateClip(selectedClipId, { rotate: ((selectedClip.rotate || 0) + 90) % 360 })} data-tooltip={t?.rotate || 'Rotate'}>
+                                        <button className="action-btn" style={{ width: 34, height: 34, background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} onClick={() => historyUpdateClip('actionTransform', selectedClipId, { rotate: ((selectedClip.rotate || 0) + 90) % 360 })} data-tooltip={t?.rotate || 'Rotate'}>
                                             <RotateCw size={16} />
                                         </button>
-                                        <button className={`action-btn ${selectedClip.flipH ? 'active' : ''}`} style={{ width: 34, height: 34, background: selectedClip.flipH ? 'var(--netflix-red)' : 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} onClick={() => updateClip(selectedClipId, { flipH: !selectedClip.flipH })} data-tooltip={t?.flipH || 'Flip H'}>
+                                        <button className={`action-btn ${selectedClip.flipH ? 'active' : ''}`} style={{ width: 34, height: 34, background: selectedClip.flipH ? 'var(--netflix-red)' : 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} onClick={() => historyUpdateClip('actionTransform', selectedClipId, { flipH: !selectedClip.flipH })} data-tooltip={t?.flipH || 'Flip H'}>
                                             <Maximize2 size={16} style={{ transform: 'rotate(90deg)' }} />
                                         </button>
-                                        <button className={`action-btn ${selectedClip.flipV ? 'active' : ''}`} style={{ width: 34, height: 34, background: selectedClip.flipV ? 'var(--netflix-red)' : 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} onClick={() => updateClip(selectedClipId, { flipV: !selectedClip.flipV })} data-tooltip={t?.flipV || 'Flip V'}>
+                                        <button className={`action-btn ${selectedClip.flipV ? 'active' : ''}`} style={{ width: 34, height: 34, background: selectedClip.flipV ? 'var(--netflix-red)' : 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} onClick={() => historyUpdateClip('actionTransform', selectedClipId, { flipV: !selectedClip.flipV })} data-tooltip={t?.flipV || 'Flip V'}>
                                             <Maximize2 size={16} />
                                         </button>
-                                        <button className="action-btn" style={{ width: 34, height: 34, background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} onClick={() => updateClip(selectedClipId, { rotate: 0, flipH: false, flipV: false, transform: { ...(selectedClip.transform || { x: 0, y: 0 }), scale: 1 } })} data-tooltip={t.resetTransform || 'Reset Transform'}>
+                                        <button className="action-btn" style={{ width: 34, height: 34, background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} onClick={() => historyUpdateClip('actionReset', selectedClipId, { rotate: 0, flipH: false, flipV: false, transform: { ...(selectedClip.transform || { x: 0, y: 0 }), scale: 1 } })} data-tooltip={t.resetTransform || 'Reset Transform'}>
                                             <CornerUpLeft size={16} />
                                         </button>
                                     </div>
@@ -2141,11 +2373,11 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                         <button className="action-btn" style={{ background: 'var(--netflix-red)', color: 'white', border: 'none' }} onClick={() => {
                                             const sw = selectedClip.sourceWidth || canvasSize.w;
                                             const sh = selectedClip.sourceHeight || canvasSize.h;
-                                            updateClip(selectedClipId, { transform: { ...(selectedClip.transform || { x: 0, y: 0 }), x: (canvasSize.w - sw) / 2, y: (canvasSize.h - sh) / 2 } });
+                                            historyUpdateClip('actionTransform', selectedClipId, { transform: { ...(selectedClip.transform || { x: 0, y: 0 }), x: (canvasSize.w - sw) / 2, y: (canvasSize.h - sh) / 2 } });
                                         }} data-tooltip={t.center || 'Center'}>
                                             <Monitor size={16} style={{ marginRight: 8 }} /> {t.center || 'Center'}
                                         </button>
-                                        <button className="action-btn" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} onClick={() => updateClip(selectedClipId, { transform: { ...(selectedClip.transform || { x: 0, y: 0 }), x: 0, y: 0 } })} data-tooltip={t.resetPosition || 'Reset Position'}>
+                                        <button className="action-btn" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} onClick={() => historyUpdateClip('actionReset', selectedClipId, { transform: { ...(selectedClip.transform || { x: 0, y: 0 }), x: 0, y: 0 } })} data-tooltip={t.resetPosition || 'Reset Position'}>
                                             <Maximize2 size={16} style={{ marginRight: 8 }} /> {t.reset || 'Reset'}
                                         </button>
                                     </div>
@@ -2827,6 +3059,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                                     <h4 style={{ margin: '0 0 5px 0', color: 'var(--netflix-red)', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '1px' }}>{t.helpTitleShortcuts || 'Shortcuts'}</h4>
                                     {[
+                                        'scUndo', 'scRedo',
                                         'scMove', 'scPrecisionMove', 'scZoom', 'scPrecisionZoom',
                                         'scHorizontalScroll', 'scVerticalScroll', 'scSplit', 'scDelete',
                                         'scPack', 'scPlayPause', 'scEscape', 'scHome', 'scEnd',
@@ -2841,6 +3074,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                                     <h4 style={{ margin: '0 0 5px 0', color: 'var(--netflix-red)', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '1px' }}>{t.helpTitleFunctions || 'Functions'}</h4>
                                     {[
+                                        'helpUndo', 'helpRedo',
                                         'helpRotate', 'helpFlipH', 'helpFlipV', 'helpResetTransform',
                                         'helpCenter', 'helpResetPosition', 'helpAspectRatio', 'helpScreenshot'
                                     ].map(key => (
