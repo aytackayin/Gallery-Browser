@@ -1014,9 +1014,9 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
     }, [currentTime, isPlaying, tracks, isDragging]);
 
     // Use a Ref to keep latest values for shortcuts without frequent rebinding
-    const stateRef = useRef({ currentTime, tracks, selectedClipId, contentDuration });
+    const stateRef = useRef({ currentTime, tracks, selectedClipId, contentDuration, timelineDuration });
     useEffect(() => {
-        stateRef.current = { currentTime, tracks, selectedClipId, contentDuration };
+        stateRef.current = { currentTime, tracks, selectedClipId, contentDuration, timelineDuration };
     });
 
     // Final unmount cleanup
@@ -1024,38 +1024,45 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
         const handleKeyDown = (e) => {
             if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
 
+            // Get LATEST values from Ref to avoid stale closure
+            const { tracks: latestTracks, selectedClipId: latestId, contentDuration: latestDur, timelineDuration: latestTimelineDur } = stateRef.current;
+
+            const getLatestSelectedClip = () => {
+                for (const track of latestTracks) {
+                    const clip = track.clips.find(c => c.id === latestId);
+                    if (clip) return clip;
+                }
+                return null;
+            };
+
             if (e.key === 'Delete' || e.key === 'Backspace') {
                 handleDelete();
             } else if (e.key.toLowerCase() === 's') {
                 handleSplit();
+            } else if (e.key.toLowerCase() === 'p') {
+                // Sadece seçili klibin olduğu katmanı toparla
+                const sel = getLatestSelectedClip();
+                if (sel) {
+                    const track = latestTracks.find(t => t.clips.some(c => c.id === sel.id));
+                    if (track) packClips(track.id);
+                }
+            } else if (e.key === 'Home') {
+                const clip = getLatestSelectedClip();
+                setCurrentTime(clip ? clip.offset : 0);
+            } else if (e.key === 'End') {
+                const clip = getLatestSelectedClip();
+                setCurrentTime(clip ? (clip.offset + clip.duration) : latestDur);
+            } else if (e.key === 'ArrowRight') {
+                e.preventDefault();
+                const step = e.ctrlKey ? 0.05 : 1;
+                setCurrentTime(prev => Math.min(latestTimelineDur, prev + step));
+            } else if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                const step = e.ctrlKey ? 0.05 : 1;
+                setCurrentTime(prev => Math.max(0, prev - step));
             } else if (e.key === ' ') {
                 e.preventDefault();
-                const { currentTime: cur, tracks: trks, selectedClipId: selId } = stateRef.current;
-
-                setIsPlaying(prev => {
-                    const willPlay = !prev;
-                    if (willPlay) {
-                        const { currentTime: currentCur, tracks: currentTrks, selectedClipId: currentSelId, contentDuration: currentDur } = stateRef.current;
-                        // Restart logic if starting playback
-                        let selectedClip = null;
-                        for (const track of currentTrks) {
-                            const clip = track.clips.find(c => c.id === currentSelId);
-                            if (clip) { selectedClip = clip; break; }
-                        }
-
-                        if (selectedClip) {
-                            const clipEnd = selectedClip.offset + selectedClip.duration;
-                            if (currentCur >= clipEnd - 0.05 || currentCur < selectedClip.offset) {
-                                setCurrentTime(selectedClip.offset);
-                            }
-                        } else {
-                            if (currentCur >= currentDur - 0.05) {
-                                setCurrentTime(0);
-                            }
-                        }
-                    }
-                    return willPlay;
-                });
+                togglePlay();
             } else if (e.key === 'Escape') {
                 setSelectedClipId(null);
             }
@@ -1157,10 +1164,11 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
 
     const selectedClip = getSelectedClip();
 
-    const packClips = () => {
+    const packClips = (targetTrackId = null) => {
         setTracks(prev => prev.map(track => {
+            if (targetTrackId && track.id !== targetTrackId) return track;
             let currentOffset = 0;
-            const newClips = track.clips
+            const newClips = [...track.clips]
                 .sort((a, b) => a.offset - b.offset)
                 .map(c => {
                     const updated = { ...c, offset: currentOffset };
@@ -1543,8 +1551,8 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
             let dx = (e.clientX - isDragging.startX) * scaleFactorX;
             let dy = (e.clientY - isDragging.startY) * scaleFactorY;
 
-            // Shift modifier for precision panning
-            if (e.shiftKey) {
+            // Ctrl modifier for precision panning
+            if (e.ctrlKey) {
                 dx *= 0.1;
                 dy *= 0.1;
             }
@@ -2667,46 +2675,32 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                 </div>
                                 <button onClick={() => setShowHelp(false)} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer' }}><X size={20} /></button>
                             </div>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '0 10px 10px 10px' }}>
-                                <div className="shortcut-item" style={{ fontSize: '0.9rem', color: '#eee', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-                                    <div style={{ minWidth: 20, color: 'var(--netflix-red)', fontWeight: 'bold' }}>•</div>
-                                    <div dangerouslySetInnerHTML={{ __html: (t.stretchShortcut || '<b>ALT + Drag Edge</b>: Change playback speed (Slow/Fast Motion)').replace(/:\s*/, ': <span style="color:#aaa">') + '</span>' }} />
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                                    <h4 style={{ margin: '0 0 5px 0', color: 'var(--netflix-red)', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '1px' }}>{t.helpTitleShortcuts || 'Shortcuts'}</h4>
+                                    {[
+                                        'scMove', 'scPrecisionMove', 'scZoom', 'scPrecisionZoom',
+                                        'scHorizontalScroll', 'scVerticalScroll', 'scSplit', 'scDelete',
+                                        'scPack', 'scPlayPause', 'scEscape', 'scHome', 'scEnd',
+                                        'scStepForward', 'scStepBackward', 'scPreciseForward', 'scPreciseBackward'
+                                    ].map(key => (
+                                        <div key={key} className="shortcut-item" style={{ fontSize: '0.85rem', color: '#eee', display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                                            <div style={{ minWidth: 15, color: 'var(--netflix-red)' }}>•</div>
+                                            <div dangerouslySetInnerHTML={{ __html: (t[key] || key).replace(/:\s*/, ': <span style="color:#aaa">') + '</span>' }} />
+                                        </div>
+                                    ))}
                                 </div>
-                                <div className="shortcut-item" style={{ fontSize: '0.9rem', color: '#eee', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-                                    <div style={{ minWidth: 20, color: 'var(--netflix-red)', fontWeight: 'bold' }}>•</div>
-                                    <div dangerouslySetInnerHTML={{ __html: (t.splitShortcut || '<b>S</b>: Split selected clip at scrubber position').replace(/:\s*/, ': <span style="color:#aaa">') + '</span>' }} />
-                                </div>
-                                <div className="shortcut-item" style={{ fontSize: '0.9rem', color: '#eee', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-                                    <div style={{ minWidth: 20, color: 'var(--netflix-red)', fontWeight: 'bold' }}>•</div>
-                                    <div dangerouslySetInnerHTML={{ __html: (t.deleteShortcut || '<b>Delete / Backspace</b>: Delete selected clip').replace(/:\s*/, ': <span style="color:#aaa">') + '</span>' }} />
-                                </div>
-                                <div className="shortcut-item" style={{ fontSize: '0.9rem', color: '#eee', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-                                    <div style={{ minWidth: 20, color: 'var(--netflix-red)', fontWeight: 'bold' }}>•</div>
-                                    <div dangerouslySetInnerHTML={{ __html: (t.playPauseShortcut || '<b>Space</b>: Play / Pause').replace(/:\s*/, ': <span style="color:#aaa">') + '</span>' }} />
-                                </div>
-                                <div className="shortcut-item" style={{ fontSize: '0.9rem', color: '#eee', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-                                    <div style={{ minWidth: 20, color: 'var(--netflix-red)', fontWeight: 'bold' }}>•</div>
-                                    <div dangerouslySetInnerHTML={{ __html: (t.zoomShortcut || '<b>Scroll Wheel</b>: Zoom timeline').replace(/:\s*/, ': <span style="color:#aaa">') + '</span>' }} />
-                                </div>
-                                <div className="shortcut-item" style={{ fontSize: '0.9rem', color: '#eee', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-                                    <div style={{ minWidth: 20, color: 'var(--netflix-red)', fontWeight: 'bold' }}>•</div>
-                                    <div dangerouslySetInnerHTML={{ __html: (t.panShortcut || '<b>Left Click + Drag</b>: Pan preview canvas').replace(/:\s*/, ': <span style="color:#aaa">') + '</span>' }} />
-                                </div>
-                                <div className="shortcut-item" style={{ fontSize: '0.9rem', color: '#eee', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-                                    <div style={{ minWidth: 20, color: 'var(--netflix-red)', fontWeight: 'bold' }}>•</div>
-                                    <div dangerouslySetInnerHTML={{ __html: (t.precisionPanShortcut || '<b>SHIFT + Drag</b>: Precision pan (Preview)').replace(/:\s*/, ': <span style="color:#aaa">') + '</span>' }} />
-                                </div>
-                                <div className="shortcut-item" style={{ fontSize: '0.9rem', color: '#eee', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-                                    <div style={{ minWidth: 20, color: 'var(--netflix-red)', fontWeight: 'bold' }}>•</div>
-                                    <div dangerouslySetInnerHTML={{ __html: (t.precisionZoomShortcut || '<b>CTRL + Scroll</b>: Precision zoom').replace(/:\s*/, ': <span style="color:#aaa">') + '</span>' }} />
-                                </div>
-                                <div className="shortcut-item" style={{ fontSize: '0.9rem', color: '#eee', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-                                    <div style={{ minWidth: 20, color: 'var(--netflix-red)', fontWeight: 'bold' }}>•</div>
-                                    <div dangerouslySetInnerHTML={{ __html: (t.verticalScrollShortcut || '<b>ALT + Scroll</b>: Vertical scroll (Layers)').replace(/:\s*/, ': <span style="color:#aaa">') + '</span>' }} />
-                                </div>
-                                <div className="shortcut-item" style={{ fontSize: '0.9rem', color: '#eee', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-                                    <div style={{ minWidth: 20, color: 'var(--netflix-red)', fontWeight: 'bold' }}>•</div>
-                                    <div dangerouslySetInnerHTML={{ __html: (t.scrollShortcut || '<b>SHIFT + Scroll</b>: Horizontal scroll').replace(/:\s*/, ': <span style="color:#aaa">') + '</span>' }} />
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                                    <h4 style={{ margin: '0 0 5px 0', color: 'var(--netflix-red)', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '1px' }}>{t.helpTitleFunctions || 'Functions'}</h4>
+                                    {[
+                                        'helpRotate', 'helpFlipH', 'helpFlipV', 'helpResetTransform',
+                                        'helpCenter', 'helpResetPosition', 'helpAspectRatio', 'helpScreenshot'
+                                    ].map(key => (
+                                        <div key={key} className="shortcut-item" style={{ fontSize: '0.85rem', color: '#eee', display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                                            <div style={{ minWidth: 15, color: 'var(--netflix-red)' }}>•</div>
+                                            <div dangerouslySetInnerHTML={{ __html: (t[key] || key).replace(/:\s*/, ': <span style="color:#aaa">') + '</span>' }} />
+                                        </div>
+                                    ))}
                                 </div>
                             </div>
                         </div>
