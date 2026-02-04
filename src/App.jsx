@@ -948,6 +948,22 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
         return `${r_m * exposure} 0 0 0 0 0 ${g_m * exposure} 0 0 0 0 0 ${b_m * exposure} 0 0 0 0 0 1 0`;
     }, [activeVClip?.filters]);
 
+    // Curves Preset Values for SVG Preview
+    const curveValues = useMemo(() => {
+        const preset = activeVClip?.filters?.curves || 'none';
+        const def = "0 1";
+
+        if (preset === 'color_negative') return { r: "1 0", g: "1 0", b: "1 0" };
+        if (preset === 'darker') return { r: "0 0.25 1", g: "0 0.25 1", b: "0 0.25 1" };
+        if (preset === 'lighter') return { r: "0 0.75 1", g: "0 0.75 1", b: "0 0.75 1" };
+        if (preset === 'increase_contrast' || preset === 'medium_contrast' || preset === 'strong_contrast')
+            return { r: "0 0.2 0.8 1", g: "0 0.2 0.8 1", b: "0 0.2 0.8 1" };
+        if (preset === 'vintage') return { r: "0.2 0.5 1", g: "0 0.5 0.8", b: "0 0.2 0.6" }; // Sepia-ish
+        if (preset === 'cross_process') return { r: "0 0.8 1", g: "0 1", b: "0.2 0.4 1" };
+
+        return { r: def, g: def, b: def };
+    }, [activeVClip?.filters?.curves]);
+
     const contentDuration = useMemo(() => {
         let max = 0;
         tracks.forEach(t => {
@@ -2527,6 +2543,11 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
             <svg width="0" height="0" style={{ position: 'absolute' }}>
                 <filter id="preview-color-correction">
                     <feColorMatrix type="matrix" values={colorMatrix} />
+                    <feComponentTransfer>
+                        <feFuncR type="table" tableValues={curveValues.r} />
+                        <feFuncG type="table" tableValues={curveValues.g} />
+                        <feFuncB type="table" tableValues={curveValues.b} />
+                    </feComponentTransfer>
                     {activeVClip?.filters?.clarity > 0 && (
                         <feConvolveMatrix
                             order="3"
