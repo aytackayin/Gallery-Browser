@@ -890,8 +890,16 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
             if (Math.abs(video.playbackRate - videoSpeed) > 0.05) {
                 video.playbackRate = Math.max(0.1, Math.min(16, videoSpeed));
             }
+
+            // Sync video volume based on current active clip
+            const clipVolume = (typeof activeVClip.volume === 'number') ? activeVClip.volume : 100;
+            const safeVolume = Math.max(0, Math.min(1, clipVolume / 100)); // Clamp between 0-1 for HTML5
+            if (video.volume !== safeVolume) {
+                video.volume = safeVolume;
+            }
         } else {
             if (!video.paused) video.pause();
+            video.volume = 0; // Mute if no video clip is active
         }
     }, [currentTime, activeVClip, isPlaying, isDragging]);
 
@@ -939,13 +947,15 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
 
         // Ensure players exist
         audioClips.forEach(clip => {
+            const clipVolume = (typeof clip.volume === 'number') ? clip.volume : 100;
+            const safeVolume = Math.max(0, Math.min(1, clipVolume / 100)); // Clamp between 0-1 for HTML5
             if (!audioPlayers.current[clip.id]) {
                 const player = new Audio(`http://localhost:3001/media/${encodeURIComponent(clip.path)}`);
                 player.preload = 'auto'; // Preload audio for smoother playback
-                player.volume = (clip.volume || 100) / 100;
+                player.volume = safeVolume;
                 audioPlayers.current[clip.id] = player;
             } else {
-                audioPlayers.current[clip.id].volume = (clip.volume || 100) / 100;
+                audioPlayers.current[clip.id].volume = safeVolume;
             }
         });
 
@@ -1908,7 +1918,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                             onChange={e => {
                                                 const vol = parseInt(e.target.value) || 0;
                                                 updateClip(selectedClipId, { volume: vol });
-                                                if (videoRef.current) videoRef.current.volume = vol / 100;
+                                                if (videoRef.current) videoRef.current.volume = Math.max(0, Math.min(1, vol / 100));
                                             }}
                                             style={{ width: 45, background: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: 'var(--netflix-red)', fontSize: '0.65rem', padding: '1px 3px', borderRadius: 3, textAlign: 'center' }} />
                                     </div>
@@ -1916,7 +1926,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                         onChange={e => {
                                             const vol = parseInt(e.target.value);
                                             updateClip(selectedClipId, { volume: vol });
-                                            if (videoRef.current) videoRef.current.volume = vol / 100;
+                                            if (videoRef.current) videoRef.current.volume = Math.max(0, Math.min(1, vol / 100));
                                         }} />
                                 </div>
                                 <div className="control-item" style={{ gap: 2 }}>
