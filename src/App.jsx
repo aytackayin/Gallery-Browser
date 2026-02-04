@@ -375,9 +375,6 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                     midtones: { r: 0, g: 0, b: 0 },
                     highlights: { r: 0, g: 0, b: 0 }
                 },
-                selectiveColor: {
-                    red: 0, green: 0, blue: 0, cyan: 0, magenta: 0, yellow: 0
-                },
                 curves: 'none'
             },
             crop: { x: 0, y: 0, w: 100, h: 100 },
@@ -1885,6 +1882,13 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
             <svg width="0" height="0" style={{ position: 'absolute' }}>
                 <filter id="preview-color-correction">
                     <feColorMatrix type="matrix" values={colorMatrix} />
+                    {activeVClip?.filters?.clarity > 0 && (
+                        <feConvolveMatrix
+                            order="3"
+                            kernelMatrix={`0 -${activeVClip.filters.clarity / 100} 0 -${activeVClip.filters.clarity / 100} ${1 + (activeVClip.filters.clarity / 25)} -${activeVClip.filters.clarity / 100} 0 -${activeVClip.filters.clarity / 100} 0`}
+                            preserveAlpha="true"
+                        />
+                    )}
                 </filter>
             </svg>
             <div className="modal editor-modal video-editor-modal"
@@ -2043,34 +2047,6 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                         </div>
                                     ))}
                                 </div>
-
-                                <div style={{ marginTop: 5, padding: 5, background: 'var(--bg-primary)', borderRadius: 4, border: '1px solid var(--border-color)' }}>
-                                    <label style={{ fontSize: '0.6rem', fontWeight: 'bold', display: 'block', marginBottom: 5, color: 'var(--text-secondary)' }}>SELECTIVE COLOR (Saturation)</label>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 5 }}>
-                                        {['red', 'green', 'blue', 'cyan', 'magenta', 'yellow'].map(color => {
-                                            const colorsMapping = {
-                                                red: '#ff0000', green: '#00ff00', blue: '#0000ff',
-                                                cyan: '#00ffff', magenta: '#ff00ff', yellow: '#ffff00'
-                                            };
-                                            return (
-                                                <div key={color} style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                                                    <div style={{ fontSize: '10px', textTransform: 'uppercase', opacity: 0.6 }}>{color.substring(0, 3)}</div>
-                                                    <input
-                                                        type="range" min="-100" max="100"
-                                                        value={selectedClip.filters?.selectiveColor?.[color] ?? 0}
-                                                        style={{ height: 2, accentColor: colorsMapping[color] }}
-                                                        onChange={e => {
-                                                            const newVal = parseInt(e.target.value);
-                                                            const newSC = { ...selectedClip.filters.selectiveColor };
-                                                            newSC[color] = newVal;
-                                                            updateClip(selectedClipId, { filters: { ...selectedClip.filters, selectiveColor: newSC } });
-                                                        }}
-                                                    />
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
                                 <div className="control-item" style={{ gap: 2 }}>
                                     <label style={{ fontSize: '0.65rem', opacity: 0.8 }}>CURVES PRESET</label>
                                     <select
@@ -2142,7 +2118,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                             updateClip(selectedClipId, { duration: isFinite(newTimelineDur) ? newTimelineDur : 1, sourceDuration: sourceDur });
                                         }} />
                                 </div>
-                                <button className="action-btn" style={{ width: '100%', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', justifyContent: 'center', fontSize: '0.8rem', padding: '6px' }} onClick={() => updateClip(selectedClipId, { filters: { brightness: 100, contrast: 100, saturation: 100, exposure: 100, temperature: 0, tint: 0, vibrance: 0, hue: 0, clarity: 0, gamma: 1.0, colorBalance: { shadows: { r: 0, g: 0, b: 0 }, midtones: { r: 0, g: 0, b: 0 }, highlights: { r: 0, g: 0, b: 0 } }, selectiveColor: { red: 0, green: 0, blue: 0, cyan: 0, magenta: 0, yellow: 0 }, curves: 'none' }, volume: 100 })}>
+                                <button className="action-btn" style={{ width: '100%', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', justifyContent: 'center', fontSize: '0.8rem', padding: '6px' }} onClick={() => updateClip(selectedClipId, { filters: { brightness: 100, contrast: 100, saturation: 100, exposure: 100, temperature: 0, tint: 0, vibrance: 0, hue: 0, clarity: 0, gamma: 1.0, colorBalance: { shadows: { r: 0, g: 0, b: 0 }, midtones: { r: 0, g: 0, b: 0 }, highlights: { r: 0, g: 0, b: 0 } }, curves: 'none' }, volume: 100 })}>
                                     <RotateCw size={14} style={{ marginRight: 8 }} /> {t.resetFilters || 'Reset Filters'}
                                 </button>
 

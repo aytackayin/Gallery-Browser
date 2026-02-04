@@ -1281,15 +1281,18 @@ app.post('/api/process-video', async (req, res) => {
 
             const temp = (clip.filters?.temperature ?? 0);
             if (temp !== 0) {
-                const kelvin = 6500 + (temp * 35); // 3000K - 10000K range approx
-                vFilters.push(`colortemperature=temperature=${kelvin}`);
+                // colortemperature simulation via colorbalance
+                // temperature > 0: more yellow/red (warm)
+                // temperature < 0: more blue (cold)
+                const r = temp > 0 ? (temp / 200) : 0;
+                const b = temp < 0 ? (Math.abs(temp) / 200) : 0;
+                vFilters.push(`colorbalance=rm=${r}:bm=${b}`);
             }
 
             const tint = (clip.filters?.tint ?? 0);
             if (tint !== 0) {
-                // Tint adjustment via colorbalance (green/magenta axis)
-                const tintVal = tint / 200; // -0.5 to 0.5
-                vFilters.push(`colorbalance=gm=${tintVal}`);
+                const gm = tint / 200;
+                vFilters.push(`colorbalance=gm=${gm}`);
             }
 
             const hueVal = (clip.filters?.hue ?? 0);
@@ -1297,8 +1300,9 @@ app.post('/api/process-video', async (req, res) => {
 
             const clarity = (clip.filters?.clarity ?? 0);
             if (clarity > 0) {
-                const amount = clarity / 100;
-                vFilters.push(`unsharp=luma_msize_x=5:luma_msize_y=5:luma_amount=${amount}`);
+                // Stronger unsharp for visible effect
+                const amount = (clarity / 100) * 1.5;
+                vFilters.push(`unsharp=luma_msize_x=7:luma_msize_y=7:luma_amount=${amount}`);
             }
 
             const cb = clip.filters?.colorBalance;
@@ -1318,19 +1322,8 @@ app.post('/api/process-video', async (req, res) => {
                 }
             }
 
-            const sc = clip.filters?.selectiveColor;
-            if (sc) {
-                const rs = (sc.red ?? 0) / 100;
-                const gs = (sc.green ?? 0) / 100;
-                const bs = (sc.blue ?? 0) / 100;
-                const cs = (sc.cyan ?? 0) / 100;
-                const ms = (sc.magenta ?? 0) / 100;
-                const ys = (sc.yellow ?? 0) / 100;
-
-                if (rs !== 0 || gs !== 0 || bs !== 0 || cs !== 0 || ms !== 0 || ys !== 0) {
-                    vFilters.push(`huesaturation=red_s=${rs}:green_s=${gs}:blue_s=${bs}:cyan_s=${cs}:magenta_s=${ms}:yellow_s=${ys}`);
-                }
-            }
+            // Selective Color (huesaturation) removed because it's not supported in standard ffmpeg builds
+            // and causing save errors. Substituting with extra vibrance if needed but better to just remove.
 
             const curves = clip.filters?.curves;
             if (curves && curves !== 'none') {
