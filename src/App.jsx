@@ -2272,7 +2272,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                             )}
 
                             {/* Viewer Controls */}
-                            <div style={{ position: 'absolute', bottom: -5, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 12, background: 'rgba(0,0,0,0.7)', padding: '6px 18px', borderRadius: 25, alignItems: 'center', backdropFilter: 'blur(5px)', border: '1px solid rgba(255,255,255,0.1)', zIndex: 10000 }}>
+                            <div style={{ position: 'absolute', bottom: -5, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 12, background: 'rgba(0,0,0,0.7)', padding: '6px 18px', borderRadius: 25, alignItems: 'center', backdropFilter: 'blur(5px)', border: '1px solid rgba(255,255,255,0.1)', zIndex: 50 }}>
                                 {/* En Başa / Klip Başına */}
                                 <button className="action-btn" data-tooltip={t.goToStart || "Go to Start"} data-tooltip-pos="top" style={{ background: 'transparent', border: 'none', color: 'white', display: 'flex', alignItems: 'center', padding: 4 }}
                                     onClick={() => {
@@ -4677,7 +4677,7 @@ function App() {
                                         value={ytUrl}
                                         onChange={(e) => setYtUrl(e.target.value)}
                                         className="modal-input"
-                                        placeholder="https://www.youtube.com/watch?v=..."
+                                        placeholder={t.youtubePlaceholder || "https://www.youtube.com/watch?v=..."}
                                     />
                                     <button className="btn btn-primary" onClick={handleYtFetchInfo} disabled={ytLoading}>
                                         {ytLoading ? <RotateCw size={16} className="spin" /> : <Search size={16} />}

@@ -143,5 +143,15 @@
     "newFolder": "Yeni Klasör",
     "folderName": "Klasör İsmi",
     "create": "Oluştur",
-    "cleanupSuccess": "Temizlik tamamlandı! {n} öğe silindi."
+    "cleanupSuccess": "Temizlik tamamlandı! {n} öğe silindi.",
+    "goToStart": "Başa Git / Klip Başına",
+    "goToEnd": "Sona Git / Klip Sonuna",
+    "play": "Oynat",
+    "pause": "Duraklat",
+    "downloadAsMp3": "MP3 Olarak İndir",
+    "cleanupThumbs": "Gereksiz Dosyaları Temizle",
+    "cleanupDesc": "Manuel silinen dosyaların kalıntılarını ve küçük resimlerini temizler.",
+    "cleaning": "Temizleniyor...",
+    "start": "Başlat",
+    "youtubePlaceholder": "YouTube video veya liste adresi girin..."
 }

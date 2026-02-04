@@ -143,5 +143,15 @@
     "newFolder": "New Folder",
     "folderName": "Folder Name",
     "create": "Create",
-    "cleanupSuccess": "Cleanup complete! Removed {n} items."
+    "cleanupSuccess": "Cleanup complete! Removed {n} items.",
+    "goToStart": "Go to Start / Clip Start",
+    "goToEnd": "Go to End / Clip End",
+    "play": "Play",
+    "pause": "Pause",
+    "downloadAsMp3": "Download as MP3",
+    "cleanupThumbs": "Cleanup Orphans",
+    "cleanupDesc": "Removes thumbnails and records of manually deleted files.",
+    "cleaning": "Cleaning...",
+    "start": "Start",
+    "youtubePlaceholder": "Enter YouTube video or playlist URL..."
 }
