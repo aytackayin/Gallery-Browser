@@ -622,15 +622,27 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
         for (const track of vTracks) {
             const clip = track.clips.find(c => {
                 const end = c.offset + c.duration;
-                // Eğer süre henüz yüklenmişse (0 veya çok küçükse), yükleme aşamasında kabul et
                 if (c.duration <= 1) return currentTime >= c.offset && currentTime < c.offset + 2;
                 return currentTime >= c.offset && currentTime < end;
             });
             if (clip) return clip;
         }
-        // Fallback: Henüz video süresi oturmadıysa ve başlangıçtaysak ilk klibi göster (Boş ekranı önler)
-        if (currentTime <= 1 && vTracks.length > 0 && vTracks[0].clips.length > 0) return vTracks[0].clips[0];
         return null;
+    }, [tracks, currentTime]);
+
+    const activeVClips = useMemo(() => {
+        const active = [];
+        // tracks[0] is top layer. We want bottom-to-top order for rendering (last rendered is on top).
+        [...tracks].reverse().forEach(track => {
+            if (track.type !== 'video') return;
+            const clip = track.clips.find(c => {
+                const end = c.offset + c.duration;
+                if (c.duration <= 1) return currentTime >= c.offset && currentTime < c.offset + 2;
+                return currentTime >= c.offset && currentTime < end;
+            });
+            if (clip) active.push(clip);
+        });
+        return active;
     }, [tracks, currentTime]);
 
     const videoUrl = useMemo(() => {
@@ -934,93 +946,45 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
         return () => viewport.removeEventListener('wheel', handleViewportWheel);
     }, [activeTool, selectedClipId, activeVClip, canvasSize]);
 
-    const onMetadata = (e) => {
+    const onMetadata = (e, clipId) => {
         const video = e.target;
-        syncDuration(video.duration);
+        if (clipId === activeVClip?.id) {
+            syncDuration(video.duration);
+        }
 
-        // Save source dimensions and duration to clip if missing
-        if (activeVClip && activeVClip.type === 'video') {
+        const clip = tracks.flatMap(t => t.clips).find(c => c.id === clipId);
+        if (clip && clip.type === 'video') {
             const updates = {};
-            if (!activeVClip.sourceWidth) updates.sourceWidth = video.videoWidth;
-            if (!activeVClip.sourceHeight) updates.sourceHeight = video.videoHeight;
+            if (!clip.sourceWidth) updates.sourceWidth = video.videoWidth;
+            if (!clip.sourceHeight) updates.sourceHeight = video.videoHeight;
 
-            // If sourceDuration is missing, initialize it to the full source duration
-            if (!activeVClip.sourceDuration || activeVClip.sourceDuration <= 0) {
+            if (!clip.sourceDuration || clip.sourceDuration <= 0) {
                 const vidDur = isFinite(video.duration) && video.duration > 0 ? video.duration : 0.1;
-                updates.sourceDuration = activeVClip.duration || vidDur;
+                updates.sourceDuration = clip.duration || vidDur;
             }
             // If duration itself is missing (clip-0 with 0s), set them both
-            if (!activeVClip.duration || activeVClip.duration <= 0.1) {
+            if (!clip.duration || clip.duration <= 0.1) {
                 const vidDur = isFinite(video.duration) && video.duration > 0 ? video.duration : 0.1;
                 updates.duration = vidDur;
                 updates.sourceDuration = vidDur;
             }
-            if (Object.keys(updates).length > 0) {
-                // Update track but ALSO update the HISTORY initial state if we are at the start
-                setTracks(prev => {
-                    const newTracks = prev.map(track => ({
-                        ...track,
-                        clips: track.clips.map(c => c.id === activeVClip.id ? { ...c, ...updates } : c)
-                    }));
-
-                    // IMPORTANT: If this is the initial load, we MUST update the first history item
-                    setTimeout(() => {
-                        setHistory(h => {
-                            if (h.stack.length > 0 && h.index === 0) {
-                                // We are at the initial state, update it with the loaded metadata
-                                const newStack = [...h.stack];
-                                newStack[0] = {
-                                    ...newStack[0],
-                                    tracks: JSON.parse(JSON.stringify(newTracks)),
-                                    // Also update canvas size if we changed it below
-                                    canvasSize: (activeVClip.id === 'clip-0' && canvasSize.w === 1920 && canvasSize.h === 1080 && video.videoWidth && video.videoHeight && !item?.durationSeconds)
-                                        ? { w: video.videoWidth, h: video.videoHeight }
-                                        : newStack[0].canvasSize
-                                };
-                                return { ...h, stack: newStack };
-                            }
-                            return h;
-                        });
-                    }, 0);
-
-                    return newTracks;
-                });
-            }
-        }
-
-        if (video.videoWidth && video.videoHeight) {
-            setOriginalSize({ w: video.videoWidth, h: video.videoHeight });
-        }
-
-        // Set canvas to video size initially if it's the first load
-        if (canvasSize.w === 1920 && canvasSize.h === 1080 && video.videoWidth && video.videoHeight && !item?.durationSeconds) {
-            setCanvasSize({ w: video.videoWidth, h: video.videoHeight });
+            if (Object.keys(updates).length > 0) updateClip(clipId, updates);
         }
         updateVideoRect();
-        setTimeout(updateVideoRect, 100);
     };
 
 
-
     const togglePlay = () => {
-        if (isPlaying) {
-            setIsPlaying(false);
-            if (videoRef.current) videoRef.current.pause();
-        } else {
-            const selectedClip = getSelectedClip();
-            if (selectedClip) {
-                // If selected clip is finished or playhead is far away, restart from clip start
-                const clipEnd = selectedClip.offset + selectedClip.duration;
-                if (currentTime >= clipEnd - 0.05 || currentTime < selectedClip.offset) {
-                    setCurrentTime(selectedClip.offset);
-                }
-            } else {
-                // No selection: restart if at the end of all content
-                if (currentTime >= contentDuration - 0.05) {
-                    setCurrentTime(0);
-                }
-            }
-            setIsPlaying(true);
+        const newState = !isPlaying;
+        setIsPlaying(newState);
+
+        const container = document.querySelector('.preview-canvas-container');
+        if (container) {
+            const videos = container.querySelectorAll('video');
+            videos.forEach(v => {
+                if (newState) v.play().catch(() => { });
+                else v.pause();
+            });
         }
     };
 
@@ -1062,50 +1026,49 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
             frame = requestAnimationFrame(tick);
         }
         return () => cancelAnimationFrame(frame);
-    }, [isPlaying, timelineDuration]);
+    }, [isPlaying, contentDuration]);
 
-    // Sync Video Playhead to Timeline - Main Preview Video (Optimized)
+    // Sync Video Playhead to Timeline
     useEffect(() => {
-        const video = videoRef.current;
-        if (!video) return;
+        const container = document.querySelector('.preview-canvas-container');
+        if (!container) return;
 
-        if (activeVClip && activeVClip.type === 'video') {
-            const clipDur = activeVClip.duration || 1;
-            const speed = (activeVClip.sourceDuration || clipDur) / clipDur;
-            const targetTime = activeVClip.start + (currentTime - activeVClip.offset) * speed;
+        const videos = container.querySelectorAll('video');
+        const allClips = tracks.flatMap(t => t.clips);
+
+        videos.forEach(video => {
+            const clipId = video.getAttribute('data-clip-id');
+            const clip = allClips.find(c => c.id === clipId);
+            if (!clip) return;
+
+            const clipDur = clip.duration || 1;
+            const speed = (clip.sourceDuration || clipDur) / clipDur;
+            const targetTime = clip.start + (currentTime - clip.offset) * speed;
             const timeDiff = Math.abs(video.currentTime - targetTime);
 
-            // Only seek if:
-            // 1. Not currently playing (to avoid interruptions during playback)
-            // 2. OR time difference is very large (> 0.3s, indicating a jump/seek)
-            const shouldSeek = !isPlaying && timeDiff > 0.05;
-            const largeJump = timeDiff > 0.3;
-
-            if (isFinite(targetTime) && (shouldSeek || largeJump)) {
-                video.currentTime = targetTime;
+            // Sync playback rate
+            if (Math.abs(video.playbackRate - speed) > 0.05) {
+                video.playbackRate = Math.max(0.1, Math.min(16, speed));
             }
 
-            if (isPlaying || (isDragging?.type === 'playhead')) {
-                if (video.paused) video.play().catch(() => { });
-            } else {
-                if (!video.paused) video.pause();
-            }
-            const videoSpeed = (activeVClip.sourceDuration || clipDur) / clipDur;
-            if (Math.abs(video.playbackRate - videoSpeed) > 0.05) {
-                video.playbackRate = Math.max(0.1, Math.min(16, videoSpeed));
+            // Sync volume for the main video or based on clip settings
+            const isMain = clip.id === activeVClip?.id;
+            const clipVolume = (typeof clip.volume === 'number') ? clip.volume : 100;
+            video.volume = isMain ? (clipVolume / 100) : 0;
+            video.muted = !isMain;
+
+            // Seek if needed
+            if (!isPlaying || timeDiff > 0.3) {
+                if (timeDiff > 0.05) {
+                    video.currentTime = targetTime;
+                }
             }
 
-            // Sync video volume based on current active clip
-            const clipVolume = (typeof activeVClip.volume === 'number') ? activeVClip.volume : 100;
-            const safeVolume = Math.max(0, Math.min(1, clipVolume / 100)); // Clamp between 0-1 for HTML5
-            if (video.volume !== safeVolume) {
-                video.volume = safeVolume;
-            }
-        } else {
-            if (!video.paused) video.pause();
-            video.volume = 0; // Mute if no video clip is active
-        }
-    }, [currentTime, activeVClip, isPlaying, isDragging]);
+            // Ensure playing state matches global state
+            if (isPlaying && video.paused) video.play().catch(() => { });
+            if (!isPlaying && !video.paused) video.pause();
+        });
+    }, [currentTime, isPlaying, tracks, activeVClip?.id]);
 
     // Auto-scroll Timeline to Keep Playhead Visible
     useEffect(() => {
@@ -2551,7 +2514,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                 }}
                             />
                             {/* Canvas Container with Overflow Hidden */}
-                            <div style={{
+                            <div className="preview-canvas-container" style={{
                                 position: 'absolute',
                                 left: videoRect.left,
                                 top: videoRect.top,
@@ -2563,106 +2526,104 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                 boxShadow: '0 0 20px rgba(0,0,0,0.5)'
                             }}>
                                 {(() => {
-                                    // Viewport Scale Calculation for correct translate rendering
                                     const viewScaleX = videoRect.width && canvasSize.w ? (videoRect.width / canvasSize.w) : 1;
                                     const viewScaleY = videoRect.height && canvasSize.h ? (videoRect.height / canvasSize.h) : 1;
 
-                                    return (
-                                        <>
+                                    if (activeVClips.length === 0 && item?.path && (item.type === 'video' || item.type?.startsWith('video/'))) {
+                                        return (
                                             <video
                                                 ref={videoRef}
-                                                key={`vid-${activeVClip?.id || 'none'}`}
-                                                src={videoUrl}
+                                                src={`http://localhost:3001/media/${encodeURIComponent(item.path)}?t=${localRefreshKey}`}
                                                 preload="auto"
-                                                autoPlay={false}
                                                 muted={true}
-                                                playsInline={true}
-                                                crossOrigin="anonymous"
-                                                onLoadedMetadata={onMetadata}
-                                                onDurationChange={onMetadata}
-                                                onLoadedData={(e) => {
-                                                    updateVideoRect();
-                                                    if (videoRef.current?.duration && duration <= 0) syncDuration(videoRef.current.duration);
-                                                }}
-                                                onCanPlay={() => {
-                                                    updateVideoRect();
-                                                    if (videoRef.current) {
-                                                        videoRef.current.muted = false;
-                                                        if (selectedClip) videoRef.current.volume = selectedClip.volume / 100;
-                                                    }
-                                                }}
-                                                onTimeUpdate={handleTimeUpdate}
-                                                onError={(e) => {
-                                                    if (videoRef.current?.error?.code === 4) {
-                                                        console.error("Video Codec Error:", videoRef.current?.error);
-                                                        setDuration(-1);
-                                                    }
-                                                }}
-                                                style={{
-                                                    position: 'absolute',
-                                                    left: 0, top: 0,
-                                                    width: activeVClip?.sourceWidth ? `${(activeVClip.sourceWidth / canvasSize.w) * 100}%` : '100%',
-                                                    height: activeVClip?.sourceHeight ? `${(activeVClip.sourceHeight / canvasSize.h) * 100}%` : '100%',
-                                                    objectFit: 'fill',
-                                                    display: 'block',
-                                                    opacity: (activeVClip && activeVClip.type === 'video') || (duration <= 0) ? 1 : 0,
-                                                    filter: activeVClip?.filters ? `url(#preview-color-correction) brightness(${activeVClip.filters.brightness ?? 100}%) contrast(${activeVClip.filters.contrast ?? 100}%) saturate(${(activeVClip.filters.saturation ?? 100) + (activeVClip.filters.vibrance ?? 0)}%) hue-rotate(${activeVClip.filters.hue ?? 0}deg)` : 'none',
-                                                    transform: activeVClip ? `translate(${(activeVClip.transform?.x || 0) * viewScaleX}px, ${(activeVClip.transform?.y || 0) * viewScaleY}px) scale(${activeVClip.transform?.scale || 1}) rotate(${activeVClip.rotate || 0}deg) scaleX(${activeVClip.flipH ? -1 : 1}) scaleY(${activeVClip.flipV ? -1 : 1})` : 'none',
-                                                    clipPath: activeVClip?.crop ? `inset(${activeVClip.crop.y}% ${100 - (activeVClip.crop.x + activeVClip.crop.w)}% ${100 - (activeVClip.crop.y + activeVClip.crop.h)}% ${activeVClip.crop.x}%)` : 'none'
-                                                }}
+                                                style={{ width: '100%', height: '100%', objectFit: 'fill' }}
                                             />
+                                        );
+                                    }
 
-                                            {activeVClip && activeVClip.type === 'image' && (
+                                    return activeVClips.map((clip) => {
+                                        const isMain = clip.id === activeVClip?.id;
+                                        const url = `http://localhost:3001/media/${encodeURIComponent(clip.path)}?t=${localRefreshKey}`;
+
+                                        if (clip.type === 'video') {
+                                            return (
+                                                <video
+                                                    key={clip.id}
+                                                    data-clip-id={clip.id}
+                                                    ref={isMain ? videoRef : null}
+                                                    src={url}
+                                                    preload="auto"
+                                                    autoPlay={false}
+                                                    muted={!isMain}
+                                                    playsInline={true}
+                                                    crossOrigin="anonymous"
+                                                    onLoadedMetadata={(e) => onMetadata(e, clip.id)}
+                                                    onDurationChange={(e) => onMetadata(e, clip.id)}
+                                                    onLoadedData={() => {
+                                                        updateVideoRect();
+                                                        if (isMain && videoRef.current?.duration && duration <= 0) syncDuration(videoRef.current.duration);
+                                                    }}
+                                                    onCanPlay={() => {
+                                                        updateVideoRect();
+                                                        if (isMain && videoRef.current) {
+                                                            videoRef.current.muted = false;
+                                                            if (selectedClip) videoRef.current.volume = selectedClip.volume / 100;
+                                                        }
+                                                    }}
+                                                    onTimeUpdate={isMain ? handleTimeUpdate : null}
+                                                    style={{
+                                                        position: 'absolute',
+                                                        left: 0, top: 0,
+                                                        width: clip.sourceWidth ? `${(clip.sourceWidth / canvasSize.w) * 100}%` : '100%',
+                                                        height: clip.sourceHeight ? `${(clip.sourceHeight / canvasSize.h) * 100}%` : '100%',
+                                                        objectFit: 'fill',
+                                                        display: 'block',
+                                                        opacity: 1,
+                                                        filter: clip.filters ? `url(#preview-color-correction) brightness(${clip.filters.brightness ?? 100}%) contrast(${clip.filters.contrast ?? 100}%) saturate(${(clip.filters.saturation ?? 100) + (clip.filters.vibrance ?? 0)}%) hue-rotate(${clip.filters.hue ?? 0}deg)` : 'none',
+                                                        transform: `translate(${(clip.transform?.x || 0) * viewScaleX}px, ${(clip.transform?.y || 0) * viewScaleY}px) scale(${clip.transform?.scale || 1}) rotate(${clip.rotate || 0}deg) scaleX(${clip.flipH ? -1 : 1}) scaleY(${clip.flipV ? -1 : 1})`,
+                                                        clipPath: clip.crop ? `inset(${clip.crop.y}% ${100 - (clip.crop.x + clip.crop.w)}% ${100 - (clip.crop.y + clip.crop.h)}% ${clip.crop.x}%)` : 'none',
+                                                        zIndex: isMain ? 10 : 1
+                                                    }}
+                                                />
+                                            );
+                                        } else {
+                                            return (
                                                 <img
+                                                    key={clip.id}
                                                     draggable={false}
-                                                    ref={imageRef}
-                                                    key={`img-${activeVClip.id}`}
-                                                    src={`http://localhost:3001/media/${encodeURIComponent(activeVClip.path)}`}
+                                                    src={`http://localhost:3001/media/${encodeURIComponent(clip.path)}`}
                                                     alt="Preview"
                                                     onLoad={(e) => {
                                                         const nw = e.target.naturalWidth;
                                                         const nh = e.target.naturalHeight;
-
-                                                        // Sadece boyut bilgisi HİÇ YOKSA (yeni eklenen klip) güncelle ve ortala.
-                                                        // Varsa dokunma, kullanıcının ayarını bozma.
-                                                        if (!activeVClip.sourceWidth || activeVClip.sourceWidth === 0) {
-                                                            const oldW = canvasSize.w; // Varsayılan olarak canvas boyutundaydı
-                                                            const oldH = canvasSize.h;
-                                                            const dx = (oldW - nw) / 2;
-                                                            const dy = (oldH - nh) / 2;
-
-                                                            updateClip(activeVClip.id, {
+                                                        if (!clip.sourceWidth || clip.sourceWidth === 0) {
+                                                            const dx = (canvasSize.w - nw) / 2;
+                                                            const dy = (canvasSize.h - nh) / 2;
+                                                            updateClip(clip.id, {
                                                                 sourceWidth: nw,
                                                                 sourceHeight: nh,
-                                                                transform: {
-                                                                    ...(activeVClip.transform || { scale: 1 }),
-                                                                    x: dx,
-                                                                    y: dy
-                                                                }
+                                                                transform: { ...(clip.transform || { scale: 1 }), x: dx, y: dy }
                                                             });
-                                                        } else if (Math.abs(activeVClip.sourceWidth - nw) > 2) {
-                                                            // Boyut değişmiş ama pozisyonu bozmadan sadece metadatayı güncelle (nadir durum)
-                                                            updateClip(activeVClip.id, { sourceWidth: nw, sourceHeight: nh });
                                                         }
                                                         updateVideoRect();
-                                                        setTimeout(updateVideoRect, 50);
                                                     }}
                                                     style={{
                                                         position: 'absolute',
                                                         left: 0, top: 0,
-                                                        width: activeVClip?.sourceWidth ? `${(activeVClip.sourceWidth / canvasSize.w) * 100}%` : '100%',
-                                                        height: activeVClip?.sourceHeight ? `${(activeVClip.sourceHeight / canvasSize.h) * 100}%` : '100%',
+                                                        width: clip.sourceWidth ? `${(clip.sourceWidth / canvasSize.w) * 100}%` : '100%',
+                                                        height: clip.sourceHeight ? `${(clip.sourceHeight / canvasSize.h) * 100}%` : '100%',
                                                         objectFit: 'fill',
                                                         opacity: 1,
-                                                        filter: activeVClip?.filters ? `url(#preview-color-correction) brightness(${activeVClip.filters.brightness ?? 100}%) contrast(${activeVClip.filters.contrast ?? 100}%) saturate(${(activeVClip.filters.saturation ?? 100) + (activeVClip.filters.vibrance ?? 0)}%) hue-rotate(${activeVClip.filters.hue ?? 0}deg)` : 'none',
-                                                        transform: activeVClip ? `translate(${(activeVClip.transform?.x || 0) * viewScaleX}px, ${(activeVClip.transform?.y || 0) * viewScaleY}px) scale(${activeVClip.transform?.scale || 1}) rotate(${activeVClip.rotate || 0}deg) scaleX(${activeVClip.flipH ? -1 : 1}) scaleY(${activeVClip.flipV ? -1 : 1})` : 'none',
+                                                        filter: clip.filters ? `url(#preview-color-correction) brightness(${clip.filters.brightness ?? 100}%) contrast(${clip.filters.contrast ?? 100}%) saturate(${(clip.filters.saturation ?? 100) + (clip.filters.vibrance ?? 0)}%) hue-rotate(${clip.filters.hue ?? 0}deg)` : 'none',
+                                                        transform: `translate(${(clip.transform?.x || 0) * viewScaleX}px, ${(clip.transform?.y || 0) * viewScaleY}px) scale(${clip.transform?.scale || 1}) rotate(${clip.rotate || 0}deg) scaleX(${clip.flipH ? -1 : 1}) scaleY(${clip.flipV ? -1 : 1})`,
                                                         transformOrigin: '50% 50%',
-                                                        clipPath: activeVClip?.crop ? `inset(${activeVClip.crop.y}% ${100 - (activeVClip.crop.x + activeVClip.crop.w)}% ${100 - (activeVClip.crop.y + activeVClip.crop.h)}% ${activeVClip.crop.x}%)` : 'none'
+                                                        clipPath: clip.crop ? `inset(${clip.crop.y}% ${100 - (clip.crop.x + clip.crop.w)}% ${100 - (clip.crop.y + clip.crop.h)}% ${clip.crop.x}%)` : 'none',
+                                                        zIndex: isMain ? 10 : 1
                                                     }}
                                                 />
-                                            )}
-                                        </>
-                                    );
+                                            );
+                                        }
+                                    });
                                 })()}
 
                                 {/* Snap Lines Overlay - Red dotted lines */}
