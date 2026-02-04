@@ -303,6 +303,170 @@ const formatTime = (seconds) => {
     }
 };
 
+// Draggable Panel Component
+const DraggablePanel = ({ id, title, icon, visible, collapsed, position, size, onDragStart, onDragEnd, onResize, onToggleCollapse, children }) => {
+    const [isDragging, setIsDragging] = useState(false);
+    const [isResizing, setIsResizing] = useState(false);
+    const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+    const panelRef = useRef(null);
+    const resizeStartRef = useRef({ x: 0, y: 0, w: 0, h: 0 });
+
+    const handleMouseDown = (e) => {
+        if (e.target.closest('.panel-header-btn') || e.target.closest('.resize-handle')) return;
+        setIsDragging(true);
+        const rect = panelRef.current.getBoundingClientRect();
+        setDragOffset({
+            x: e.clientX - rect.left,
+            y: e.clientY - rect.top
+        });
+        if (onDragStart) onDragStart(id, e);
+    };
+
+    const handleResizeMouseDown = (e) => {
+        e.stopPropagation();
+        e.preventDefault(); // Metin seçimini engelle
+        setIsResizing(true);
+        const rect = panelRef.current.getBoundingClientRect();
+        resizeStartRef.current = {
+            x: e.clientX,
+            y: e.clientY,
+            w: rect.width,
+            h: rect.height
+        };
+    };
+
+    const handleMouseMove = useCallback((e) => {
+        if (isDragging && panelRef.current) {
+            const newX = e.clientX - dragOffset.x;
+            const newY = e.clientY - dragOffset.y;
+            panelRef.current.style.left = `${newX}px`;
+            panelRef.current.style.top = `${newY}px`;
+        }
+
+        if (isResizing && panelRef.current) {
+            const dx = e.clientX - resizeStartRef.current.x;
+            const dy = e.clientY - resizeStartRef.current.y;
+            const newWidth = Math.max(250, resizeStartRef.current.w + dx); // Min width 250
+            const newHeight = Math.max(200, resizeStartRef.current.h + dy); // Min height 200
+
+            panelRef.current.style.width = `${newWidth}px`;
+            panelRef.current.style.height = `${newHeight}px`;
+        }
+    }, [isDragging, isResizing, dragOffset]);
+
+    const handleMouseUp = useCallback((e) => {
+        if (isDragging) {
+            setIsDragging(false);
+            const rect = panelRef.current.getBoundingClientRect();
+            if (onDragEnd) onDragEnd(id, { x: rect.left, y: rect.top });
+        }
+        if (isResizing) {
+            setIsResizing(false);
+            const rect = panelRef.current.getBoundingClientRect();
+            if (onResize) onResize(id, { width: rect.width, height: rect.height });
+        }
+    }, [isDragging, isResizing, id, onDragEnd, onResize]);
+
+    useEffect(() => {
+        if (isDragging || isResizing) {
+            window.addEventListener('mousemove', handleMouseMove);
+            window.addEventListener('mouseup', handleMouseUp);
+            return () => {
+                window.removeEventListener('mousemove', handleMouseMove);
+                window.removeEventListener('mouseup', handleMouseUp);
+            };
+        }
+    }, [isDragging, isResizing, handleMouseMove, handleMouseUp]);
+
+    // Native Wheel Event Listener for Non-Passive preventDefault
+    useEffect(() => {
+        const panelEl = panelRef.current;
+        if (!panelEl) return;
+
+        const handleWheelCapture = (e) => {
+            // Sadece number input üzerindeyken scroll'u engelle
+            if (e.target.tagName === 'INPUT' && e.target.type === 'number') {
+                e.preventDefault(); // Native scroll'u durdur (Panel kaymasın)
+                // Not: stopPropagation yapmıyoruz ki React event'i tetiklenebilsin (veya tam tersi gerekebilir)
+                // Deneyim: React eventleri document seviyesinde dinlediği için stopPropagation native'de yaparsak react duymayabilir.
+                // Sadece preventDefault yeterli.
+            }
+        };
+
+        // { passive: false } kritik nokta!
+        panelEl.addEventListener('wheel', handleWheelCapture, { passive: false });
+
+        return () => {
+            panelEl.removeEventListener('wheel', handleWheelCapture);
+        };
+    }, []);
+
+    if (!visible) return null;
+
+    return (
+        <div
+            ref={panelRef}
+            className={`draggable-panel ${collapsed ? 'collapsed' : ''}`}
+            style={{
+                left: position.x,
+                top: position.y,
+                width: collapsed ? 'auto' : (size?.width || 300),
+                height: collapsed ? 'auto' : (size?.height || 350),
+                zIndex: 8000
+            }}
+        >
+            <div className="panel-header" onMouseDown={handleMouseDown}>
+                <div className="panel-header-title">
+                    {icon}
+                    <span>{title}</span>
+                </div>
+                <div className="panel-header-actions">
+                    <button
+                        className="panel-header-btn"
+                        onClick={onToggleCollapse}
+                        data-tooltip={collapsed ? "Expand" : "Collapse"}
+                        data-tooltip-pos="left"
+                    >
+                        {collapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+                    </button>
+
+                </div>
+            </div>
+            {!collapsed && (
+                <>
+                    <div className="panel-content">
+                        {children}
+                    </div>
+                    <div
+                        className="resize-handle"
+                        onMouseDown={handleResizeMouseDown}
+                        style={{
+                            position: 'absolute',
+                            bottom: 2,
+                            right: 2,
+                            width: 16,
+                            height: 16,
+                            cursor: 'se-resize',
+                            zIndex: 10,
+                            display: 'flex',
+                            alignItems: 'end',
+                            justifyContent: 'end',
+                            opacity: 0.6,
+                            padding: 2
+                        }}
+                    >
+                        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                            <path d="M6 9L9 6" />
+                            <path d="M2 9L9 2" />
+                        </svg>
+                    </div>
+                </>
+            )}
+        </div>
+    );
+};
+
+
 const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey, onShowToast }) => {
     const videoRef = useRef(null);
     const imageRef = useRef(null);
@@ -569,10 +733,79 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
     const tracksAtStartRef = useRef(null);
     const lastZoomPoint = useRef({ time: null, x: null });
 
+    // Draggable Panel System States
+    const [panels, setPanels] = useState({
+        properties: {
+            visible: true,
+            collapsed: false,
+            position: { x: window.innerWidth - 320, y: 70 },
+            size: { width: 300, height: 350 }
+        }
+    });
+    const [draggingPanel, setDraggingPanel] = useState(null);
+
+    // Panel Management Functions
+    const togglePanel = (panelId) => {
+        setPanels(prev => ({
+            ...prev,
+            [panelId]: {
+                ...prev[panelId],
+                visible: !prev[panelId].visible
+            }
+        }));
+    };
+
+    const togglePanelCollapse = (panelId) => {
+        setPanels(prev => ({
+            ...prev,
+            [panelId]: {
+                ...prev[panelId],
+                collapsed: !prev[panelId].collapsed
+            }
+        }));
+    };
+
+    const handlePanelDragEnd = (panelId, position) => {
+        setPanels(prev => ({
+            ...prev,
+            [panelId]: {
+                ...prev[panelId],
+                position
+            }
+        }));
+    };
+
+    const handlePanelResize = (panelId, size) => {
+        setPanels(prev => ({
+            ...prev,
+            [panelId]: {
+                ...prev[panelId],
+                size
+            }
+        }));
+    };
+
+    const handleInputWheel = (e, currentVal, updateLogic, step = 1) => {
+        // Scroll prevent default (Zen Browser/Firefox fix)
+        e.preventDefault();
+        e.stopPropagation();
+
+        const delta = e.deltaY < 0 ? step : -step;
+        const baseVal = parseFloat(currentVal);
+        const newVal = (isNaN(baseVal) ? 0 : baseVal) + delta;
+
+        let finalVal = newVal;
+        if (step < 1) {
+            finalVal = parseFloat(newVal.toFixed(2));
+        }
+        updateLogic(finalVal);
+    };
+
     const handleDragStart = (idx) => {
         setDragTrackIndex(idx);
         tracksAtStartRef.current = JSON.stringify(tracks);
     };
+
     const handleDragOver = (e, targetIdx) => {
         e.preventDefault();
         if (dragTrackIndex === null || dragTrackIndex === targetIdx) return;
@@ -1373,6 +1606,75 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
 
         setTracks(updatedTracks);
         pushHistory('actionPack', updatedTracks);
+    };
+
+    const screenshot = () => {
+        try {
+            // Canvas container'ı bul
+            const canvasContainer = document.querySelector('.preview-canvas-container');
+            if (!canvasContainer) {
+                return;
+            }
+
+            // Geçici bir canvas oluştur
+            const canvas = document.createElement('canvas');
+            canvas.width = canvasSize.w;
+            canvas.height = canvasSize.h;
+            const ctx = canvas.getContext('2d');
+
+            // Siyah arka plan
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Tüm aktif video/image elementlerini canvas'a çiz
+            const mediaElements = canvasContainer.querySelectorAll('video, img');
+
+
+
+            mediaElements.forEach(element => {
+                try {
+                    // Element'in transform ve diğer stil özelliklerini al
+                    const style = window.getComputedStyle(element);
+                    const transform = style.transform;
+
+                    // Canvas'a çiz
+                    ctx.save();
+
+                    // Transform'u uygula (basitleştirilmiş)
+                    const rect = element.getBoundingClientRect();
+                    const containerRect = canvasContainer.getBoundingClientRect();
+
+                    // Pozisyonu hesapla
+                    const x = rect.left - containerRect.left;
+                    const y = rect.top - containerRect.top;
+
+                    ctx.drawImage(element, x, y, rect.width, rect.height);
+                    ctx.restore();
+                } catch (err) {
+                    // Hata sessizce yoksayılır
+                }
+            });
+
+            // Canvas'ı blob'a çevir ve indir
+            canvas.toBlob((blob) => {
+                if (!blob) {
+                    return;
+                }
+
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+                a.href = url;
+                a.download = `screenshot-${timestamp}.png`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }, 'image/png');
+
+        } catch (error) {
+            // Hata sessizce yoksayılır
+        }
     };
 
     const fetchPickerItems = async (path) => {
@@ -2292,124 +2594,136 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
 
                 <div className="editor-grid" style={{
                     display: 'grid',
-                    gridTemplateColumns: 'minmax(280px, 300px) minmax(0, 1fr)',
+                    gridTemplateColumns: 'minmax(0, 1fr)',
                     gridTemplateRows: `minmax(0, 1fr) 6px ${timelineHeight}px`,
-                    columnGap: 10,
+                    columnGap: 0,
                     rowGap: 0,
                     flex: 1,
                     overflow: 'hidden',
-                    padding: '0 10px 10px 10px'
+                    padding: '0 10px 10px 60px'
                 }}>
 
-                    {/* Left: properties */}
-                    <div className="editor-sidebar sidebar-group" style={{ overflowY: 'auto', padding: '10px 8px', height: '100%', boxSizing: 'border-box' }}>
-                        <label style={{ fontSize: '0.65rem', fontWeight: 'bold', letterSpacing: '1px', marginBottom: 8, display: 'block', color: 'var(--text-primary)', textAlign: 'center' }}>{t.clipProperties || 'CLIP PROPERTIES'}</label>
+
+                    {/* Draggable Clip Properties Panel */}
+                    <DraggablePanel
+                        id="properties"
+                        title={t.clipProperties || "Clip Properties"}
+                        icon={<Settings size={14} color="var(--netflix-red)" />}
+                        visible={panels.properties.visible}
+                        collapsed={panels.properties.collapsed}
+                        position={panels.properties.position}
+                        size={panels.properties.size}
+                        onDragEnd={handlePanelDragEnd}
+                        onResize={handlePanelResize}
+                        onToggleCollapse={() => togglePanelCollapse('properties')}
+
+                    >
                         {selectedClip ? (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                                <div className="control-item" style={{ gap: 2 }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                <div className="control-item">
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <label style={{ fontSize: '0.65rem', opacity: 0.8, color: 'var(--text-primary)' }}>{t.brightness || 'Brightness'}</label>
-                                        <input type="number" value={selectedClip.filters?.brightness ?? 100}
+                                        <label>{t.brightness || 'Brightness'}</label>
+                                        <input type="number" value={selectedClip.filters?.brightness ?? 100} onWheel={e => handleInputWheel(e, selectedClip.filters?.brightness ?? 100, (val) => updateClip(selectedClipId, { filters: { ...selectedClip.filters, brightness: val } }))}
                                             onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, brightness: parseInt(e.target.value) || 0 } })}
-                                            style={{ width: 45, background: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: 'var(--netflix-red)', fontSize: '0.65rem', padding: '1px 3px', borderRadius: 3, textAlign: 'center' }} />
+                                        />
                                     </div>
-                                    <input type="range" min="0" max="200" value={selectedClip.filters?.brightness ?? 100} style={{ height: 3 }}
+                                    <input type="range" min="0" max="200" value={selectedClip.filters?.brightness ?? 100}
                                         onMouseUp={() => pushHistory('actionFilter')}
                                         onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, brightness: parseInt(e.target.value) } })} />
                                 </div>
-                                <div className="control-item" style={{ gap: 2 }}>
+                                <div className="control-item">
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <label style={{ fontSize: '0.65rem', opacity: 0.8, color: 'var(--text-primary)' }}>{t.contrast || 'Contrast'}</label>
-                                        <input type="number" value={selectedClip.filters?.contrast ?? 100}
+                                        <label>{t.contrast || 'Contrast'}</label>
+                                        <input type="number" value={selectedClip.filters?.contrast ?? 100} onWheel={e => handleInputWheel(e, selectedClip.filters?.contrast ?? 100, (val) => updateClip(selectedClipId, { filters: { ...selectedClip.filters, contrast: val } }))}
                                             onBlur={() => pushHistory('actionFilter')}
                                             onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, contrast: parseInt(e.target.value) || 0 } })}
-                                            style={{ width: 45, background: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: 'var(--netflix-red)', fontSize: '0.65rem', padding: '1px 3px', borderRadius: 3, textAlign: 'center' }} />
+                                        />
                                     </div>
-                                    <input type="range" min="0" max="200" value={selectedClip.filters?.contrast ?? 100} style={{ height: 3 }}
+                                    <input type="range" min="0" max="200" value={selectedClip.filters?.contrast ?? 100}
                                         onMouseUp={() => pushHistory('actionFilter')}
                                         onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, contrast: parseInt(e.target.value) } })} />
                                 </div>
-                                <div className="control-item" style={{ gap: 2 }}>
+                                <div className="control-item">
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <label style={{ fontSize: '0.65rem', opacity: 0.8, color: 'var(--text-primary)' }}>{t.saturation || 'Saturation'}</label>
-                                        <input type="number" value={selectedClip.filters?.saturation ?? 100}
+                                        <label>{t.saturation || 'Saturation'}</label>
+                                        <input type="number" value={selectedClip.filters?.saturation ?? 100} onWheel={e => handleInputWheel(e, selectedClip.filters?.saturation ?? 100, (val) => updateClip(selectedClipId, { filters: { ...selectedClip.filters, saturation: val } }))}
                                             onBlur={() => pushHistory('actionFilter')}
                                             onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, saturation: parseInt(e.target.value) || 0 } })}
-                                            style={{ width: 45, background: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: 'var(--netflix-red)', fontSize: '0.65rem', padding: '1px 3px', borderRadius: 3, textAlign: 'center' }} />
+                                        />
                                     </div>
-                                    <input type="range" min="0" max="200" value={selectedClip.filters?.saturation ?? 100} style={{ height: 3 }}
+                                    <input type="range" min="0" max="200" value={selectedClip.filters?.saturation ?? 100}
                                         onMouseUp={() => pushHistory('actionFilter')}
                                         onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, saturation: parseInt(e.target.value) } })} />
                                 </div>
-                                <div className="control-item" style={{ gap: 2 }}>
+                                <div className="control-item">
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <label style={{ fontSize: '0.65rem', opacity: 0.8, color: 'var(--text-primary)' }}>{t.exposure || 'Exposure'}</label>
-                                        <input type="number" value={selectedClip.filters?.exposure ?? 100}
+                                        <label>{t.exposure || 'Exposure'}</label>
+                                        <input type="number" value={selectedClip.filters?.exposure ?? 100} onWheel={e => handleInputWheel(e, selectedClip.filters?.exposure ?? 100, (val) => updateClip(selectedClipId, { filters: { ...selectedClip.filters, exposure: val } }))}
                                             onBlur={() => pushHistory('actionFilter')}
                                             onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, exposure: parseInt(e.target.value) || 0 } })}
-                                            style={{ width: 45, background: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: 'var(--netflix-red)', fontSize: '0.65rem', padding: '1px 3px', borderRadius: 3, textAlign: 'center' }} />
+                                        />
                                     </div>
-                                    <input type="range" min="0" max="200" value={selectedClip.filters?.exposure ?? 100} style={{ height: 3 }}
+                                    <input type="range" min="0" max="200" value={selectedClip.filters?.exposure ?? 100}
                                         onMouseUp={() => pushHistory('actionFilter')}
                                         onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, exposure: parseInt(e.target.value) } })} />
                                 </div>
-                                <div className="control-item" style={{ gap: 2 }}>
+                                <div className="control-item">
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <label style={{ fontSize: '0.65rem', opacity: 0.8, color: 'var(--text-primary)' }}>{t.temperature || 'Temperature'}</label>
-                                        <input type="number" value={selectedClip.filters?.temperature ?? 0}
+                                        <label>{t.temperature || 'Temperature'}</label>
+                                        <input type="number" value={selectedClip.filters?.temperature ?? 0} onWheel={e => handleInputWheel(e, selectedClip.filters?.temperature ?? 0, (val) => updateClip(selectedClipId, { filters: { ...selectedClip.filters, temperature: val } }))}
                                             onBlur={() => pushHistory('actionFilter')}
                                             onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, temperature: parseInt(e.target.value) || 0 } })}
-                                            style={{ width: 45, background: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: 'var(--netflix-red)', fontSize: '0.65rem', padding: '1px 3px', borderRadius: 3, textAlign: 'center' }} />
+                                        />
                                     </div>
-                                    <input type="range" min="-100" max="100" value={selectedClip.filters?.temperature ?? 0} style={{ height: 3 }}
+                                    <input type="range" min="-100" max="100" value={selectedClip.filters?.temperature ?? 0}
                                         onMouseUp={() => pushHistory('actionFilter')}
                                         onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, temperature: parseInt(e.target.value) } })} />
                                 </div>
-                                <div className="control-item" style={{ gap: 2 }}>
+                                <div className="control-item">
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <label style={{ fontSize: '0.65rem', opacity: 0.8, color: 'var(--text-primary)' }}>{t.tint || 'Tint'}</label>
-                                        <input type="number" value={selectedClip.filters?.tint ?? 0}
+                                        <label>{t.tint || 'Tint'}</label>
+                                        <input type="number" value={selectedClip.filters?.tint ?? 0} onWheel={e => handleInputWheel(e, selectedClip.filters?.tint ?? 0, (val) => updateClip(selectedClipId, { filters: { ...selectedClip.filters, tint: val } }))}
                                             onBlur={() => pushHistory('actionFilter')}
                                             onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, tint: parseInt(e.target.value) || 0 } })}
-                                            style={{ width: 45, background: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: 'var(--netflix-red)', fontSize: '0.65rem', padding: '1px 3px', borderRadius: 3, textAlign: 'center' }} />
+                                        />
                                     </div>
-                                    <input type="range" min="-100" max="100" value={selectedClip.filters?.tint ?? 0} style={{ height: 3 }}
+                                    <input type="range" min="-100" max="100" value={selectedClip.filters?.tint ?? 0}
                                         onMouseUp={() => pushHistory('actionFilter')}
                                         onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, tint: parseInt(e.target.value) } })} />
                                 </div>
-                                <div className="control-item" style={{ gap: 2 }}>
+                                <div className="control-item">
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <label style={{ fontSize: '0.65rem', opacity: 0.8, color: 'var(--text-primary)' }}>{t.vibrance || 'Vibrance'}</label>
-                                        <input type="number" value={selectedClip.filters?.vibrance ?? 0}
+                                        <label>{t.vibrance || 'Vibrance'}</label>
+                                        <input type="number" value={selectedClip.filters?.vibrance ?? 0} onWheel={e => handleInputWheel(e, selectedClip.filters?.vibrance ?? 0, (val) => updateClip(selectedClipId, { filters: { ...selectedClip.filters, vibrance: val } }))}
                                             onBlur={() => pushHistory('actionFilter')}
                                             onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, vibrance: parseInt(e.target.value) || 0 } })}
-                                            style={{ width: 45, background: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: 'var(--netflix-red)', fontSize: '0.65rem', padding: '1px 3px', borderRadius: 3, textAlign: 'center' }} />
+                                        />
                                     </div>
-                                    <input type="range" min="-100" max="100" value={selectedClip.filters?.vibrance ?? 0} style={{ height: 3 }}
+                                    <input type="range" min="-100" max="100" value={selectedClip.filters?.vibrance ?? 0}
                                         onMouseUp={() => pushHistory('actionFilter')}
                                         onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, vibrance: parseInt(e.target.value) } })} />
                                 </div>
-                                <div className="control-item" style={{ gap: 2 }}>
+                                <div className="control-item">
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <label style={{ fontSize: '0.65rem', opacity: 0.8, color: 'var(--text-primary)' }}>{t.clarity || 'Clarity'}</label>
-                                        <input type="number" value={selectedClip.filters?.clarity ?? 0}
+                                        <label>{t.clarity || 'Clarity'}</label>
+                                        <input type="number" value={selectedClip.filters?.clarity ?? 0} onWheel={e => handleInputWheel(e, selectedClip.filters?.clarity ?? 0, (val) => updateClip(selectedClipId, { filters: { ...selectedClip.filters, clarity: val } }))}
                                             onBlur={() => pushHistory('actionFilter')}
                                             onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, clarity: parseInt(e.target.value) || 0 } })}
-                                            style={{ width: 45, background: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: 'var(--netflix-red)', fontSize: '0.65rem', padding: '1px 3px', borderRadius: 3, textAlign: 'center' }} />
+                                        />
                                     </div>
-                                    <input type="range" min="0" max="100" value={selectedClip.filters?.clarity ?? 0} style={{ height: 3 }}
+                                    <input type="range" min="0" max="100" value={selectedClip.filters?.clarity ?? 0}
                                         onMouseUp={() => pushHistory('actionFilter')}
                                         onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, clarity: parseInt(e.target.value) } })} />
                                 </div>
-                                <div className="control-item" style={{ gap: 2 }}>
+                                <div className="control-item">
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <label style={{ fontSize: '0.65rem', opacity: 0.8, color: 'var(--text-primary)' }}>{t.hue || 'Hue'}</label>
-                                        <input type="number" value={selectedClip.filters?.hue ?? 0}
+                                        <label>{t.hue || 'Hue'}</label>
+                                        <input type="number" value={selectedClip.filters?.hue ?? 0} onWheel={e => handleInputWheel(e, selectedClip.filters?.hue ?? 0, (val) => updateClip(selectedClipId, { filters: { ...selectedClip.filters, hue: val } }))}
                                             onBlur={() => pushHistory('actionFilter')}
                                             onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, hue: parseInt(e.target.value) || 0 } })}
-                                            style={{ width: 45, background: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: 'var(--netflix-red)', fontSize: '0.65rem', padding: '1px 3px', borderRadius: 3, textAlign: 'center' }} />
+                                        />
                                     </div>
-                                    <input type="range" min="-180" max="180" value={selectedClip.filters?.hue ?? 0} style={{ height: 3 }}
+                                    <input type="range" min="-180" max="180" value={selectedClip.filters?.hue ?? 0}
                                         onMouseUp={() => pushHistory('actionFilter')}
                                         onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, hue: parseInt(e.target.value) } })} />
                                 </div>
@@ -2482,7 +2796,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
 
                                             <div className="control-item" style={{ gap: 2 }}>
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                    <label style={{ fontSize: '0.6rem', opacity: 0.8 }} title="Renk eşleşme toleransı. Artırırsanız daha fazla renk tonu şeffaf olur.">{t.chromaSimilarity || 'Similarity'}</label>
+                                                    <label style={{ fontSize: '0.6rem', opacity: 0.8 }} title="Renk eşleşme toleransı">{t.chromaSimilarity || 'Similarity'}</label>
                                                     <span style={{ fontSize: '0.6rem', color: 'var(--netflix-red)' }}>{(selectedClip.filters.chromaKey.similarity || 0.05).toFixed(2)}</span>
                                                 </div>
                                                 <input
@@ -2499,7 +2813,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
 
                                             <div className="control-item" style={{ gap: 2 }}>
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                    <label style={{ fontSize: '0.6rem', opacity: 0.8 }} title="Kenar yumuşatma. Şeffaflık geçişini pürüzsüzleştirir.">{t.chromaBlend || 'Blend'}</label>
+                                                    <label style={{ fontSize: '0.6rem', opacity: 0.8 }} title="Kenar yumuşatma">{t.chromaBlend || 'Blend'}</label>
                                                     <span style={{ fontSize: '0.6rem', color: 'var(--netflix-red)' }}>{(selectedClip.filters.chromaKey.blend || 0.05).toFixed(2)}</span>
                                                 </div>
                                                 <input
@@ -2526,10 +2840,18 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                             <div style={{ display: 'flex', gap: 5 }}>
                                                 {['r', 'g', 'b'].map(color => (
                                                     <div key={color} style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                                                        <div style={{
+                                                            fontSize: '0.6rem',
+                                                            color: color === 'r' ? '#ff5252' : (color === 'g' ? '#69f0ae' : '#448aff'),
+                                                            fontWeight: 'bold',
+                                                            textAlign: 'center'
+                                                        }}>
+                                                            {color.toUpperCase()}
+                                                        </div>
                                                         <input
                                                             type="range" min="-100" max="100"
                                                             value={selectedClip.filters?.colorBalance?.[type]?.[color] ?? 0}
-                                                            style={{ height: 2, accentColor: color === 'r' ? '#f00' : (color === 'g' ? '#0f0' : '#00f') }}
+                                                            style={{ height: 2, accentColor: color === 'r' ? '#ff5252' : (color === 'g' ? '#69f0ae' : '#448aff') }}
                                                             onMouseUp={() => pushHistory('actionFilter')}
                                                             onChange={e => {
                                                                 const newVal = parseInt(e.target.value);
@@ -2544,7 +2866,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                         </div>
                                     ))}
                                 </div>
-                                <div className="control-item" style={{ gap: 2 }}>
+                                <div className="control-item">
                                     <label style={{ fontSize: '0.65rem', opacity: 0.8 }}>CURVES PRESET</label>
                                     <select
                                         value={selectedClip.filters?.curves ?? 'none'}
@@ -2564,19 +2886,23 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                     </select>
                                 </div>
 
-                                <div className="control-item" style={{ gap: 2 }}>
+                                <div className="control-item">
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <label style={{ fontSize: '0.65rem', opacity: 0.8, color: 'var(--text-primary)' }}>{t.volume || 'Volume'}</label>
+                                        <label>{t.volume || 'Volume'}</label>
                                         <input type="number" value={selectedClip.volume ?? 100}
+                                            onWheel={e => handleInputWheel(e, selectedClip.volume ?? 100, (val) => {
+                                                updateClip(selectedClipId, { volume: val });
+                                                if (videoRef.current) videoRef.current.volume = Math.max(0, Math.min(1, val / 100));
+                                            })}
                                             onBlur={() => pushHistory('actionVolume')}
                                             onChange={e => {
                                                 const vol = parseInt(e.target.value) || 0;
                                                 updateClip(selectedClipId, { volume: vol });
                                                 if (videoRef.current) videoRef.current.volume = Math.max(0, Math.min(1, vol / 100));
                                             }}
-                                            style={{ width: 45, background: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: 'var(--netflix-red)', fontSize: '0.65rem', padding: '1px 3px', borderRadius: 3, textAlign: 'center' }} />
+                                        />
                                     </div>
-                                    <input type="range" min="0" max="200" value={selectedClip.volume ?? 100} style={{ height: 3 }}
+                                    <input type="range" min="0" max="200" value={selectedClip.volume ?? 100}
                                         onMouseUp={() => pushHistory('actionVolume')}
                                         onChange={e => {
                                             const vol = parseInt(e.target.value);
@@ -2584,22 +2910,30 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                             if (videoRef.current) videoRef.current.volume = Math.max(0, Math.min(1, vol / 100));
                                         }} />
                                 </div>
-                                <div className="control-item" style={{ gap: 2 }}>
+                                <div className="control-item">
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <label style={{ fontSize: '0.65rem', opacity: 0.8, color: 'var(--text-primary)' }}>{t.scale || 'Scale'}</label>
+                                        <label>{t.scale || 'Scale'}</label>
                                         <input type="number" step="0.01" value={isFinite(selectedClip.transform?.scale) ? parseFloat(selectedClip.transform.scale).toFixed(2) : "1.00"}
+                                            onWheel={e => handleInputWheel(e, isFinite(selectedClip.transform?.scale) ? selectedClip.transform.scale : 1, (val) => updateClip(selectedClipId, { transform: { ...(selectedClip.transform || { x: 0, y: 0 }), scale: val } }), 0.01)}
                                             onBlur={() => pushHistory('actionTransform')}
                                             onChange={e => updateClip(selectedClipId, { transform: { ...(selectedClip.transform || { x: 0, y: 0 }), scale: parseFloat(e.target.value) || 1 } })}
-                                            style={{ width: 45, background: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: 'var(--netflix-red)', fontSize: '0.65rem', padding: '1px 3px', borderRadius: 3, textAlign: 'center' }} />
+
+                                        />
                                     </div>
-                                    <input type="range" min="0.1" max="10" step="0.01" value={isFinite(selectedClip.transform?.scale) ? selectedClip.transform.scale : 1} style={{ height: 3 }}
+                                    <input type="range" min="0.1" max="10" step="0.01" value={isFinite(selectedClip.transform?.scale) ? selectedClip.transform.scale : 1}
                                         onMouseUp={() => pushHistory('actionTransform')}
                                         onChange={e => updateClip(selectedClipId, { transform: { ...(selectedClip.transform || { x: 0, y: 0 }), scale: parseFloat(e.target.value) || 1 } })} />
                                 </div>
-                                <div className="control-item" style={{ gap: 2 }}>
+                                <div className="control-item">
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <label style={{ fontSize: '0.65rem', opacity: 0.8, color: 'var(--text-primary)' }}>{t.playbackSpeed || 'Speed'}</label>
+                                        <label>{t.playbackSpeed || 'Speed'}</label>
                                         <input type="number" step="0.01"
+                                            onWheel={e => handleInputWheel(e, (selectedClip.duration > 0 && isFinite(selectedClip.sourceDuration / selectedClip.duration)) ? (selectedClip.sourceDuration / selectedClip.duration).toFixed(2) : "1.00", (val) => {
+                                                const newSpeed = Math.max(0.1, val);
+                                                const sourceDur = selectedClip.sourceDuration || selectedClip.duration || 1;
+                                                const newTimelineDur = sourceDur / newSpeed;
+                                                updateClip(selectedClipId, { duration: isFinite(newTimelineDur) ? newTimelineDur : 1, sourceDuration: sourceDur });
+                                            }, 0.01)}
                                             onBlur={() => pushHistory('actionSpeed')}
                                             value={(selectedClip.duration > 0 && isFinite(selectedClip.sourceDuration / selectedClip.duration)) ? (selectedClip.sourceDuration / selectedClip.duration).toFixed(2) : "1.00"}
                                             onChange={e => {
@@ -2608,11 +2942,10 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                                 const newTimelineDur = sourceDur / newSpeed;
                                                 updateClip(selectedClipId, { duration: isFinite(newTimelineDur) ? newTimelineDur : 1, sourceDuration: sourceDur });
                                             }}
-                                            style={{ width: 45, background: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: '#ffc107', fontSize: '0.65rem', padding: '1px 3px', borderRadius: 3, textAlign: 'center' }} />
+                                        />
                                     </div>
                                     <input type="range" min="0.1" max="5" step="0.01"
                                         value={(selectedClip.duration > 0 && isFinite(selectedClip.sourceDuration / selectedClip.duration)) ? (selectedClip.sourceDuration / selectedClip.duration) : 1}
-                                        style={{ height: 3 }}
                                         onMouseUp={() => pushHistory('actionSpeed')}
                                         onChange={e => {
                                             const newSpeed = Math.max(0.1, parseFloat(e.target.value) || 1);
@@ -2621,40 +2954,46 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                             updateClip(selectedClipId, { duration: isFinite(newTimelineDur) ? newTimelineDur : 1, sourceDuration: sourceDur });
                                         }} />
                                 </div>
-                                <button className="action-btn" style={{ width: '100%', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', justifyContent: 'center', fontSize: '0.8rem', padding: '6px' }} onClick={() => historyUpdateClip('actionResetFilters', selectedClipId, { filters: { brightness: 100, contrast: 100, saturation: 100, exposure: 100, temperature: 0, tint: 0, vibrance: 0, hue: 0, clarity: 0, gamma: 1.0, colorBalance: { shadows: { r: 0, g: 0, b: 0 }, midtones: { r: 0, g: 0, b: 0 }, highlights: { r: 0, g: 0, b: 0 } }, curves: 'none' }, volume: 100 })}>
-                                    <RotateCw size={14} style={{ marginRight: 8 }} /> {t.resetFilters || 'Reset Filters'}
-                                </button>
-
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 5 }}>
-                                    <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', justifyContent: 'flex-start' }}>
-                                        <button className="action-btn" style={{ width: 34, height: 34, background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} onClick={() => historyUpdateClip('actionTransform', selectedClipId, { rotate: ((selectedClip.rotate || 0) + 90) % 360 })} data-tooltip={t?.rotate || 'Rotate'}>
-                                            <RotateCw size={16} />
-                                        </button>
-                                        <button className={`action-btn ${selectedClip.flipH ? 'active' : ''}`} style={{ width: 34, height: 34, background: selectedClip.flipH ? 'var(--netflix-red)' : 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} onClick={() => historyUpdateClip('actionTransform', selectedClipId, { flipH: !selectedClip.flipH })} data-tooltip={t?.flipH || 'Flip H'}>
-                                            <Maximize2 size={16} style={{ transform: 'rotate(90deg)' }} />
-                                        </button>
-                                        <button className={`action-btn ${selectedClip.flipV ? 'active' : ''}`} style={{ width: 34, height: 34, background: selectedClip.flipV ? 'var(--netflix-red)' : 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} onClick={() => historyUpdateClip('actionTransform', selectedClipId, { flipV: !selectedClip.flipV })} data-tooltip={t?.flipV || 'Flip V'}>
-                                            <Maximize2 size={16} />
-                                        </button>
-                                        <button className="action-btn" style={{ width: 34, height: 34, background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} onClick={() => historyUpdateClip('actionResetTransform', selectedClipId, { rotate: 0, flipH: false, flipV: false, transform: { ...(selectedClip.transform || { x: 0, y: 0 }), scale: 1 } })} data-tooltip={t.resetTransform || 'Reset Transform'}>
-                                            <CornerUpLeft size={16} />
-                                        </button>
-                                    </div>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5 }}>
-                                        <button className="action-btn" style={{ background: 'var(--netflix-red)', color: 'white', border: 'none' }} onClick={() => {
+                                <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
+                                    <button className="action-btn" style={{ flex: 1, background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', justifyContent: 'center', padding: '4px' }}
+                                        onClick={() => historyUpdateClip('actionTransform', selectedClipId, { rotate: ((selectedClip.rotate || 0) + 90) % 360 })}
+                                        data-tooltip={t?.rotate || 'Rotate'}>
+                                        <RotateCw size={14} />
+                                    </button>
+                                    <button className={`action-btn ${selectedClip.flipH ? 'active' : ''}`} style={{ flex: 1, background: selectedClip.flipH ? 'var(--netflix-red)' : 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'white', justifyContent: 'center', padding: '4px' }}
+                                        onClick={() => historyUpdateClip('actionTransform', selectedClipId, { flipH: !selectedClip.flipH })}
+                                        data-tooltip={t?.flipH || 'Flip H'}>
+                                        <Maximize2 size={14} style={{ transform: 'rotate(90deg)' }} />
+                                    </button>
+                                    <button className={`action-btn ${selectedClip.flipV ? 'active' : ''}`} style={{ flex: 1, background: selectedClip.flipV ? 'var(--netflix-red)' : 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'white', justifyContent: 'center', padding: '4px' }}
+                                        onClick={() => historyUpdateClip('actionTransform', selectedClipId, { flipV: !selectedClip.flipV })}
+                                        data-tooltip={t?.flipV || 'Flip V'}>
+                                        <Maximize2 size={14} />
+                                    </button>
+                                    <button className="action-btn" style={{ flex: 1, background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', justifyContent: 'center', padding: '4px' }}
+                                        onClick={() => historyUpdateClip('actionResetTransform', selectedClipId, { rotate: 0, flipH: false, flipV: false, transform: { ...(selectedClip.transform || { x: 0, y: 0 }), scale: 1 } })}
+                                        data-tooltip={t.resetTransform || 'Reset Transform'}>
+                                        <CornerUpLeft size={14} />
+                                    </button>
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, marginTop: 4 }}>
+                                    <button className="action-btn" style={{ background: 'var(--netflix-red)', color: 'white', border: 'none', justifyContent: 'center', padding: '4px' }}
+                                        onClick={() => {
                                             const sw = selectedClip.sourceWidth || canvasSize.w;
                                             const sh = selectedClip.sourceHeight || canvasSize.h;
                                             historyUpdateClip('actionTransform', selectedClipId, { transform: { ...(selectedClip.transform || { x: 0, y: 0 }), x: (canvasSize.w - sw) / 2, y: (canvasSize.h - sh) / 2 } });
-                                        }} data-tooltip={t.center || 'Center'}>
-                                            <Monitor size={16} style={{ marginRight: 8 }} /> {t.center || 'Center'}
-                                        </button>
-                                        <button className="action-btn" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} onClick={() => historyUpdateClip('actionResetPosition', selectedClipId, { transform: { ...(selectedClip.transform || { x: 0, y: 0 }), x: 0, y: 0 } })} data-tooltip={t.resetPosition || 'Reset Position'}>
-                                            <Maximize2 size={16} style={{ marginRight: 8 }} /> {t.resetPosition || 'Reset'}
-                                        </button>
-                                    </div>
+                                        }}
+                                        data-tooltip={t.center || 'Center'}>
+                                        <Monitor size={14} style={{ marginRight: 4 }} /> {t.center || 'Center'}
+                                    </button>
+                                    <button className="action-btn" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', justifyContent: 'center', padding: '4px' }}
+                                        onClick={() => historyUpdateClip('actionResetPosition', selectedClipId, { transform: { ...(selectedClip.transform || { x: 0, y: 0 }), x: 0, y: 0 } })}
+                                        data-tooltip={t.resetPosition || 'Reset Position'}>
+                                        <Maximize2 size={14} style={{ marginRight: 4 }} /> {t.resetPosition || 'Reset'}
+                                    </button>
                                 </div>
-                                <div style={{ marginTop: 10 }}>
-                                    <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: 8, display: 'block' }}>{t?.aspectRatio || 'Aspect Ratio'}</label>
+                                <div style={{ marginTop: 8 }}>
+                                    <label style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginBottom: 6, display: 'block' }}>{t?.aspectRatio || 'Aspect Ratio'}</label>
                                     <div className="ratio-presets" style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                                         <button className="action-btn" style={{ padding: '2px 8px', fontSize: '0.7rem', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} onClick={() => setAspectRatio(1)}>1:1</button>
                                         <button className="action-btn" style={{ padding: '2px 8px', fontSize: '0.7rem', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} onClick={() => setAspectRatio(16 / 9)}>16:9</button>
@@ -2662,15 +3001,23 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                         <button className="action-btn" style={{ padding: '2px 8px', fontSize: '0.7rem', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} onClick={() => setAspectRatio(4 / 3)}>4:3</button>
                                         <button className="action-btn" style={{ padding: '2px 8px', fontSize: '0.7rem', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} onClick={() => setAspectRatio(21 / 9)}>21:9</button>
                                     </div>
+
                                 </div>
+                                <button className="action-btn" style={{ width: '100%', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', justifyContent: 'center', marginTop: 4 }}
+                                    onClick={() => historyUpdateClip('actionResetFilters', selectedClipId, { filters: { brightness: 100, contrast: 100, saturation: 100, exposure: 100, temperature: 0, tint: 0, vibrance: 0, hue: 0, clarity: 0, gamma: 1.0, colorBalance: { shadows: { r: 0, g: 0, b: 0 }, midtones: { r: 0, g: 0, b: 0 }, highlights: { r: 0, g: 0, b: 0 } }, curves: 'none' }, volume: 100 })}>
+                                    <RotateCw size={14} style={{ marginRight: 6 }} /> {t.resetFilters || 'Reset'}
+                                </button>
+
                             </div>
                         ) : (
-                            <p style={{ color: '#666', fontSize: '0.8rem' }}>{t.selectClipToEdit || 'Select a clip to edit properties'}</p>
+                            <p style={{ color: '#666', fontSize: '0.75rem', textAlign: 'center', margin: 0 }}>{t.selectClipToEdit || 'Select a clip'}</p>
                         )}
-                    </div>
+                    </DraggablePanel>
 
                     {/* Right: Viewer */}
-                    <div className="editor-main-area" style={{ display: 'flex', flexDirection: 'column', background: 'var(--bg-primary)', borderLeft: '1px solid var(--border-color)', borderRadius: 8, overflow: 'hidden', height: '100%' }}>
+
+                    <div className="editor-main-area" style={{ display: 'flex', flexDirection: 'column', background: 'var(--bg-primary)', borderRadius: 8, overflow: 'hidden', height: '100%' }}>
+
                         <div className="video-viewport video-viewport-container" ref={containerRef}
                             onMouseDown={handleCanvasMouseDown}
                             onContextMenu={(e) => e.preventDefault()}
