@@ -367,7 +367,19 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
             duration: initialDuration > 0 ? initialDuration : 0.1,
             sourceDuration: initialDuration > 0 ? initialDuration : 0.1,
             offset: 0,
-            filters: { brightness: 100, contrast: 100, saturation: 100, gamma: 1.0 },
+            filters: {
+                brightness: 100, contrast: 100, saturation: 100, exposure: 100,
+                temperature: 0, tint: 0, vibrance: 0, hue: 0, clarity: 0, gamma: 1.0,
+                colorBalance: {
+                    shadows: { r: 0, g: 0, b: 0 },
+                    midtones: { r: 0, g: 0, b: 0 },
+                    highlights: { r: 0, g: 0, b: 0 }
+                },
+                selectiveColor: {
+                    red: 0, green: 0, blue: 0, cyan: 0, magenta: 0, yellow: 0
+                },
+                curves: 'none'
+            },
             crop: { x: 0, y: 0, w: 100, h: 100 },
             rotate: 0, flipH: false, flipV: false, volume: 100
         };
@@ -499,6 +511,26 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
         const path = (activeVClip && activeVClip.type === 'video') ? activeVClip.path : item?.path;
         return `http://localhost:3001/media/${encodeURIComponent(path || '')}?t=${localRefreshKey}`;
     }, [activeVClip?.path, item?.path, localRefreshKey]);
+
+    const colorMatrix = useMemo(() => {
+        if (!activeVClip?.filters) return "1 0 0 0 0 0 1 0 0 0 0 0 1 0 0 0 0 0 1 0";
+        const f = activeVClip.filters;
+        const temp = (f.temperature || 0) / 400; // -0.25 to 0.25
+        const tint = (f.tint || 0) / 400;
+        const exposure = (f.exposure || 100) / 100;
+
+        const cb = f.colorBalance || { shadows: { r: 0, g: 0, b: 0 }, midtones: { r: 0, g: 0, b: 0 }, highlights: { r: 0, g: 0, b: 0 } };
+        const r_off = ((cb.shadows?.r || 0) + (cb.midtones?.r || 0) + (cb.highlights?.r || 0)) / 200;
+        const g_off = ((cb.shadows?.g || 0) + (cb.midtones?.g || 0) + (cb.highlights?.g || 0)) / 200;
+        const b_off = ((cb.shadows?.b || 0) + (cb.midtones?.b || 0) + (cb.highlights?.b || 0)) / 200;
+
+        // Simple Matrix Construction for Preview
+        let r_m = 1 + temp - tint / 2 + r_off;
+        let g_m = 1 + tint + g_off;
+        let b_m = 1 - temp - tint / 2 + b_off;
+
+        return `${r_m * exposure} 0 0 0 0 0 ${g_m * exposure} 0 0 0 0 0 ${b_m * exposure} 0 0 0 0 0 1 0`;
+    }, [activeVClip?.filters]);
 
     const contentDuration = useMemo(() => {
         let max = 0;
@@ -1850,6 +1882,11 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
 
     return (
         <div className="modal-overlay editor-overlay" style={{ zIndex: 7000 }}>
+            <svg width="0" height="0" style={{ position: 'absolute' }}>
+                <filter id="preview-color-correction">
+                    <feColorMatrix type="matrix" values={colorMatrix} />
+                </filter>
+            </svg>
             <div className="modal editor-modal video-editor-modal"
                 onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onClick={e => e.stopPropagation()}>
 
@@ -1921,6 +1958,141 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                 </div>
                                 <div className="control-item" style={{ gap: 2 }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <label style={{ fontSize: '0.65rem', opacity: 0.8, color: 'var(--text-primary)' }}>{t.exposure || 'Exposure'}</label>
+                                        <input type="number" value={selectedClip.filters?.exposure ?? 100}
+                                            onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, exposure: parseInt(e.target.value) || 0 } })}
+                                            style={{ width: 45, background: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: 'var(--netflix-red)', fontSize: '0.65rem', padding: '1px 3px', borderRadius: 3, textAlign: 'center' }} />
+                                    </div>
+                                    <input type="range" min="0" max="200" value={selectedClip.filters?.exposure ?? 100} style={{ height: 3 }}
+                                        onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, exposure: parseInt(e.target.value) } })} />
+                                </div>
+                                <div className="control-item" style={{ gap: 2 }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <label style={{ fontSize: '0.65rem', opacity: 0.8, color: 'var(--text-primary)' }}>{t.temperature || 'Temperature'}</label>
+                                        <input type="number" value={selectedClip.filters?.temperature ?? 0}
+                                            onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, temperature: parseInt(e.target.value) || 0 } })}
+                                            style={{ width: 45, background: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: 'var(--netflix-red)', fontSize: '0.65rem', padding: '1px 3px', borderRadius: 3, textAlign: 'center' }} />
+                                    </div>
+                                    <input type="range" min="-100" max="100" value={selectedClip.filters?.temperature ?? 0} style={{ height: 3 }}
+                                        onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, temperature: parseInt(e.target.value) } })} />
+                                </div>
+                                <div className="control-item" style={{ gap: 2 }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <label style={{ fontSize: '0.65rem', opacity: 0.8, color: 'var(--text-primary)' }}>{t.tint || 'Tint'}</label>
+                                        <input type="number" value={selectedClip.filters?.tint ?? 0}
+                                            onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, tint: parseInt(e.target.value) || 0 } })}
+                                            style={{ width: 45, background: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: 'var(--netflix-red)', fontSize: '0.65rem', padding: '1px 3px', borderRadius: 3, textAlign: 'center' }} />
+                                    </div>
+                                    <input type="range" min="-100" max="100" value={selectedClip.filters?.tint ?? 0} style={{ height: 3 }}
+                                        onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, tint: parseInt(e.target.value) } })} />
+                                </div>
+                                <div className="control-item" style={{ gap: 2 }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <label style={{ fontSize: '0.65rem', opacity: 0.8, color: 'var(--text-primary)' }}>{t.vibrance || 'Vibrance'}</label>
+                                        <input type="number" value={selectedClip.filters?.vibrance ?? 0}
+                                            onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, vibrance: parseInt(e.target.value) || 0 } })}
+                                            style={{ width: 45, background: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: 'var(--netflix-red)', fontSize: '0.65rem', padding: '1px 3px', borderRadius: 3, textAlign: 'center' }} />
+                                    </div>
+                                    <input type="range" min="-100" max="100" value={selectedClip.filters?.vibrance ?? 0} style={{ height: 3 }}
+                                        onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, vibrance: parseInt(e.target.value) } })} />
+                                </div>
+                                <div className="control-item" style={{ gap: 2 }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <label style={{ fontSize: '0.65rem', opacity: 0.8, color: 'var(--text-primary)' }}>{t.clarity || 'Clarity'}</label>
+                                        <input type="number" value={selectedClip.filters?.clarity ?? 0}
+                                            onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, clarity: parseInt(e.target.value) || 0 } })}
+                                            style={{ width: 45, background: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: 'var(--netflix-red)', fontSize: '0.65rem', padding: '1px 3px', borderRadius: 3, textAlign: 'center' }} />
+                                    </div>
+                                    <input type="range" min="0" max="100" value={selectedClip.filters?.clarity ?? 0} style={{ height: 3 }}
+                                        onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, clarity: parseInt(e.target.value) } })} />
+                                </div>
+                                <div className="control-item" style={{ gap: 2 }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <label style={{ fontSize: '0.65rem', opacity: 0.8, color: 'var(--text-primary)' }}>{t.hue || 'Hue'}</label>
+                                        <input type="number" value={selectedClip.filters?.hue ?? 0}
+                                            onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, hue: parseInt(e.target.value) || 0 } })}
+                                            style={{ width: 45, background: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: 'var(--netflix-red)', fontSize: '0.65rem', padding: '1px 3px', borderRadius: 3, textAlign: 'center' }} />
+                                    </div>
+                                    <input type="range" min="-180" max="180" value={selectedClip.filters?.hue ?? 0} style={{ height: 3 }}
+                                        onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, hue: parseInt(e.target.value) } })} />
+                                </div>
+
+                                <div style={{ marginTop: 5, padding: 5, background: 'var(--bg-primary)', borderRadius: 4, border: '1px solid var(--border-color)' }}>
+                                    <label style={{ fontSize: '0.6rem', fontWeight: 'bold', display: 'block', marginBottom: 5, color: 'var(--text-secondary)' }}>COLOR BALANCE (RGB)</label>
+
+                                    {['highlights', 'midtones', 'shadows'].map(type => (
+                                        <div key={type} style={{ marginBottom: 8 }}>
+                                            <div style={{ fontSize: '0.55rem', opacity: 0.7, marginBottom: 2, textTransform: 'uppercase' }}>{t[type] || type}</div>
+                                            <div style={{ display: 'flex', gap: 5 }}>
+                                                {['r', 'g', 'b'].map(color => (
+                                                    <div key={color} style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                                                        <input
+                                                            type="range" min="-100" max="100"
+                                                            value={selectedClip.filters?.colorBalance?.[type]?.[color] ?? 0}
+                                                            style={{ height: 2, accentColor: color === 'r' ? '#f00' : (color === 'g' ? '#0f0' : '#00f') }}
+                                                            onChange={e => {
+                                                                const newVal = parseInt(e.target.value);
+                                                                const newCB = { ...selectedClip.filters.colorBalance };
+                                                                newCB[type] = { ...newCB[type], [color]: newVal };
+                                                                updateClip(selectedClipId, { filters: { ...selectedClip.filters, colorBalance: newCB } });
+                                                            }}
+                                                        />
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <div style={{ marginTop: 5, padding: 5, background: 'var(--bg-primary)', borderRadius: 4, border: '1px solid var(--border-color)' }}>
+                                    <label style={{ fontSize: '0.6rem', fontWeight: 'bold', display: 'block', marginBottom: 5, color: 'var(--text-secondary)' }}>SELECTIVE COLOR (Saturation)</label>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 5 }}>
+                                        {['red', 'green', 'blue', 'cyan', 'magenta', 'yellow'].map(color => {
+                                            const colorsMapping = {
+                                                red: '#ff0000', green: '#00ff00', blue: '#0000ff',
+                                                cyan: '#00ffff', magenta: '#ff00ff', yellow: '#ffff00'
+                                            };
+                                            return (
+                                                <div key={color} style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                                                    <div style={{ fontSize: '10px', textTransform: 'uppercase', opacity: 0.6 }}>{color.substring(0, 3)}</div>
+                                                    <input
+                                                        type="range" min="-100" max="100"
+                                                        value={selectedClip.filters?.selectiveColor?.[color] ?? 0}
+                                                        style={{ height: 2, accentColor: colorsMapping[color] }}
+                                                        onChange={e => {
+                                                            const newVal = parseInt(e.target.value);
+                                                            const newSC = { ...selectedClip.filters.selectiveColor };
+                                                            newSC[color] = newVal;
+                                                            updateClip(selectedClipId, { filters: { ...selectedClip.filters, selectiveColor: newSC } });
+                                                        }}
+                                                    />
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                                <div className="control-item" style={{ gap: 2 }}>
+                                    <label style={{ fontSize: '0.65rem', opacity: 0.8 }}>CURVES PRESET</label>
+                                    <select
+                                        value={selectedClip.filters?.curves ?? 'none'}
+                                        onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, curves: e.target.value } })}
+                                        style={{ width: '100%', background: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', fontSize: '0.7rem', padding: '3px', borderRadius: 3 }}
+                                    >
+                                        <option value="none">None</option>
+                                        <option value="color_negative">Color Negative</option>
+                                        <option value="cross_process">Cross Process</option>
+                                        <option value="darker">Darker</option>
+                                        <option value="lighter">Lighter</option>
+                                        <option value="increase_contrast">Increase Contrast</option>
+                                        <option value="linear_contrast">Linear Contrast</option>
+                                        <option value="medium_contrast">Medium Contrast</option>
+                                        <option value="strong_contrast">Strong Contrast</option>
+                                        <option value="vintage">Vintage</option>
+                                    </select>
+                                </div>
+
+                                <div className="control-item" style={{ gap: 2 }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                         <label style={{ fontSize: '0.65rem', opacity: 0.8, color: 'var(--text-primary)' }}>{t.volume || 'Volume'}</label>
                                         <input type="number" value={selectedClip.volume ?? 100}
                                             onChange={e => {
@@ -1970,7 +2142,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                             updateClip(selectedClipId, { duration: isFinite(newTimelineDur) ? newTimelineDur : 1, sourceDuration: sourceDur });
                                         }} />
                                 </div>
-                                <button className="action-btn" style={{ width: '100%', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', justifyContent: 'center', fontSize: '0.8rem', padding: '6px' }} onClick={() => updateClip(selectedClipId, { filters: { brightness: 100, contrast: 100, saturation: 100, gamma: 1.0 }, volume: 100 })}>
+                                <button className="action-btn" style={{ width: '100%', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', justifyContent: 'center', fontSize: '0.8rem', padding: '6px' }} onClick={() => updateClip(selectedClipId, { filters: { brightness: 100, contrast: 100, saturation: 100, exposure: 100, temperature: 0, tint: 0, vibrance: 0, hue: 0, clarity: 0, gamma: 1.0, colorBalance: { shadows: { r: 0, g: 0, b: 0 }, midtones: { r: 0, g: 0, b: 0 }, highlights: { r: 0, g: 0, b: 0 } }, selectiveColor: { red: 0, green: 0, blue: 0, cyan: 0, magenta: 0, yellow: 0 }, curves: 'none' }, volume: 100 })}>
                                     <RotateCw size={14} style={{ marginRight: 8 }} /> {t.resetFilters || 'Reset Filters'}
                                 </button>
 
@@ -2106,7 +2278,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                                     objectFit: 'fill',
                                                     display: 'block',
                                                     opacity: (activeVClip && activeVClip.type === 'video') || (duration <= 0) ? 1 : 0,
-                                                    filter: activeVClip?.filters ? `brightness(${activeVClip.filters.brightness ?? 100}%) contrast(${activeVClip.filters.contrast ?? 100}%) saturate(${activeVClip.filters.saturation ?? 100}%)` : 'none',
+                                                    filter: activeVClip?.filters ? `url(#preview-color-correction) brightness(${activeVClip.filters.brightness ?? 100}%) contrast(${activeVClip.filters.contrast ?? 100}%) saturate(${(activeVClip.filters.saturation ?? 100) + (activeVClip.filters.vibrance ?? 0)}%) hue-rotate(${activeVClip.filters.hue ?? 0}deg)` : 'none',
                                                     transform: activeVClip ? `translate(${(activeVClip.transform?.x || 0) * viewScaleX}px, ${(activeVClip.transform?.y || 0) * viewScaleY}px) scale(${activeVClip.transform?.scale || 1}) rotate(${activeVClip.rotate || 0}deg) scaleX(${activeVClip.flipH ? -1 : 1}) scaleY(${activeVClip.flipV ? -1 : 1})` : 'none',
                                                     clipPath: activeVClip?.crop ? `inset(${activeVClip.crop.y}% ${100 - (activeVClip.crop.x + activeVClip.crop.w)}% ${100 - (activeVClip.crop.y + activeVClip.crop.h)}% ${activeVClip.crop.x}%)` : 'none'
                                                 }}
@@ -2154,7 +2326,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                                         height: activeVClip?.sourceHeight ? `${(activeVClip.sourceHeight / canvasSize.h) * 100}%` : 'auto',
                                                         objectFit: 'fill',
                                                         opacity: activeVClip?.sourceWidth ? 1 : 0,
-                                                        filter: activeVClip?.filters ? `brightness(${activeVClip.filters.brightness ?? 100}%) contrast(${activeVClip.filters.contrast ?? 100}%) saturate(${activeVClip.filters.saturation ?? 100}%)` : 'none',
+                                                        filter: activeVClip?.filters ? `url(#preview-color-correction) brightness(${activeVClip.filters.brightness ?? 100}%) contrast(${activeVClip.filters.contrast ?? 100}%) saturate(${(activeVClip.filters.saturation ?? 100) + (activeVClip.filters.vibrance ?? 0)}%) hue-rotate(${activeVClip.filters.hue ?? 0}deg)` : 'none',
                                                         transform: activeVClip ? `translate(${(activeVClip.transform?.x || 0) * viewScaleX}px, ${(activeVClip.transform?.y || 0) * viewScaleY}px) scale(${activeVClip.transform?.scale || 1}) rotate(${activeVClip.rotate || 0}deg) scaleX(${activeVClip.flipH ? -1 : 1}) scaleY(${activeVClip.flipV ? -1 : 1})` : 'none',
                                                         transformOrigin: '50% 50%',
                                                         clipPath: activeVClip?.crop ? `inset(${activeVClip.crop.y}% ${100 - (activeVClip.crop.x + activeVClip.crop.w)}% ${100 - (activeVClip.crop.y + activeVClip.crop.h)}% ${activeVClip.crop.x}%)` : 'none'
@@ -2851,21 +3023,23 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
             }
 
             {/* Processing Overlay */}
-            {isProcessing && (
-                <div className="processing-overlay">
-                    <div className="processing-card">
-                        <div className="processing-spinner"></div>
-                        <div className="processing-title">{(t.saving || 'Kaydediliyor...')}</div>
-                        <div className="progress-container">
-                            <div className="progress-bar" style={{ width: `${processingProgress}%` }}></div>
+            {
+                isProcessing && (
+                    <div className="processing-overlay">
+                        <div className="processing-card">
+                            <div className="processing-spinner"></div>
+                            <div className="processing-title">{(t.saving || 'Kaydediliyor...')}</div>
+                            <div className="progress-container">
+                                <div className="progress-bar" style={{ width: `${processingProgress}%` }}></div>
+                            </div>
+                            <div className="progress-percent">%{Math.round(processingProgress)}</div>
+                            <button className="btn btn-grey" onClick={(e) => { e.stopPropagation(); handleCancelProcessing(); }} style={{ marginTop: 10, padding: '8px 24px' }}>
+                                {t.cancel || 'İptal Et'}
+                            </button>
                         </div>
-                        <div className="progress-percent">%{Math.round(processingProgress)}</div>
-                        <button className="btn btn-grey" onClick={(e) => { e.stopPropagation(); handleCancelProcessing(); }} style={{ marginTop: 10, padding: '8px 24px' }}>
-                            {t.cancel || 'İptal Et'}
-                        </button>
                     </div>
-                </div>
-            )}
+                )
+            }
         </div >
     );
 };

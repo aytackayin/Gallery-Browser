@@ -1267,9 +1267,75 @@ app.post('/api/process-video', async (req, res) => {
             vFilters.push(`fps=30`); // Ensure frames are generated/sampled at 30fps for the new duration
             vFilters.push(`setpts=PTS+(${clip.offset}/TB)`); // Move to timeline position
 
-            // 3. ADIM: Filtreler (EQ)
+            // 3. ADIM: Filtreler (EQ & Renk Düzeltme)
             vFilters.push(`eq=brightness=0:contrast=${cVal}:saturation=${s}:gamma=${g}`);
             if (bRatio !== 1) vFilters.push(`lutyuv=y=val*${bRatio}`);
+
+            // Advanced Color Correction
+            const exposure = (clip.filters?.exposure ?? 100);
+            const ev = (exposure - 100) / 20;
+            if (ev !== 0) vFilters.push(`exposure=exposure=${ev}`);
+
+            const vibranceVal = (clip.filters?.vibrance ?? 0) / 100;
+            if (vibranceVal !== 0) vFilters.push(`vibrance=intensity=${vibranceVal}`);
+
+            const temp = (clip.filters?.temperature ?? 0);
+            if (temp !== 0) {
+                const kelvin = 6500 + (temp * 35); // 3000K - 10000K range approx
+                vFilters.push(`colortemperature=temperature=${kelvin}`);
+            }
+
+            const tint = (clip.filters?.tint ?? 0);
+            if (tint !== 0) {
+                // Tint adjustment via colorbalance (green/magenta axis)
+                const tintVal = tint / 200; // -0.5 to 0.5
+                vFilters.push(`colorbalance=gm=${tintVal}`);
+            }
+
+            const hueVal = (clip.filters?.hue ?? 0);
+            if (hueVal !== 0) vFilters.push(`hue=h=${hueVal}`);
+
+            const clarity = (clip.filters?.clarity ?? 0);
+            if (clarity > 0) {
+                const amount = clarity / 100;
+                vFilters.push(`unsharp=luma_msize_x=5:luma_msize_y=5:luma_amount=${amount}`);
+            }
+
+            const cb = clip.filters?.colorBalance;
+            if (cb) {
+                const rs = (cb.shadows?.r ?? 0) / 100;
+                const gs = (cb.shadows?.g ?? 0) / 100;
+                const bs = (cb.shadows?.b ?? 0) / 100;
+                const rm = (cb.midtones?.r ?? 0) / 100;
+                const gm = (cb.midtones?.g ?? 0) / 100;
+                const bm = (cb.midtones?.b ?? 0) / 100;
+                const rh = (cb.highlights?.r ?? 0) / 100;
+                const gh = (cb.highlights?.g ?? 0) / 100;
+                const bh = (cb.highlights?.b ?? 0) / 100;
+
+                if (rs !== 0 || gs !== 0 || bs !== 0 || rm !== 0 || gm !== 0 || bm !== 0 || rh !== 0 || gh !== 0 || bh !== 0) {
+                    vFilters.push(`colorbalance=rs=${rs}:gs=${gs}:bs=${bs}:rm=${rm}:gm=${gm}:bm=${bm}:rh=${rh}:gh=${gh}:bh=${bh}`);
+                }
+            }
+
+            const sc = clip.filters?.selectiveColor;
+            if (sc) {
+                const rs = (sc.red ?? 0) / 100;
+                const gs = (sc.green ?? 0) / 100;
+                const bs = (sc.blue ?? 0) / 100;
+                const cs = (sc.cyan ?? 0) / 100;
+                const ms = (sc.magenta ?? 0) / 100;
+                const ys = (sc.yellow ?? 0) / 100;
+
+                if (rs !== 0 || gs !== 0 || bs !== 0 || cs !== 0 || ms !== 0 || ys !== 0) {
+                    vFilters.push(`huesaturation=red_s=${rs}:green_s=${gs}:blue_s=${bs}:cyan_s=${cs}:magenta_s=${ms}:yellow_s=${ys}`);
+                }
+            }
+
+            const curves = clip.filters?.curves;
+            if (curves && curves !== 'none') {
+                vFilters.push(`curves=preset=${curves}`);
+            }
 
             // 4. ADIM: Scale (Fit + Zoom)
             // Legacy Fit Logic Removed to match Frontend 1:1 pixel mapping
