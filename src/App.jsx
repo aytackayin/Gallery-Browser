@@ -934,12 +934,12 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
             newScrollLeft = playheadPos - viewportWidth + rightMargin + 80;
         }
 
-        // Only scroll if needed and if we're playing or dragging playhead
-        if (newScrollLeft !== scrollLeft && (isPlaying || isDragging?.type === 'playhead')) {
+        // Only scroll if needed
+        if (newScrollLeft !== scrollLeft) {
             // Use instant scroll for immediate response (smooth was too slow)
             timeline.scrollLeft = newScrollLeft;
         }
-    }, [currentTime, zoomLevel, isPlaying, isDragging]);
+    }, [currentTime, zoomLevel]);
 
     // Background Audio Sync Effect
     useEffect(() => {
