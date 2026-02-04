@@ -2295,9 +2295,9 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                 </button>
 
                                 {/* Play / Pause (Merkez) */}
-                                <button className="action-btn" style={{ background: 'white', border: 'none', color: 'black', width: 36, height: 36, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'transform 0.1s' }}
+                                <button className="action-btn" style={{ background: 'white', border: 'none', color: 'black', width: 30, height: 30, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'transform 0.1s', flexShrink: 0 }}
                                     onClick={togglePlay}>
-                                    {isPlaying ? <Pause size={20} fill="black" /> : <Play size={20} fill="black" style={{ marginLeft: 2 }} />}
+                                    {isPlaying ? <Pause size={16} fill="black" /> : <Play size={16} fill="black" style={{ marginLeft: 1.5 }} />}
                                 </button>
 
                                 {/* Hassas İleri (0.05s) */}
