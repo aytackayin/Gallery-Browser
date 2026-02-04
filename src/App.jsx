@@ -563,9 +563,13 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
     const timelineRef = useRef(null);
     const [dragTrackIndex, setDragTrackIndex] = useState(null);
     const [snapLines, setSnapLines] = useState([]);
+    const tracksAtStartRef = useRef(null);
     const lastZoomPoint = useRef({ time: null, x: null });
 
-    const handleDragStart = (idx) => setDragTrackIndex(idx);
+    const handleDragStart = (idx) => {
+        setDragTrackIndex(idx);
+        tracksAtStartRef.current = JSON.stringify(tracks);
+    };
     const handleDragOver = (e, targetIdx) => {
         e.preventDefault();
         if (dragTrackIndex === null || dragTrackIndex === targetIdx) return;
@@ -577,7 +581,13 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
         });
         setDragTrackIndex(targetIdx);
     };
-    const handleDrop = () => setDragTrackIndex(null);
+    const handleDrop = () => {
+        if (tracksAtStartRef.current && tracksAtStartRef.current !== JSON.stringify(tracks)) {
+            pushHistory('actionMoveTrack');
+        }
+        setDragTrackIndex(null);
+        tracksAtStartRef.current = null;
+    };
 
     const moveClipToTrack = (clipId, targetTrackId) => {
         setTracks(prev => {
@@ -729,17 +739,18 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
 
     const removeTrack = (trackId) => {
         if (trackId === 'v1' || trackId === 'a1') return;
-        setTracks(prev => prev.filter(t => t.id !== trackId));
+        const newTracks = tracks.filter(t => t.id !== trackId);
+        setTracks(newTracks);
+        pushHistory('actionDeleteTrack', newTracks);
     };
 
     const moveTrack = (index, direction) => {
-        setTracks(prev => {
-            const newTracks = [...prev];
-            const targetIndex = index + direction;
-            if (targetIndex < 0 || targetIndex >= newTracks.length) return prev;
-            [newTracks[index], newTracks[targetIndex]] = [newTracks[targetIndex], newTracks[index]];
-            return newTracks;
-        });
+        const newTracks = [...tracks];
+        const targetIndex = index + direction;
+        if (targetIndex < 0 || targetIndex >= newTracks.length) return;
+        [newTracks[index], newTracks[targetIndex]] = [newTracks[targetIndex], newTracks[index]];
+        setTracks(newTracks);
+        pushHistory('actionMoveTrack', newTracks);
     };
 
     const updateVideoRect = () => {
@@ -2080,8 +2091,8 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
             // Record history for discrete drag operations ONLY if actual movement occurred
             let actionName = null;
             if (hasMoved) {
-                if (isDragging.type === 'timeline-clip-move') actionName = 'actionMove';
-                else if (isDragging.type === 'timeline-clip-resize') actionName = 'actionResize';
+                if (isDragging.type === 'timeline-clip-move' || isDragging.type === 'clip') actionName = 'actionMove';
+                else if (isDragging.type === 'timeline-clip-resize' || isDragging.type === 'resize-edge') actionName = 'actionResize';
                 else if (isDragging.type === 'canvas-pan') actionName = 'actionTransform';
                 else if (isDragging.type === 'canvas-resize') actionName = 'actionCanvasResize';
                 else if (isDragging.type === 'crop') actionName = 'actionCrop';

@@ -203,6 +203,8 @@
     "actionSpeed": "Adjust Speed",
     "actionPack": "Remove Gaps",
     "actionAddTrack": "Add Track",
+    "actionDeleteTrack": "Delete Track",
+    "actionMoveTrack": "Move Track",
     "actionReset": "Reset",
     "actionResetFilters": "Reset Filters",
     "actionResetTransform": "Reset Transform",

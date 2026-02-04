@@ -203,6 +203,8 @@
     "actionSpeed": "Hız Ayarı",
     "actionPack": "Boşlukları Kaldır",
     "actionAddTrack": "Katman Ekle",
+    "actionDeleteTrack": "Katmanı Sil",
+    "actionMoveTrack": "Katman Taşı",
     "actionReset": "Sıfırla",
     "actionResetFilters": "Filtreleri Sıfırla",
     "actionResetTransform": "Dönüşümü Sıfırla",
