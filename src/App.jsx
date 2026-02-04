@@ -1249,6 +1249,9 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                 if (sel) {
                     const track = latestTracks.find(t => t.clips.some(c => c.id === sel.id));
                     if (track) packClips(track.id);
+                } else {
+                    // Hiçbir şey seçili değilse tüm katmanları toparla
+                    packClips();
                 }
             } else if (e.key === 'Home') {
                 const clip = getLatestSelectedClip();
@@ -1376,8 +1379,21 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
     const selectedClip = getSelectedClip();
 
     const packClips = (targetTrackId = null) => {
-        const updatedTracks = tracks.map(track => {
-            if (targetTrackId && track.id !== targetTrackId) return track;
+        // If called from onClick={packClips}, targetTrackId will be an event object.
+        // We only want to use it if it's a string ID.
+        let actualTrackId = (typeof targetTrackId === 'string') ? targetTrackId : null;
+
+        // Use stateRef to avoid stale closure in keyboard listeners
+        const { tracks: latestTracks, selectedClipId: latestSelectedId } = stateRef.current;
+
+        // If no ID provided (like from the toolbar button), try to use the selected clip's track
+        if (!actualTrackId && latestSelectedId) {
+            const track = latestTracks.find(t => t.clips.some(c => c.id === latestSelectedId));
+            if (track) actualTrackId = track.id;
+        }
+
+        const updatedTracks = latestTracks.map(track => {
+            if (actualTrackId && track.id !== actualTrackId) return track;
             let currentOffset = 0;
             const newClips = [...track.clips]
                 .sort((a, b) => a.offset - b.offset)
@@ -1388,6 +1404,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                 });
             return { ...track, clips: newClips };
         });
+
         setTracks(updatedTracks);
         pushHistory('actionPack', updatedTracks);
     };
@@ -2855,7 +2872,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                 <button className={`action-btn ${activeTool === 'crop' ? 'active' : ''}`} onClick={() => setActiveTool('crop')} data-tooltip={t.projectCanvasResize || 'Project Canvas Resize'}><Monitor size={14} /></button>
                                 <button className={`action-btn ${activeTool === 'split' ? 'active' : ''}`} onClick={handleSplit} data-tooltip={t.splitAtScrubber || 'Split at Scrubber'}><Scissors size={14} /></button>
                                 <button className={`action-btn ${activeTool === 'delete' ? 'active' : ''}`} onClick={handleDelete} data-tooltip={t.deleteSelectedClip || 'Delete Selected Clip'}><Trash size={14} /></button>
-                                <button className="action-btn" onClick={packClips} data-tooltip={t.packClips || 'Pack Clips (Remove Gaps)'}><Droplet size={14} /></button>
+                                <button className="action-btn" onClick={() => packClips()} data-tooltip={t.packClips || 'Pack Clips (Remove Gaps)'}><Droplet size={14} /></button>
                             </div>
                             <div className="toolbar-separator" />
                             <button className="action-btn" onClick={handleScreenshot} data-tooltip={t.takeScreenshot || 'Take Screenshot'} style={{ color: screenshotSuccess ? '#46d369' : 'var(--text-primary)', border: 'none', background: 'transparent' }}>
