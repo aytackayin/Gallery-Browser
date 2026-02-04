@@ -4918,9 +4918,7 @@ function App() {
             // Just update UI and refresh gallery
             setRefreshKey(Date.now());
             setLastActivePath(currentItem.path);
-            setShowVideoEditor(false);
-            setEditVideoItem(null);
-            setSelectedMediaIndex(-1);
+            // Editor stays open per user request
             setToast(t.videoSaved || 'Video processed successfully');
             setTimeout(() => {
                 setToast(null);
