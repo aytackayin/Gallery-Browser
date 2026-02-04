@@ -711,6 +711,64 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
         loadInitialAudioBuffer();
     }, [item]);
 
+    // Initial Media Dimensions Loader (Auto-Resize Canvas)
+    useEffect(() => {
+        const loadInitialDimensions = async () => {
+            if (!item || !item.path) return;
+            const isImage = item.type?.startsWith('image/') || item.path.match(/\.(jpg|jpeg|png|webp|bmp)$/i);
+
+            let w = item.width;
+            let h = item.height;
+            let duration = 0;
+
+            if (!w || !h) {
+                try {
+                    const res = await fetch(`/api/info?path=${encodeURIComponent(item.path)}`);
+                    const data = await res.json();
+                    if (data) {
+                        if (data.width) w = data.width;
+                        if (data.height) h = data.height;
+                        if (data.durationSeconds) duration = data.durationSeconds;
+                    }
+                } catch (e) {
+                    console.error("Failed to load initial dimensions", e);
+                }
+            }
+
+            if (w && h) {
+                // Canvas boyutunu videonun boyutuna eşitle
+                setCanvasSize({ w, h });
+
+                // Klibin metadatasını güncelle
+                setTracks(prev => prev.map(track => ({
+                    ...track,
+                    clips: track.clips.map(c => {
+                        if (c.id === 'clip-0') {
+                            return {
+                                ...c,
+                                sourceWidth: w,
+                                sourceHeight: h,
+                                sourceDuration: duration || c.sourceDuration || c.sourceDuration, // Keep existing if api fails
+                                // Eğer duration çok kısaysa (0.1 gibi placeholder), gerçeği kullan.
+                                // Resimse duration'a dokunma (default 5sn kalsın).
+                                duration: (!isImage && duration > 0.5 && c.duration < 0.2) ? duration : c.duration,
+                                transform: {
+                                    ...(c.transform || {}),
+                                    x: 0,
+                                    y: 0,
+                                    scale: 1
+                                }
+                            };
+                        }
+                        return c;
+                    })
+                })));
+            }
+        };
+
+        loadInitialDimensions();
+    }, [item?.path]);
+
     const [selectedClipId, setSelectedClipId] = useState('clip-0');
     const [activeTool, setActiveTool] = useState('select'); // select, split, delete
     const [isDragging, setIsDragging] = useState(null);
