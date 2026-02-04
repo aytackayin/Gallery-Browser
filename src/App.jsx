@@ -394,7 +394,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
 
     const [history, setHistory] = useState({ stack: [], index: -1 });
     const [showHistory, setShowHistory] = useState(false);
-    const [historyPos, setHistoryPos] = useState({ x: 320, y: 150 });
+    const [historyPos, setHistoryPos] = useState({ x: window.innerWidth - 250, y: 60 });
     const [isDraggingHistory, setIsDraggingHistory] = useState(false);
 
     const pushHistory = useCallback((name, customTracks = null, customCanvas = null) => {
@@ -2083,8 +2083,8 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                 if (isDragging.type === 'timeline-clip-move') actionName = 'actionMove';
                 else if (isDragging.type === 'timeline-clip-resize') actionName = 'actionResize';
                 else if (isDragging.type === 'canvas-pan') actionName = 'actionTransform';
-                else if (isDragging.type === 'canvas-resize') actionName = 'actionTransform';
-                else if (isDragging.type === 'crop') actionName = 'actionTransform';
+                else if (isDragging.type === 'canvas-resize') actionName = 'actionCanvasResize';
+                else if (isDragging.type === 'crop') actionName = 'actionCrop';
             }
 
             if (actionName) {
@@ -2435,7 +2435,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                             updateClip(selectedClipId, { duration: isFinite(newTimelineDur) ? newTimelineDur : 1, sourceDuration: sourceDur });
                                         }} />
                                 </div>
-                                <button className="action-btn" style={{ width: '100%', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', justifyContent: 'center', fontSize: '0.8rem', padding: '6px' }} onClick={() => historyUpdateClip('actionReset', selectedClipId, { filters: { brightness: 100, contrast: 100, saturation: 100, exposure: 100, temperature: 0, tint: 0, vibrance: 0, hue: 0, clarity: 0, gamma: 1.0, colorBalance: { shadows: { r: 0, g: 0, b: 0 }, midtones: { r: 0, g: 0, b: 0 }, highlights: { r: 0, g: 0, b: 0 } }, curves: 'none' }, volume: 100 })}>
+                                <button className="action-btn" style={{ width: '100%', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', justifyContent: 'center', fontSize: '0.8rem', padding: '6px' }} onClick={() => historyUpdateClip('actionResetFilters', selectedClipId, { filters: { brightness: 100, contrast: 100, saturation: 100, exposure: 100, temperature: 0, tint: 0, vibrance: 0, hue: 0, clarity: 0, gamma: 1.0, colorBalance: { shadows: { r: 0, g: 0, b: 0 }, midtones: { r: 0, g: 0, b: 0 }, highlights: { r: 0, g: 0, b: 0 } }, curves: 'none' }, volume: 100 })}>
                                     <RotateCw size={14} style={{ marginRight: 8 }} /> {t.resetFilters || 'Reset Filters'}
                                 </button>
 
@@ -2450,7 +2450,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                         <button className={`action-btn ${selectedClip.flipV ? 'active' : ''}`} style={{ width: 34, height: 34, background: selectedClip.flipV ? 'var(--netflix-red)' : 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} onClick={() => historyUpdateClip('actionTransform', selectedClipId, { flipV: !selectedClip.flipV })} data-tooltip={t?.flipV || 'Flip V'}>
                                             <Maximize2 size={16} />
                                         </button>
-                                        <button className="action-btn" style={{ width: 34, height: 34, background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} onClick={() => historyUpdateClip('actionReset', selectedClipId, { rotate: 0, flipH: false, flipV: false, transform: { ...(selectedClip.transform || { x: 0, y: 0 }), scale: 1 } })} data-tooltip={t.resetTransform || 'Reset Transform'}>
+                                        <button className="action-btn" style={{ width: 34, height: 34, background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} onClick={() => historyUpdateClip('actionResetTransform', selectedClipId, { rotate: 0, flipH: false, flipV: false, transform: { ...(selectedClip.transform || { x: 0, y: 0 }), scale: 1 } })} data-tooltip={t.resetTransform || 'Reset Transform'}>
                                             <CornerUpLeft size={16} />
                                         </button>
                                     </div>
@@ -2462,8 +2462,8 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                         }} data-tooltip={t.center || 'Center'}>
                                             <Monitor size={16} style={{ marginRight: 8 }} /> {t.center || 'Center'}
                                         </button>
-                                        <button className="action-btn" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} onClick={() => historyUpdateClip('actionReset', selectedClipId, { transform: { ...(selectedClip.transform || { x: 0, y: 0 }), x: 0, y: 0 } })} data-tooltip={t.resetPosition || 'Reset Position'}>
-                                            <Maximize2 size={16} style={{ marginRight: 8 }} /> {t.reset || 'Reset'}
+                                        <button className="action-btn" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} onClick={() => historyUpdateClip('actionResetPosition', selectedClipId, { transform: { ...(selectedClip.transform || { x: 0, y: 0 }), x: 0, y: 0 } })} data-tooltip={t.resetPosition || 'Reset Position'}>
+                                            <Maximize2 size={16} style={{ marginRight: 8 }} /> {t.resetPosition || 'Reset'}
                                         </button>
                                     </div>
                                 </div>
@@ -2729,11 +2729,12 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                                 if (originalSize) {
                                                     const newSize = { w: originalSize.w, h: originalSize.h };
                                                     setCanvasSize(newSize);
-                                                    pushHistory('actionTransform', null, newSize);
+                                                    pushHistory('actionCanvasResize', null, newSize);
                                                 }
                                             }}
                                             style={{ padding: '2px 6px', height: 'auto', border: 'none', background: 'transparent' }}
-                                            data-tooltip={t.resetTransform || 'Reset'}
+                                            data-tooltip={t.resetCanvasSize || 'Reset'}
+                                            data-tooltip-pos="top"
                                         >
                                             <CornerUpLeft size={14} color="#e50914" />
                                         </button>
@@ -3175,7 +3176,6 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                                     <h4 style={{ margin: '0 0 5px 0', color: 'var(--netflix-red)', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '1px' }}>{t.helpTitleFunctions || 'Functions'}</h4>
                                     {[
-                                        'helpUndo', 'helpRedo',
                                         'helpRotate', 'helpFlipH', 'helpFlipV', 'helpResetTransform',
                                         'helpCenter', 'helpResetPosition', 'helpAspectRatio', 'helpScreenshot'
                                     ].map(key => (
