@@ -959,6 +959,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
         if (preset === 'increase_contrast' || preset === 'medium_contrast' || preset === 'strong_contrast')
             return { r: "0 0.2 0.8 1", g: "0 0.2 0.8 1", b: "0 0.2 0.8 1" };
         if (preset === 'vintage') return { r: "0.2 0.5 1", g: "0 0.5 0.8", b: "0 0.2 0.6" }; // Sepia-ish
+        if (preset === 'underwater') return { r: "0 0.6 1", g: "0 0.5 1", b: "0 0.4 0.9" }; // Red Boost, Blue Cut
         if (preset === 'cross_process') return { r: "0 0.8 1", g: "0 1", b: "0.2 0.4 1" };
 
         return { r: def, g: def, b: def };
@@ -2919,6 +2920,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                         <option value="medium_contrast">Medium Contrast</option>
                                         <option value="strong_contrast">Strong Contrast</option>
                                         <option value="vintage">Vintage</option>
+                                        <option value="underwater">Underwater (Red Boost)</option>
                                     </select>
                                 </div>
 

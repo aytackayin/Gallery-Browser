@@ -1336,7 +1336,11 @@ app.post('/api/process-video', async (req, res) => {
 
             const curves = clip.filters?.curves;
             if (curves && curves !== 'none') {
-                vFilters.push(`curves=preset=${curves}`);
+                if (curves === 'underwater') {
+                    vFilters.push(`curves=r='0/0 0.5/0.6 1/1':b='0/0 0.5/0.45 1/0.95'`);
+                } else {
+                    vFilters.push(`curves=preset=${curves}`);
+                }
             }
 
             // 4. ADIM: Scale (Fit + Zoom)
