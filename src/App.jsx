@@ -618,7 +618,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
     const [localRefreshKey] = useState(Date.now());
 
     const activeVClip = useMemo(() => {
-        const vTracks = [...tracks].filter(t => t.type === 'video').reverse();
+        const vTracks = [...tracks].filter(t => t.type === 'video');
         for (const track of vTracks) {
             const clip = track.clips.find(c => {
                 const end = c.offset + c.duration;
@@ -1438,7 +1438,14 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
             }
         } catch (e) {
             console.error("Info fetch failed:", e);
-            if (isImage) actualDuration = 5;
+        }
+
+        if (isImage) {
+            actualDuration = 5;
+            if (!sWidth || !sHeight) {
+                sWidth = canvasSize.w;
+                sHeight = canvasSize.h;
+            }
         }
 
         const newClip = {
@@ -2054,7 +2061,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
             let minDelta = snapThreshold;
 
             const snapPoints = [0];
-            tracks.forEach(t => {
+            [...tracks].reverse().forEach(t => { // Reverse tracks to prioritize top layers for snapping
                 t.clips.forEach(c => {
                     snapPoints.push(c.offset);
                     snapPoints.push(c.offset + c.duration);
@@ -2643,10 +2650,10 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                                     style={{
                                                         position: 'absolute',
                                                         left: 0, top: 0,
-                                                        width: activeVClip?.sourceWidth ? `${(activeVClip.sourceWidth / canvasSize.w) * 100}%` : 'auto',
-                                                        height: activeVClip?.sourceHeight ? `${(activeVClip.sourceHeight / canvasSize.h) * 100}%` : 'auto',
+                                                        width: activeVClip?.sourceWidth ? `${(activeVClip.sourceWidth / canvasSize.w) * 100}%` : '100%',
+                                                        height: activeVClip?.sourceHeight ? `${(activeVClip.sourceHeight / canvasSize.h) * 100}%` : '100%',
                                                         objectFit: 'fill',
-                                                        opacity: activeVClip?.sourceWidth ? 1 : 0,
+                                                        opacity: 1,
                                                         filter: activeVClip?.filters ? `url(#preview-color-correction) brightness(${activeVClip.filters.brightness ?? 100}%) contrast(${activeVClip.filters.contrast ?? 100}%) saturate(${(activeVClip.filters.saturation ?? 100) + (activeVClip.filters.vibrance ?? 0)}%) hue-rotate(${activeVClip.filters.hue ?? 0}deg)` : 'none',
                                                         transform: activeVClip ? `translate(${(activeVClip.transform?.x || 0) * viewScaleX}px, ${(activeVClip.transform?.y || 0) * viewScaleY}px) scale(${activeVClip.transform?.scale || 1}) rotate(${activeVClip.rotate || 0}deg) scaleX(${activeVClip.flipH ? -1 : 1}) scaleY(${activeVClip.flipV ? -1 : 1})` : 'none',
                                                         transformOrigin: '50% 50%',
@@ -3018,43 +3025,53 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                                         }}
                                                     >
                                                         {/* Visual Content */}
-                                                        {isVideo && clip.type === 'video' && (
+                                                        {isVideo && (clip.type === 'video' || clip.type === 'image') && (
                                                             <div className="clip-thumbnails" style={{ display: 'flex', width: '100%', height: '100%', position: 'absolute', top: 0, left: 0 }}>
-                                                                {Array.from({ length: numChunks }).map((_, i) => {
-                                                                    const chunkStart = clip.start + (i * SECONDS_PER_CHUNK);
-                                                                    const chunkDuration = Math.min(SECONDS_PER_CHUNK, clip.duration - (i * SECONDS_PER_CHUNK));
+                                                                {clip.type === 'image' ? (
+                                                                    <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#222' }}>
+                                                                        <img
+                                                                            src={`http://localhost:3001/media/${encodeURIComponent(clip.path)}`}
+                                                                            style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'cover', opacity: 0.6 }}
+                                                                            alt=""
+                                                                        />
+                                                                    </div>
+                                                                ) : (
+                                                                    Array.from({ length: numChunks }).map((_, i) => {
+                                                                        const chunkStart = clip.start + (i * SECONDS_PER_CHUNK);
+                                                                        const chunkDuration = Math.min(SECONDS_PER_CHUNK, clip.duration - (i * SECONDS_PER_CHUNK));
 
-                                                                    const clipLeft = (clip.offset || 0) * zoomLevel;
-                                                                    const chunkLeft = clipLeft + (i * SECONDS_PER_CHUNK * zoomLevel);
-                                                                    const chunkWidth = chunkDuration * zoomLevel;
+                                                                        const clipLeft = (clip.offset || 0) * zoomLevel;
+                                                                        const chunkLeft = clipLeft + (i * SECONDS_PER_CHUNK * zoomLevel);
+                                                                        const chunkWidth = chunkDuration * zoomLevel;
 
-                                                                    // Simple Visibility Check
-                                                                    const viewportWidth = timelineRef.current?.clientWidth || 2000;
-                                                                    const isVisible = (chunkLeft + chunkWidth > timelineScroll - 500) &&
-                                                                        (chunkLeft < timelineScroll + viewportWidth + 500);
+                                                                        // Simple Visibility Check
+                                                                        const viewportWidth = timelineRef.current?.clientWidth || 2000;
+                                                                        const isVisible = (chunkLeft + chunkWidth > timelineScroll - 500) &&
+                                                                            (chunkLeft < timelineScroll + viewportWidth + 500);
 
-                                                                    if (!isVisible) return <div key={i} style={{ flex: `0 0 ${chunkWidth}px`, width: chunkWidth, height: '100%' }} />;
+                                                                        if (!isVisible) return <div key={i} style={{ flex: `0 0 ${chunkWidth}px`, width: chunkWidth, height: '100%' }} />;
 
-                                                                    // Client-side thumbnail generation
-                                                                    return (
-                                                                        <div
-                                                                            key={i}
-                                                                            style={{
-                                                                                flex: `0 0 ${chunkWidth}px`,
-                                                                                width: chunkWidth,
-                                                                                height: '100%',
-                                                                                overflow: 'hidden'
-                                                                            }}
-                                                                        >
-                                                                            <VideoThumbnailCanvas
-                                                                                videoPath={clip.path}
-                                                                                startTime={chunkStart}
-                                                                                width={thumbWidth}
-                                                                                height={thumbHeight}
-                                                                            />
-                                                                        </div>
-                                                                    );
-                                                                })}
+                                                                        // Client-side thumbnail generation
+                                                                        return (
+                                                                            <div
+                                                                                key={i}
+                                                                                style={{
+                                                                                    flex: `0 0 ${chunkWidth}px`,
+                                                                                    width: chunkWidth,
+                                                                                    height: '100%',
+                                                                                    overflow: 'hidden'
+                                                                                }}
+                                                                            >
+                                                                                <VideoThumbnailCanvas
+                                                                                    videoPath={clip.path}
+                                                                                    startTime={chunkStart}
+                                                                                    width={thumbWidth}
+                                                                                    height={thumbHeight}
+                                                                                />
+                                                                            </div>
+                                                                        );
+                                                                    })
+                                                                )}
                                                             </div>
                                                         )}
 
@@ -3114,7 +3131,8 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                                                                 />
                                                                             </div>
                                                                         );
-                                                                    }))}
+                                                                    })
+                                                                )}
                                                             </div>
                                                         )}
 

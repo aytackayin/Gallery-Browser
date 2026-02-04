@@ -1061,7 +1061,7 @@ app.post('/api/process-video', async (req, res) => {
 
     try {
         let clips = [];
-        timeline.tracks.forEach(t => {
+        [...timeline.tracks].reverse().forEach(t => {
             t.clips.forEach(c => {
                 if (c.duration > 0.05) clips.push({ ...c, trackType: t.type });
             });
@@ -1177,7 +1177,15 @@ app.post('/api/process-video', async (req, res) => {
         if (targetH % 2 !== 0) targetH -= 1;
 
         const command = ffmpeg();
-        clips.forEach(c => command.input(path.join(rootGalleryPath, c.path)));
+        clips.forEach(c => {
+            const inputPath = path.join(rootGalleryPath, c.path);
+            const isImg = (mime.lookup(inputPath) || '').startsWith('image/');
+            if (isImg) {
+                command.input(inputPath).inputOptions(['-loop 1']);
+            } else {
+                command.input(inputPath);
+            }
+        });
 
         const tempPath = targetPath + '.tmp.mp4';
 
