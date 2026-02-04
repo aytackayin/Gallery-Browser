@@ -1,7 +1,7 @@
 import { AudioWaveformCanvas } from './utils/WaveformGenerator';
 import { VideoThumbnailCanvas, clearVideoThumbnailCache } from './utils/VideoThumbnailGenerator';
 import { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
-import { Folder, X, Play, Pause, ChevronRight, Home, ChevronLeft, Image as ImageIcon, Video as VideoIcon, Search, Trash2, Info, Save, FolderInput, ChevronDown, ChevronUp, Settings, CheckCircle, Scissors, RotateCw, Sun, Contrast, Lock, Unlock, Maximize2, Volume2, Plus, Trash, Droplet, CornerUpLeft, Layers, Crop, Monitor, Camera, FolderPlus, FileText, Tag } from 'lucide-react';
+import { Folder, X, Play, Pause, ChevronRight, Home, ChevronLeft, Image as ImageIcon, Video as VideoIcon, Search, Trash2, Info, Save, FolderInput, ChevronDown, ChevronUp, Settings, CheckCircle, Scissors, RotateCw, Sun, Contrast, Lock, Unlock, Maximize2, Volume2, Plus, Trash, Droplet, CornerUpLeft, Layers, Crop, Monitor, Camera, FolderPlus, FileText, Tag, SkipBack, SkipForward, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import Cropper from "react-cropper";
 import "cropperjs/dist/cropper.css";
 
@@ -2272,12 +2272,54 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                             )}
 
                             {/* Viewer Controls */}
-                            <div style={{ position: 'absolute', bottom: -5, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 15, background: 'rgba(0,0,0,0.6)', padding: '5px 15px', borderRadius: 20 }}>
-                                <button className="action-btn" style={{ background: 'transparent', border: 'none', color: 'white' }} onClick={() => setCurrentTime(prev => Math.max(0, prev - 0.1))}><ChevronLeft size={20} /></button>
-                                <button className="action-btn" style={{ background: 'transparent', border: 'none', color: 'white' }} onClick={togglePlay}>
-                                    {isPlaying ? <Pause size={24} fill="white" /> : <Play size={24} fill="white" />}
+                            <div style={{ position: 'absolute', bottom: -5, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 12, background: 'rgba(0,0,0,0.7)', padding: '6px 18px', borderRadius: 25, alignItems: 'center', backdropFilter: 'blur(5px)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                                {/* En Başa / Klip Başına */}
+                                <button className="action-btn" title={t.goToStart || "Go to Start"} style={{ background: 'transparent', border: 'none', color: 'white', display: 'flex', alignItems: 'center', padding: 4 }}
+                                    onClick={() => {
+                                        const clip = getSelectedClip();
+                                        setCurrentTime(clip ? clip.offset : 0);
+                                    }}>
+                                    <SkipBack size={18} />
                                 </button>
-                                <button className="action-btn" style={{ background: 'transparent', border: 'none', color: 'white' }} onClick={() => setCurrentTime(prev => Math.min(timelineDuration, prev + 0.1))}><ChevronRight size={20} /></button>
+
+                                {/* Geri Sar (1s) */}
+                                <button className="action-btn" title="-1s" style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.7)', display: 'flex', alignItems: 'center', padding: 4 }}
+                                    onClick={() => setCurrentTime(prev => Math.max(0, prev - 1))}>
+                                    <ChevronsLeft size={18} />
+                                </button>
+
+                                {/* Hassas Geri (0.05s) */}
+                                <button className="action-btn" title="-0.05s" style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.9)', display: 'flex', alignItems: 'center', padding: 4 }}
+                                    onClick={() => setCurrentTime(prev => Math.max(0, prev - 0.05))}>
+                                    <ChevronLeft size={18} />
+                                </button>
+
+                                {/* Play / Pause (Merkez) */}
+                                <button className="action-btn" style={{ background: 'white', border: 'none', color: 'black', width: 36, height: 36, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'transform 0.1s' }}
+                                    onClick={togglePlay}>
+                                    {isPlaying ? <Pause size={20} fill="black" /> : <Play size={20} fill="black" style={{ marginLeft: 2 }} />}
+                                </button>
+
+                                {/* Hassas İleri (0.05s) */}
+                                <button className="action-btn" title="+0.05s" style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.9)', display: 'flex', alignItems: 'center', padding: 4 }}
+                                    onClick={() => setCurrentTime(prev => Math.min(timelineDuration, prev + 0.05))}>
+                                    <ChevronRight size={18} />
+                                </button>
+
+                                {/* İleri Sar (1s) */}
+                                <button className="action-btn" title="+1s" style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.7)', display: 'flex', alignItems: 'center', padding: 4 }}
+                                    onClick={() => setCurrentTime(prev => Math.min(timelineDuration, prev + 1))}>
+                                    <ChevronsRight size={18} />
+                                </button>
+
+                                {/* En Sona / Klip Sonuna */}
+                                <button className="action-btn" title={t.goToEnd || "Go to End"} style={{ background: 'transparent', border: 'none', color: 'white', display: 'flex', alignItems: 'center', padding: 4 }}
+                                    onClick={() => {
+                                        const clip = getSelectedClip();
+                                        setCurrentTime(clip ? (clip.offset + clip.duration) : contentDuration);
+                                    }}>
+                                    <SkipForward size={18} />
+                                </button>
                             </div>
                         </div>
                     </div>
