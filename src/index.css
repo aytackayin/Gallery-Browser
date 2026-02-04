@@ -535,15 +535,13 @@ textarea:focus {
 }
 
 .viewer-inner {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  width: 100vw;
+  height: 100vh;
+  display: block;
   z-index: 3010;
   pointer-events: none;
   position: relative;
-  /* Positioning context for speed overlay */
+  overflow: hidden;
 }
 
 .full-media {

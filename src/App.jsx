@@ -3180,10 +3180,9 @@ function App() {
         }
     };
 
-    // Zoom ve Pan State'leri
+    // Zoom ve Pan State (Atomic state to prevent drift)
+    const [zoom, setZoom] = useState({ s: 1, x: 0, y: 0 });
     const [zoomMode, setZoomMode] = useState(false);
-    const [zoomScale, setZoomScale] = useState(1);
-    const [zoomOrigin, setZoomOrigin] = useState({ x: 50, y: 50 });
     const [isPanning, setIsPanning] = useState(false);
     const [hasMoved, setHasMoved] = useState(false);
     const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
@@ -3786,7 +3785,7 @@ function App() {
     const resetAndClose = () => {
         if (selectedMedia) setLastActivePath(selectedMedia.path);
         setZoomMode(false);
-        setZoomScale(1);
+        setZoom({ s: 1, x: 0, y: 0 });
         setHasMoved(false);
         setSelectedMediaIndex(-1);
         if (document.fullscreenElement) document.exitFullscreen();
@@ -3803,7 +3802,7 @@ function App() {
         if (newIndex >= 0 && newIndex < sortedMediaOnly.length) {
             if (videoRef.current) { videoRef.current.pause(); videoRef.current.src = ""; }
             setZoomMode(false);
-            setZoomScale(1);
+            setZoom({ s: 1, x: 0, y: 0 });
             setHasMoved(false);
             setSelectedMediaIndex(newIndex);
         }
@@ -3833,26 +3832,33 @@ function App() {
     const handleZoomWheel = (e) => {
         e.preventDefault();
         const rect = e.currentTarget.getBoundingClientRect();
-        const x = ((e.clientX - rect.left) / rect.width) * 100;
-        const y = ((e.clientY - rect.top) / rect.height) * 100;
 
-        setZoomOrigin({ x, y });
-        const delta = e.deltaY > 0 ? -0.2 : 0.2;
+        // Mouse coordinate relative to the viewport center (0,0 is center)
+        const mx = e.clientX - rect.left - rect.width / 2;
+        const my = e.clientY - rect.top - rect.height / 2;
 
-        setZoomScale(prev => {
-            const newScale = Math.max(1, Math.min(prev + delta, 5));
-            if (newScale > 1) setZoomMode(true);
-            else {
-                setZoomMode(false);
-                setIsPanning(false);
-                setHasMoved(false); // Sürükleme durumunu sıfırla
-            }
-            return newScale;
+        const zoomStep = 1.25;
+        const factor = e.deltaY > 0 ? (1 / zoomStep) : zoomStep;
+
+        setZoom(prev => {
+            let nextS = prev.s * factor;
+
+            // Snap limits
+            if (nextS <= 1.05) return { s: 1, x: 0, y: 0 };
+            if (nextS > 40) nextS = 40; // Max 40x zoom
+
+            // NEW OFFSET = MX - (MX - OLD_OFFSET) * (NEXT_S / PREV_S)
+            // This is the golden formula for zoom-to-cursor with transform-origin: center
+            const nextX = mx - (mx - prev.x) * (nextS / prev.s);
+            const nextY = my - (my - prev.y) * (nextS / prev.s);
+
+            setZoomMode(true);
+            return { s: nextS, x: nextX, y: nextY };
         });
     };
 
     const handleMouseDown = (e) => {
-        if (!zoomMode || zoomScale <= 1 || e.button !== 2) return; // Sadece sağ tık ile kaydırma
+        if (zoom.s <= 1 || e.button !== 2) return; // Right click to pan
         setIsPanning(true);
         setHasMoved(false);
         setDragStart({ x: e.clientX, y: e.clientY });
@@ -3868,10 +3874,10 @@ function App() {
         }
 
         if (hasMoved) {
-            const sensitivity = 0.15 / zoomScale;
-            setZoomOrigin(prev => ({
-                x: Math.max(0, Math.min(100, prev.x - dx * sensitivity)),
-                y: Math.max(0, Math.min(100, prev.y - dy * sensitivity))
+            setZoom(prev => ({
+                ...prev,
+                x: prev.x + dx,
+                y: prev.y + dy
             }));
             setDragStart({ x: e.clientX, y: e.clientY });
         }
@@ -4333,7 +4339,15 @@ function App() {
                                 <img
                                     src={getMediaUrl(selectedMedia.path)}
                                     className="full-media"
-                                    style={{ transform: `scale(${zoomScale})`, transformOrigin: `${zoomOrigin.x}% ${zoomOrigin.y}%`, transition: (zoomScale === 1 || isPanning) ? 'none' : 'transform 0.3s' }}
+                                    style={{
+                                        transform: `translate(${zoom.x}px, ${zoom.y}px) scale(${zoom.s})`,
+                                        transformOrigin: 'center',
+                                        transition: 'none',
+                                        width: '100vw',
+                                        height: '100vh',
+                                        position: 'absolute',
+                                        objectFit: 'contain'
+                                    }}
                                     draggable="false"
                                     onClick={(e) => {
                                         e.stopPropagation();
@@ -4367,9 +4381,13 @@ function App() {
                                         autoPlay={autoPlaySetting}
                                         style={{
                                             display: (showVideoEditor || showEditor) ? 'none' : 'block',
-                                            transform: `scale(${zoomScale})`,
-                                            transformOrigin: `${zoomOrigin.x}% ${zoomOrigin.y}%`,
-                                            transition: (zoomScale === 1 || isPanning) ? 'none' : 'transform 0.3s',
+                                            transform: `translate(${zoom.x}px, ${zoom.y}px) scale(${zoom.s})`,
+                                            transformOrigin: 'center',
+                                            transition: 'none',
+                                            width: '100vw',
+                                            height: '100vh',
+                                            position: 'absolute',
+                                            objectFit: 'contain',
                                             pointerEvents: zoomMode ? 'none' : 'auto'
                                         }}
                                         draggable="false"
