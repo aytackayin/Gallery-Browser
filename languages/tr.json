@@ -208,5 +208,11 @@
     "actionReset": "Sıfırla",
     "actionResetFilters": "Filtreleri Sıfırla",
     "actionResetTransform": "Dönüşümü Sıfırla",
-    "actionResetPosition": "Konumu Sıfırla"
+    "actionResetPosition": "Konumu Sıfırla",
+    "chromaKey": "Chroma Key (Renk Temizleme)",
+    "chromaColor": "Seçilen Renk",
+    "chromaTolerance": "Tolerans",
+    "chromaSimilarity": "Benzerlik",
+    "chromaBlend": "Yumuşatma",
+    "pickColor": "Renk Seç"
 }

@@ -208,5 +208,11 @@
     "actionReset": "Reset",
     "actionResetFilters": "Reset Filters",
     "actionResetTransform": "Reset Transform",
-    "actionResetPosition": "Reset Position"
+    "actionResetPosition": "Reset Position",
+    "chromaKey": "Chroma Key",
+    "chromaColor": "Selected Color",
+    "chromaTolerance": "Tolerance",
+    "chromaSimilarity": "Similarity",
+    "chromaBlend": "Blend",
+    "pickColor": "Pick Color"
 }

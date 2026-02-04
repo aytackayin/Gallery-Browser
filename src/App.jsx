@@ -1,7 +1,7 @@
 import { AudioWaveformCanvas } from './utils/WaveformGenerator';
 import { VideoThumbnailCanvas, clearVideoThumbnailCache } from './utils/VideoThumbnailGenerator';
 import { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from 'react';
-import { Folder, X, Play, Pause, ChevronRight, Home, ChevronLeft, Image as ImageIcon, Video as VideoIcon, Search, Trash2, Info, Save, FolderInput, ChevronDown, ChevronUp, Settings, CheckCircle, Scissors, RotateCw, Sun, Contrast, Lock, Unlock, Maximize2, Volume2, Plus, Trash, Droplet, CornerUpLeft, Layers, Crop, Monitor, Camera, FolderPlus, FileText, Tag, SkipBack, SkipForward, ChevronsLeft, ChevronsRight, Undo, Redo, History } from 'lucide-react';
+import { Folder, X, Play, Pause, ChevronRight, Home, ChevronLeft, Image as ImageIcon, Video as VideoIcon, Search, Trash2, Info, Save, FolderInput, ChevronDown, ChevronUp, Settings, CheckCircle, Scissors, RotateCw, Sun, Contrast, Lock, Unlock, Maximize2, Volume2, Plus, Trash, Droplet, CornerUpLeft, Layers, Crop, Monitor, Camera, FolderPlus, FileText, Tag, SkipBack, SkipForward, ChevronsLeft, ChevronsRight, Undo, Redo, History, Pipette } from 'lucide-react';
 import Cropper from "react-cropper";
 import "cropperjs/dist/cropper.css";
 
@@ -311,6 +311,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
     const [duration, setDuration] = useState(0);
     const [currentTime, setCurrentTime] = useState(0);
     const [isPlaying, setIsPlaying] = useState(false);
+    const [isPickingColor, setIsPickingColor] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
     const [canvasSize, setCanvasSize] = useState({ w: 1920, h: 1080 });
     const [originalSize, setOriginalSize] = useState(null);
@@ -1476,6 +1477,32 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
         }, 1000);
     };
 
+    const pickChromaColor = async () => {
+        if (!window.EyeDropper) {
+            if (onShowToast) onShowToast("EyeDropper API not supported in this browser. Please enter hex color manually.");
+            return;
+        }
+
+        try {
+            const eyeDropper = new window.EyeDropper();
+            const result = await eyeDropper.open();
+            if (result.sRGBHex) {
+                const newFilters = {
+                    ...selectedClip.filters,
+                    chromaKey: {
+                        ...(selectedClip.filters?.chromaKey || { similarity: 0.05, blend: 0.05 }),
+                        color: result.sRGBHex,
+                        enabled: true
+                    }
+                };
+                updateClip(selectedClipId, { filters: newFilters });
+                pushHistory('actionFilter');
+            }
+        } catch (e) {
+            console.log("EyeDropper cancelled or failed", e);
+        }
+    };
+
     const handleCanvasMouseDown = (e) => {
         // Sol tık (0) ile taşıma başlasın
         if (e.button === 0) {
@@ -2329,6 +2356,112 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                         onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, hue: parseInt(e.target.value) } })} />
                                 </div>
 
+                                <div style={{ marginTop: 5, padding: 8, background: 'var(--bg-primary)', borderRadius: 4, border: '1px solid var(--border-color)' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                                        <label style={{ fontSize: '0.65rem', fontWeight: 'bold', color: 'var(--text-secondary)' }}>{t.chromaKey || 'CHROMA KEY'}</label>
+                                        <input
+                                            type="checkbox"
+                                            checked={selectedClip.filters?.chromaKey?.enabled || false}
+                                            onChange={e => {
+                                                const ck = { ...(selectedClip.filters?.chromaKey || { color: '#00ff00', similarity: 0.1, blend: 0.1 }), enabled: e.target.checked };
+                                                updateClip(selectedClipId, { filters: { ...selectedClip.filters, chromaKey: ck } });
+                                                pushHistory('actionFilter');
+                                            }}
+                                        />
+                                    </div>
+
+                                    {selectedClip.filters?.chromaKey?.enabled && (
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                                                <div
+                                                    style={{
+                                                        width: 24, height: 24, borderRadius: 4, border: '1px solid var(--border-color)',
+                                                        background: selectedClip.filters.chromaKey.color || '#00ff00',
+                                                        cursor: 'pointer',
+                                                        position: 'relative',
+                                                        overflow: 'hidden'
+                                                    }}
+                                                    onClick={() => {
+                                                        const el = document.getElementById('chroma-color-input');
+                                                        if (el) el.click();
+                                                    }}
+                                                    title={t.pickColor}
+                                                >
+                                                    <input
+                                                        id="chroma-color-input"
+                                                        type="color"
+                                                        value={selectedClip.filters.chromaKey.color || '#00ff00'}
+                                                        onChange={e => {
+                                                            const ck = { ...selectedClip.filters.chromaKey, color: e.target.value };
+                                                            updateClip(selectedClipId, { filters: { ...selectedClip.filters, chromaKey: ck } });
+                                                        }}
+                                                        style={{ position: 'absolute', top: -10, left: -10, width: 40, height: 40, opacity: 0, cursor: 'pointer' }}
+                                                    />
+                                                </div>
+                                                <input
+                                                    type="text"
+                                                    value={selectedClip.filters.chromaKey.color || '#00ff00'}
+                                                    onChange={e => {
+                                                        const ck = { ...selectedClip.filters.chromaKey, color: e.target.value };
+                                                        updateClip(selectedClipId, { filters: { ...selectedClip.filters, chromaKey: ck } });
+                                                    }}
+                                                    onBlur={() => pushHistory('actionFilter')}
+                                                    style={{ flex: 1, background: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', fontSize: '0.65rem', padding: '2px 5px', borderRadius: 3 }}
+                                                />
+                                                <button
+                                                    onClick={() => pickChromaColor()}
+                                                    style={{
+                                                        background: window.EyeDropper ? 'var(--netflix-red)' : 'var(--bg-secondary)',
+                                                        border: 'none',
+                                                        color: 'white',
+                                                        border: window.EyeDropper ? 'none' : '1px solid var(--border-color)',
+                                                        borderRadius: 3, padding: '2px 6px', fontSize: '0.65rem', cursor: 'pointer',
+                                                        opacity: window.EyeDropper ? 1 : 0.5
+                                                    }}
+                                                    title={window.EyeDropper ? t.pickColor : "EyeDropper not supported"}
+                                                    disabled={!window.EyeDropper}
+                                                >
+                                                    <Pipette size={12} />
+                                                </button>
+                                            </div>
+
+                                            <div className="control-item" style={{ gap: 2 }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                    <label style={{ fontSize: '0.6rem', opacity: 0.8 }}>{t.chromaSimilarity || 'Similarity'}</label>
+                                                    <span style={{ fontSize: '0.6rem', color: 'var(--netflix-red)' }}>{(selectedClip.filters.chromaKey.similarity || 0.05).toFixed(2)}</span>
+                                                </div>
+                                                <input
+                                                    type="range" min="0.01" max="1" step="0.01"
+                                                    value={selectedClip.filters.chromaKey.similarity || 0.05}
+                                                    onChange={e => {
+                                                        const ck = { ...selectedClip.filters.chromaKey, similarity: parseFloat(e.target.value) };
+                                                        updateClip(selectedClipId, { filters: { ...selectedClip.filters, chromaKey: ck } });
+                                                    }}
+                                                    onMouseUp={() => pushHistory('actionFilter')}
+                                                    style={{ height: 2 }}
+                                                />
+                                            </div>
+
+                                            <div className="control-item" style={{ gap: 2 }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                    <label style={{ fontSize: '0.6rem', opacity: 0.8 }}>{t.chromaBlend || 'Blend'}</label>
+                                                    <span style={{ fontSize: '0.6rem', color: 'var(--netflix-red)' }}>{(selectedClip.filters.chromaKey.blend || 0.05).toFixed(2)}</span>
+                                                </div>
+                                                <input
+                                                    type="range" min="0" max="1" step="0.01"
+                                                    value={selectedClip.filters.chromaKey.blend || 0.05}
+                                                    onChange={e => {
+                                                        const ck = { ...selectedClip.filters.chromaKey, blend: parseFloat(e.target.value) };
+                                                        updateClip(selectedClipId, { filters: { ...selectedClip.filters, chromaKey: ck } });
+                                                    }}
+                                                    onMouseUp={() => pushHistory('actionFilter')}
+                                                    style={{ height: 2 }}
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
                                 <div style={{ marginTop: 5, padding: 5, background: 'var(--bg-primary)', borderRadius: 4, border: '1px solid var(--border-color)' }}>
                                     <label style={{ fontSize: '0.6rem', fontWeight: 'bold', display: 'block', marginBottom: 5, color: 'var(--text-secondary)' }}>COLOR BALANCE (RGB)</label>
 
@@ -2541,89 +2674,139 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                         );
                                     }
 
-                                    return activeVClips.map((clip) => {
-                                        const isMain = clip.id === activeVClip?.id;
-                                        const url = `http://localhost:3001/media/${encodeURIComponent(clip.path)}?t=${localRefreshKey}`;
+                                    return (
+                                        <>
+                                            {/* Chroma Key Filters */}
+                                            {activeVClips.map(clip => {
+                                                const ck = clip.filters?.chromaKey;
+                                                if (!ck || !ck.enabled || !ck.color) return null;
 
-                                        if (clip.type === 'video') {
-                                            return (
-                                                <video
-                                                    key={clip.id}
-                                                    data-clip-id={clip.id}
-                                                    ref={isMain ? videoRef : null}
-                                                    src={url}
-                                                    preload="auto"
-                                                    autoPlay={false}
-                                                    muted={!isMain}
-                                                    playsInline={true}
-                                                    crossOrigin="anonymous"
-                                                    onLoadedMetadata={(e) => onMetadata(e, clip.id)}
-                                                    onDurationChange={(e) => onMetadata(e, clip.id)}
-                                                    onLoadedData={() => {
-                                                        updateVideoRect();
-                                                        if (isMain && videoRef.current?.duration && duration <= 0) syncDuration(videoRef.current.duration);
-                                                    }}
-                                                    onCanPlay={() => {
-                                                        updateVideoRect();
-                                                        if (isMain && videoRef.current) {
-                                                            videoRef.current.muted = false;
-                                                            if (selectedClip) videoRef.current.volume = selectedClip.volume / 100;
-                                                        }
-                                                    }}
-                                                    onTimeUpdate={isMain ? handleTimeUpdate : null}
-                                                    style={{
-                                                        position: 'absolute',
-                                                        left: 0, top: 0,
-                                                        width: clip.sourceWidth ? `${(clip.sourceWidth / canvasSize.w) * 100}%` : '100%',
-                                                        height: clip.sourceHeight ? `${(clip.sourceHeight / canvasSize.h) * 100}%` : '100%',
-                                                        objectFit: 'fill',
-                                                        display: 'block',
-                                                        opacity: 1,
-                                                        filter: clip.filters ? `url(#preview-color-correction) brightness(${clip.filters.brightness ?? 100}%) contrast(${clip.filters.contrast ?? 100}%) saturate(${(clip.filters.saturation ?? 100) + (clip.filters.vibrance ?? 0)}%) hue-rotate(${clip.filters.hue ?? 0}deg)` : 'none',
-                                                        transform: `translate(${(clip.transform?.x || 0) * viewScaleX}px, ${(clip.transform?.y || 0) * viewScaleY}px) scale(${clip.transform?.scale || 1}) rotate(${clip.rotate || 0}deg) scaleX(${clip.flipH ? -1 : 1}) scaleY(${clip.flipV ? -1 : 1})`,
-                                                        clipPath: clip.crop ? `inset(${clip.crop.y}% ${100 - (clip.crop.x + clip.crop.w)}% ${100 - (clip.crop.y + clip.crop.h)}% ${clip.crop.x}%)` : 'none',
-                                                        zIndex: isMain ? 10 : 1
-                                                    }}
-                                                />
-                                            );
-                                        } else {
-                                            return (
-                                                <img
-                                                    key={clip.id}
-                                                    draggable={false}
-                                                    src={`http://localhost:3001/media/${encodeURIComponent(clip.path)}`}
-                                                    alt="Preview"
-                                                    onLoad={(e) => {
-                                                        const nw = e.target.naturalWidth;
-                                                        const nh = e.target.naturalHeight;
-                                                        if (!clip.sourceWidth || clip.sourceWidth === 0) {
-                                                            const dx = (canvasSize.w - nw) / 2;
-                                                            const dy = (canvasSize.h - nh) / 2;
-                                                            updateClip(clip.id, {
-                                                                sourceWidth: nw,
-                                                                sourceHeight: nh,
-                                                                transform: { ...(clip.transform || { scale: 1 }), x: dx, y: dy }
-                                                            });
-                                                        }
-                                                        updateVideoRect();
-                                                    }}
-                                                    style={{
-                                                        position: 'absolute',
-                                                        left: 0, top: 0,
-                                                        width: clip.sourceWidth ? `${(clip.sourceWidth / canvasSize.w) * 100}%` : '100%',
-                                                        height: clip.sourceHeight ? `${(clip.sourceHeight / canvasSize.h) * 100}%` : '100%',
-                                                        objectFit: 'fill',
-                                                        opacity: 1,
-                                                        filter: clip.filters ? `url(#preview-color-correction) brightness(${clip.filters.brightness ?? 100}%) contrast(${clip.filters.contrast ?? 100}%) saturate(${(clip.filters.saturation ?? 100) + (clip.filters.vibrance ?? 0)}%) hue-rotate(${clip.filters.hue ?? 0}deg)` : 'none',
-                                                        transform: `translate(${(clip.transform?.x || 0) * viewScaleX}px, ${(clip.transform?.y || 0) * viewScaleY}px) scale(${clip.transform?.scale || 1}) rotate(${clip.rotate || 0}deg) scaleX(${clip.flipH ? -1 : 1}) scaleY(${clip.flipV ? -1 : 1})`,
-                                                        transformOrigin: '50% 50%',
-                                                        clipPath: clip.crop ? `inset(${clip.crop.y}% ${100 - (clip.crop.x + clip.crop.w)}% ${100 - (clip.crop.y + clip.crop.h)}% ${clip.crop.x}%)` : 'none',
-                                                        zIndex: isMain ? 10 : 1
-                                                    }}
-                                                />
-                                            );
-                                        }
-                                    });
+                                                const hex = ck.color;
+                                                const rt = parseInt(hex.slice(1, 3), 16) / 255;
+                                                const gt = parseInt(hex.slice(3, 5), 16) / 255;
+                                                const bt = parseInt(hex.slice(5, 7), 16) / 255;
+
+                                                const sim = ck.similarity || 0.05;
+                                                const blend = ck.blend || 0.05;
+
+                                                // Dynamic Matrix for Chroma Key preview
+                                                // We want to calculate: dist = |R-rt| + |G-gt| + |B-bt| (scaled)
+                                                // Then alpha = clamp((dist - similarity) / blend, 0, 1)
+                                                // This is still an approximation for SVG but much better
+
+                                                // Matrix approach: Detect dominance of target color
+                                                let matrix = "1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 1 0";
+
+                                                // Scale factors based on similarity/blend
+                                                const s = 1.0 / Math.max(0.01, blend);
+                                                const b = -(sim / Math.max(0.01, blend));
+
+                                                if (gt > rt && gt > bt) { // Green screen
+                                                    matrix = `1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  ${s * 0.8} ${-s * 1.2} ${s * 0.8} 0 ${1 + b}`;
+                                                } else if (rt > gt && rt > bt) { // Red screen
+                                                    matrix = `1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  ${-s * 1.2} ${s * 0.8} ${s * 0.8} 0 ${1 + b}`;
+                                                } else if (bt > rt && bt > gt) { // Blue screen
+                                                    matrix = `1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  ${s * 0.8} ${s * 0.8} ${-s * 1.2} 0 ${1 + b}`;
+                                                } else { // Neutral/Other
+                                                    matrix = `1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  ${s * 0.5} ${-s * 0.5} ${s * 0.5} 0 ${1 + b}`;
+                                                }
+
+                                                return (
+                                                    <svg key={`chroma-svg-${clip.id}`} style={{ position: 'absolute', width: 0, height: 0 }}>
+                                                        <filter id={`chroma-filter-${clip.id}`}>
+                                                            <feColorMatrix type="matrix" values={matrix} />
+                                                        </filter>
+                                                    </svg>
+                                                );
+                                            })}
+
+                                            {activeVClips.map((clip) => {
+                                                const isMain = clip.id === activeVClip?.id;
+                                                const url = `http://localhost:3001/media/${encodeURIComponent(clip.path)}?t=${localRefreshKey}`;
+                                                const ck = clip.filters?.chromaKey;
+                                                const filterId = (ck && ck.enabled) ? `chroma-filter-${clip.id}` : null;
+
+                                                if (clip.type === 'video') {
+                                                    return (
+                                                        <video
+                                                            key={clip.id}
+                                                            data-clip-id={clip.id}
+                                                            ref={isMain ? videoRef : null}
+                                                            src={url}
+                                                            preload="auto"
+                                                            autoPlay={false}
+                                                            muted={!isMain}
+                                                            playsInline={true}
+                                                            crossOrigin="anonymous"
+                                                            onLoadedMetadata={(e) => onMetadata(e, clip.id)}
+                                                            onDurationChange={(e) => onMetadata(e, clip.id)}
+                                                            onLoadedData={() => {
+                                                                updateVideoRect();
+                                                                if (isMain && videoRef.current?.duration && duration <= 0) syncDuration(videoRef.current.duration);
+                                                            }}
+                                                            onCanPlay={() => {
+                                                                updateVideoRect();
+                                                                if (isMain && videoRef.current) {
+                                                                    videoRef.current.muted = false;
+                                                                    if (selectedClip) videoRef.current.volume = selectedClip.volume / 100;
+                                                                }
+                                                            }}
+                                                            onTimeUpdate={isMain ? handleTimeUpdate : null}
+                                                            style={{
+                                                                position: 'absolute',
+                                                                left: 0, top: 0,
+                                                                width: clip.sourceWidth ? `${(clip.sourceWidth / canvasSize.w) * 100}%` : '100%',
+                                                                height: clip.sourceHeight ? `${(clip.sourceHeight / canvasSize.h) * 100}%` : '100%',
+                                                                objectFit: 'fill',
+                                                                display: 'block',
+                                                                opacity: isMain && isDragging?.type?.startsWith('canvas-') ? 0.7 : 1,
+                                                                filter: `${filterId ? `url(#${filterId}) ` : ''}${clip.filters ? `url(#preview-color-correction) brightness(${clip.filters.brightness ?? 100}%) contrast(${clip.filters.contrast ?? 100}%) saturate(${(clip.filters.saturation ?? 100) + (clip.filters.vibrance ?? 0)}%) hue-rotate(${clip.filters.hue ?? 0}deg)` : ''}` || 'none',
+                                                                transform: `translate(${(clip.transform?.x || 0) * viewScaleX}px, ${(clip.transform?.y || 0) * viewScaleY}px) scale(${clip.transform?.scale || 1}) rotate(${clip.rotate || 0}deg) scaleX(${clip.flipH ? -1 : 1}) scaleY(${clip.flipV ? -1 : 1})`,
+                                                                clipPath: clip.crop ? `inset(${clip.crop.y}% ${100 - (clip.crop.x + clip.crop.w)}% ${100 - (clip.crop.y + clip.crop.h)}% ${clip.crop.x}%)` : 'none',
+                                                                zIndex: isMain ? 10 : 1
+                                                            }}
+                                                        />
+                                                    );
+                                                } else {
+                                                    return (
+                                                        <img
+                                                            key={clip.id}
+                                                            src={url}
+                                                            draggable={false}
+                                                            onLoad={(e) => {
+                                                                const nw = e.target.naturalWidth;
+                                                                const nh = e.target.naturalHeight;
+                                                                if (!clip.sourceWidth || clip.sourceWidth === 0) {
+                                                                    const dx = (canvasSize.w - nw) / 2;
+                                                                    const dy = (canvasSize.h - nh) / 2;
+                                                                    updateClip(clip.id, {
+                                                                        sourceWidth: nw,
+                                                                        sourceHeight: nh,
+                                                                        transform: { ...(clip.transform || { scale: 1 }), x: dx, y: dy }
+                                                                    });
+                                                                }
+                                                                updateVideoRect();
+                                                            }}
+                                                            style={{
+                                                                position: 'absolute',
+                                                                left: 0, top: 0,
+                                                                width: clip.sourceWidth ? `${(clip.sourceWidth / canvasSize.w) * 100}%` : '100%',
+                                                                height: clip.sourceHeight ? `${(clip.sourceHeight / canvasSize.h) * 100}%` : '100%',
+                                                                objectFit: 'fill',
+                                                                display: 'block',
+                                                                opacity: isMain && isDragging?.type?.startsWith('canvas-') ? 0.7 : 1,
+                                                                filter: `${filterId ? `url(#${filterId}) ` : ''}${clip.filters ? `url(#preview-color-correction) brightness(${clip.filters.brightness ?? 100}%) contrast(${clip.filters.contrast ?? 100}%) saturate(${(clip.filters.saturation ?? 100) + (clip.filters.vibrance ?? 0)}%) hue-rotate(${clip.filters.hue ?? 0}deg)` : ''}` || 'none',
+                                                                transform: `translate(${(clip.transform?.x || 0) * viewScaleX}px, ${(clip.transform?.y || 0) * viewScaleY}px) scale(${clip.transform?.scale || 1}) rotate(${clip.rotate || 0}deg) scaleX(${clip.flipH ? -1 : 1}) scaleY(${clip.flipV ? -1 : 1})`,
+                                                                transformOrigin: '50% 50%',
+                                                                clipPath: clip.crop ? `inset(${clip.crop.y}% ${100 - (clip.crop.x + clip.crop.w)}% ${100 - (clip.crop.y + clip.crop.h)}% ${clip.crop.x}%)` : 'none',
+                                                                zIndex: isMain ? 10 : 1
+                                                            }}
+                                                        />
+                                                    );
+                                                }
+                                            })}
+                                        </>
+                                    );
                                 })()}
 
                                 {/* Snap Lines Overlay - Red dotted lines */}

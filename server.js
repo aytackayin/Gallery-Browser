@@ -1369,6 +1369,15 @@ app.post('/api/process-video', async (req, res) => {
             if (clip.flipH) vFilters.push('hflip');
             vFilters.push('format=yuva420p');
 
+            // Chroma Key
+            const ck = clip.filters?.chromaKey;
+            if (ck && ck.enabled && ck.color) {
+                const color = ck.color.replace('#', '0x');
+                const similarity = ck.similarity ?? 0.05;
+                const blend = ck.blend ?? 0.05;
+                vFilters.push(`chromakey=${color}:${similarity}:${blend}`);
+            }
+
             filterComplex.push({
                 inputs: `${idx}:v`,
                 filter: vFilters.join(','),
@@ -1436,7 +1445,7 @@ app.post('/api/process-video', async (req, res) => {
             const nextVLabel = `ov_${vClipCounter}`;
             filterComplex.push({
                 inputs: [currentVLabel, outLabel],
-                filter: `overlay=x=${overlayX}:y=${overlayY}:enable='between(t,${clip.offset},${clip.offset + clip.duration})':eof_action=pass:format=yuv420`,
+                filter: `overlay=x=${overlayX}:y=${overlayY}:enable='between(t,${clip.offset},${clip.offset + clip.duration})':eof_action=pass:format=auto`,
                 outputs: nextVLabel
             });
             currentVLabel = nextVLabel;
