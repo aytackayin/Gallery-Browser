@@ -2742,33 +2742,30 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                                 const bt = parseInt(hex.slice(5, 7), 16) / 255;
 
                                                 const sim = ck.similarity || 0.05;
-                                                const blend = ck.blend || 0.05;
+                                                const blend = ck.blend || 0.01;
 
-                                                // Improved single-pass matrix for Chroma Key
-                                                // We want Alpha = clamp(1.0 - (Dist - similarity) / blend, 0, 1)
-                                                // Dist is approximated linearly for the target color dominance.
-
-                                                const s = 1.0 / Math.max(0.001, blend);
+                                                // 1:1 FFmpeg Approximation for SVG
+                                                // FFmpeg similarity 0.01-1.0 is quite sensitive.
+                                                // We use a matrix that isolates the target color.
+                                                const sensitivity = 1.0 / Math.max(0.001, blend);
                                                 const offset = 1.0 + (sim / Math.max(0.001, blend));
 
-                                                let matrix = "1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 1 0";
+                                                let alphaMatrix = "1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 1 0";
 
-                                                if (gt > rt && gt > bt) { // Green Screen
-                                                    // Alpha = offset - s * (G - (R+B)/1.6)
-                                                    matrix = `1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  ${s * 0.62} ${-s} ${s * 0.62} 0 ${offset}`;
-                                                } else if (rt > gt && rt > bt) { // Red Screen
-                                                    matrix = `1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  ${-s} ${s * 0.62} ${s * 0.62} 0 ${offset}`;
-                                                } else if (bt > rt && bt > gt) { // Blue Screen
-                                                    matrix = `1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  ${s * 0.62} ${s * 0.62} ${-s} 0 ${offset}`;
-                                                } else { // Neutral
-                                                    const avg = (rt + gt + bt) / 3;
-                                                    matrix = `1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  ${rt > avg ? -s : s * 0.5} ${gt > avg ? -s : s * 0.5} ${bt > avg ? -s : s * 0.5} 0 ${offset}`;
+                                                if (gt > rt && gt > bt) { // Green
+                                                    // Preserves RGB (Rows 1-3), modifies Alpha (Row 4)
+                                                    alphaMatrix = `1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  ${sensitivity * 0.5} ${-sensitivity} ${sensitivity * 0.5} 0 ${offset}`;
+                                                } else if (bt > rt && bt > gt) { // Blue
+                                                    alphaMatrix = `1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  ${sensitivity * 0.5} ${sensitivity * 0.5} ${-sensitivity} 0 ${offset}`;
+                                                } else { // Generic
+                                                    alphaMatrix = `1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  ${-sensitivity} ${sensitivity * 0.5} ${sensitivity * 0.5} 0 ${offset}`;
                                                 }
 
                                                 return (
                                                     <svg key={`chroma-svg-${clip.id}`} style={{ position: 'absolute', width: 0, height: 0 }}>
-                                                        <filter id={`chroma-filter-${clip.id}`}>
-                                                            <feColorMatrix type="matrix" values={matrix} />
+                                                        <filter id={`chroma-filter-${clip.id}`} colorInterpolationFilters="sRGB">
+                                                            {/* Step 1: Accurate Alpha Mask */}
+                                                            <feColorMatrix type="matrix" values={alphaMatrix} />
                                                         </filter>
                                                     </svg>
                                                 );

@@ -1187,7 +1187,8 @@ app.post('/api/process-video', async (req, res) => {
             }
         });
 
-        const tempPath = targetPath + '.tmp.mp4';
+        const processId = Date.now().toString();
+        const tempPath = targetPath + `.${processId}.tmp.mp4`;
 
         let totalTimelineDuration = 0;
         clips.forEach(c => {
@@ -1367,15 +1368,30 @@ app.post('/api/process-video', async (req, res) => {
                 else if (clip.rotate === 270) vFilters.push('transpose=2');
             }
             if (clip.flipH) vFilters.push('hflip');
-            vFilters.push('format=yuva420p');
 
-            // Chroma Key
+            // Chroma Key & Professional Despill
             const ck = clip.filters?.chromaKey;
             if (ck && ck.enabled && ck.color) {
                 const color = ck.color.replace('#', '0x');
-                const similarity = ck.similarity ?? 0.05;
-                const blend = ck.blend ?? 0.05;
+
+                // 1:1 Mapping: What user sees in UI is exactly what FFmpeg gets.
+                // This makes tuning much easier.
+                const similarity = parseFloat(ck.similarity ?? 0.05).toFixed(3);
+                const blend = parseFloat(ck.blend ?? 0.01).toFixed(3);
+
+                vFilters.push('format=yuva420p');
                 vFilters.push(`chromakey=${color}:${similarity}:${blend}`);
+
+                // Professional Despill (Newer FFmpeg feature)
+                // If not supported, it falls back gracefully or we can use lutrgb
+                // It targets only the "spill" (green light reflecting on the person)
+                if (ck.color.toLowerCase().match(/#([0-2][0-9a-f])?([7-9a-f][0-9a-f])([0-2][0-9a-f])?/)) {
+                    vFilters.push("despill=type=green:expand=0.1");
+                } else if (ck.color.toLowerCase().match(/#([0-2][0-9a-f])?([0-2][0-9a-f])([7-9a-f][0-9a-f])/)) {
+                    vFilters.push("despill=type=blue:expand=0.1");
+                }
+            } else {
+                vFilters.push('format=yuva420p');
             }
 
             filterComplex.push({
@@ -1524,7 +1540,6 @@ app.post('/api/process-video', async (req, res) => {
 
         // File existence already checked at the beginning of this function
         // Now start SSE stream for processing
-        const processId = Date.now().toString();
         res.setHeader('Content-Type', 'text/event-stream');
         res.setHeader('Cache-Control', 'no-cache');
         res.setHeader('Connection', 'keep-alive');
@@ -1579,10 +1594,13 @@ app.post('/api/process-video', async (req, res) => {
 
         // Handle client disconnect
         req.on('close', () => {
-            // Optional: Auto-kill on disconnect? User asked for a cancel button, 
-            // but killing on close is good practice for orphan processes.
-            // activeProcesses.get(processId)?.kill();
-            // activeProcesses.delete(processId);
+            // Kill process if it's still running and connection closed unexpectedly
+            if (activeProcesses.has(processId)) {
+                console.log(`[Server] Killing orphan process ${processId} due to connection close`);
+                activeProcesses.get(processId)?.kill('SIGKILL');
+                activeProcesses.delete(processId);
+                if (fs.existsSync(tempPath)) { try { fs.unlinkSync(tempPath); } catch (e) { } }
+            }
         });
 
     } catch (e) {
