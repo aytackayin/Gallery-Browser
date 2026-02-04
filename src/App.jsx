@@ -4280,22 +4280,22 @@ function App() {
                     <div className="viewer" onClick={() => resetAndClose()} onContextMenu={(e) => { e.preventDefault(); if (zoomMode && !hasMoved) { setZoomMode(false); setZoomScale(1); } }}>
                         <div className="viewer-controls">
                             <div className="viewer-controls-inner">
-                                <button className="control-btn" data-tooltip={t.editInfoRename || 'Edit Info & Rename'} onClick={(e) => { e.stopPropagation(); openEditModal(selectedMedia); }} style={{ color: '#0071eb' }}>
+                                <button className="control-btn" data-tooltip={t.editInfoRename || 'Edit Info & Rename'} data-tooltip-pos="bottom" onClick={(e) => { e.stopPropagation(); openEditModal(selectedMedia); }} style={{ color: '#0071eb' }}>
                                     <Info size={18} />
                                 </button>
                                 {selectedMedia.type.startsWith('video/') && (
-                                    <button className="control-btn" data-tooltip={t.takeScreenshot || 'Take Screenshot'} onClick={handleViewerScreenshot} style={{ color: '#fff' }}>
+                                    <button className="control-btn" data-tooltip={t.takeScreenshot || 'Take Screenshot'} data-tooltip-pos="bottom" onClick={handleViewerScreenshot} style={{ color: '#fff' }}>
                                         <Camera size={18} />
                                     </button>
                                 )}
-                                <button className="control-btn" data-tooltip={t.move || 'Move'} onClick={(e) => { e.stopPropagation(); setMoveModal(selectedMedia); }} style={{ color: '#ff8c00' }}>
+                                <button className="control-btn" data-tooltip={t.move || 'Move'} data-tooltip-pos="bottom" onClick={(e) => { e.stopPropagation(); setMoveModal(selectedMedia); }} style={{ color: '#ff8c00' }}>
                                     <FolderInput size={18} />
                                 </button>
-                                <button className="control-btn" data-tooltip={t.delete || 'Delete'} onClick={(e) => { e.stopPropagation(); setConfirmDelete(selectedMedia); }} style={{ color: '#e50914' }}>
+                                <button className="control-btn" data-tooltip={t.delete || 'Delete'} data-tooltip-pos="bottom" onClick={(e) => { e.stopPropagation(); setConfirmDelete(selectedMedia); }} style={{ color: '#e50914' }}>
                                     <Trash2 size={18} />
                                 </button>
                                 {selectedMedia.type.startsWith('image/') && (
-                                    <button className="control-btn" data-tooltip={t.editImage || 'Edit Image'} onClick={(e) => {
+                                    <button className="control-btn" data-tooltip={t.editImage || 'Edit Image'} data-tooltip-pos="bottom" onClick={(e) => {
                                         e.stopPropagation();
                                         setShowEditor(true);
                                     }} style={{ color: '#46d369' }}>
@@ -4303,7 +4303,7 @@ function App() {
                                     </button>
                                 )}
                                 {selectedMedia.type.startsWith('video/') && (
-                                    <button className="control-btn" data-tooltip={t.editVideo || 'Video Editor'} onClick={(e) => {
+                                    <button className="control-btn" data-tooltip={t.editVideo || 'Video Editor'} data-tooltip-pos="bottom" onClick={(e) => {
                                         e.stopPropagation();
                                         if (videoRef.current) videoRef.current.pause();
                                         setShowVideoEditor(true);
@@ -4311,7 +4311,7 @@ function App() {
                                         <Scissors size={18} />
                                     </button>
                                 )}
-                                <button className="control-btn" data-tooltip={t.close || 'Close'} onClick={() => resetAndClose()}><X size={30} /></button>
+                                <button className="control-btn" data-tooltip={t.close || 'Close'} data-tooltip-pos="bottom" onClick={() => resetAndClose()}><X size={30} /></button>
                             </div>
                         </div>
                         {!zoomMode && selectedMediaIndex > 0 && <div className="nav-zone prev" onClick={(e) => { e.stopPropagation(); navigateMedia(-1); }}><ChevronLeft size={60} className="nav-arrow" /></div>}
