@@ -316,6 +316,11 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
     const [originalSize, setOriginalSize] = useState(null);
     const [audioBuffers, setAudioBuffers] = useState({});
     const audioContextRef = useRef(null);
+    const zoomTimeoutRef = useRef(null);
+    const pushHistoryRef = useRef(null);
+    const canvasSizeOnFocusRef = useRef(null);
+
+
 
     // Load Audio Buffers for Client Side Waveforms
     const loadAudioBuffer = async (path) => {
@@ -412,6 +417,12 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
         });
     }, [tracks, canvasSize, t]);
 
+    // Keep pushHistoryRef updated
+    useEffect(() => {
+        pushHistoryRef.current = pushHistory;
+    }, [pushHistory]);
+
+
     const undo = useCallback(() => {
         if (history.index > 0) {
             const prevIdx = history.index - 1;
@@ -479,10 +490,30 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
     useEffect(() => {
         if (initialDuration > 0) {
             setDuration(prev => Math.max(prev, initialDuration));
-            setTracks(prev => prev.map(t => ({
-                ...t,
-                clips: t.clips.map(c => (c.id === 'clip-0' && (c.duration <= 0.1 || c.duration < initialDuration)) ? { ...c, duration: initialDuration, sourceDuration: initialDuration } : c)
-            })));
+            setTracks(prev => {
+                const newTracks = prev.map(t => ({
+                    ...t,
+                    clips: t.clips.map(c => (c.id === 'clip-0' && (c.duration <= 0.1 || c.duration < initialDuration)) ? { ...c, duration: initialDuration, sourceDuration: initialDuration } : c)
+                }));
+
+                // Sync history initial state with corrected tracks
+                setTimeout(() => {
+                    setHistory(h => {
+                        if (h.stack.length === 1 && h.index === 0) {
+                            return {
+                                ...h,
+                                stack: [{
+                                    ...h.stack[0],
+                                    tracks: JSON.parse(JSON.stringify(newTracks))
+                                }]
+                            };
+                        }
+                        return h;
+                    });
+                }, 0);
+
+                return newTracks;
+            });
         }
     }, [initialDuration]);
 
@@ -878,6 +909,14 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
             updateClip(selectedClipId, {
                 transform: { ...(activeVClip?.transform || { x: 0, y: 0 }), scale: newScale }
             });
+
+            // Debounced history push
+            if (zoomTimeoutRef.current) clearTimeout(zoomTimeoutRef.current);
+            zoomTimeoutRef.current = setTimeout(() => {
+                if (pushHistoryRef.current) {
+                    pushHistoryRef.current('actionTransform');
+                }
+            }, 1000);
         };
 
         viewport.addEventListener('wheel', handleViewportWheel, { passive: false });
@@ -906,7 +945,35 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                 updates.sourceDuration = vidDur;
             }
             if (Object.keys(updates).length > 0) {
-                updateClip(activeVClip.id, updates);
+                // Update track but ALSO update the HISTORY initial state if we are at the start
+                setTracks(prev => {
+                    const newTracks = prev.map(track => ({
+                        ...track,
+                        clips: track.clips.map(c => c.id === activeVClip.id ? { ...c, ...updates } : c)
+                    }));
+
+                    // IMPORTANT: If this is the initial load, we MUST update the first history item
+                    setTimeout(() => {
+                        setHistory(h => {
+                            if (h.stack.length > 0 && h.index === 0) {
+                                // We are at the initial state, update it with the loaded metadata
+                                const newStack = [...h.stack];
+                                newStack[0] = {
+                                    ...newStack[0],
+                                    tracks: JSON.parse(JSON.stringify(newTracks)),
+                                    // Also update canvas size if we changed it below
+                                    canvasSize: (activeVClip.id === 'clip-0' && canvasSize.w === 1920 && canvasSize.h === 1080 && video.videoWidth && video.videoHeight && !item?.durationSeconds)
+                                        ? { w: video.videoWidth, h: video.videoHeight }
+                                        : newStack[0].canvasSize
+                                };
+                                return { ...h, stack: newStack };
+                            }
+                            return h;
+                        });
+                    }, 0);
+
+                    return newTracks;
+                });
             }
         }
 
@@ -1399,6 +1466,16 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
         updateClip(selectedClipId, {
             transform: { ...(activeVClip.transform || { x: 0, y: 0 }), scale: newScale }
         });
+
+        if (zoomTimeoutRef.current) clearTimeout(zoomTimeoutRef.current);
+        zoomTimeoutRef.current = setTimeout(() => {
+            if (pushHistoryRef.current) {
+                // Call pushHistory without arguments -> it uses its OWN closure tracks (fresh from when function was created)
+                // Since pushHistory depends on [tracks], it is recreated whenever tracks change.
+                // pushHistoryRef.current always holds the latest version with the latest tracks closure.
+                pushHistoryRef.current('actionTransform');
+            }
+        }, 1000);
     };
 
     const handleCanvasMouseDown = (e) => {
@@ -1995,12 +2072,20 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
         if (e && isDragging) {
             e.preventDefault();
 
-            // Record history for discrete drag operations
+            // Calculate drag distance
+            const dx = Math.abs(e.clientX - (isDragging.startX || 0));
+            const dy = Math.abs(e.clientY - (isDragging.startY || 0));
+            const hasMoved = dx > 3 || dy > 3;
+
+            // Record history for discrete drag operations ONLY if actual movement occurred
             let actionName = null;
-            if (isDragging.type === 'timeline-clip-move') actionName = 'actionMove';
-            else if (isDragging.type === 'timeline-clip-resize') actionName = 'actionResize';
-            else if (isDragging.type === 'canvas-pan') actionName = 'actionTransform';
-            else if (isDragging.type === 'crop') actionName = 'actionTransform';
+            if (hasMoved) {
+                if (isDragging.type === 'timeline-clip-move') actionName = 'actionMove';
+                else if (isDragging.type === 'timeline-clip-resize') actionName = 'actionResize';
+                else if (isDragging.type === 'canvas-pan') actionName = 'actionTransform';
+                else if (isDragging.type === 'canvas-resize') actionName = 'actionTransform';
+                else if (isDragging.type === 'crop') actionName = 'actionTransform';
+            }
 
             if (actionName) {
                 pushHistory(actionName);
@@ -2611,6 +2696,13 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                             min={1}
                                             value={Math.round(canvasSize.w)}
                                             onChange={e => setCanvasSize(prev => ({ ...prev, w: Math.max(1, parseInt(e.target.value) || 0) }))}
+                                            onFocus={() => { canvasSizeOnFocusRef.current = { ...canvasSize }; }}
+                                            onBlur={() => {
+                                                if (canvasSizeOnFocusRef.current && (canvasSizeOnFocusRef.current.w !== canvasSize.w || canvasSizeOnFocusRef.current.h !== canvasSize.h)) {
+                                                    pushHistory('actionTransform');
+                                                }
+                                                canvasSizeOnFocusRef.current = null;
+                                            }}
                                             style={{ width: 55, background: 'rgba(255,255,255,0.05)', border: '1px solid #444', color: '#fff', fontSize: '0.75rem', padding: '1px 4px', borderRadius: 3, textAlign: 'center', outline: 'none' }}
                                         />
                                         <span style={{ color: '#888' }}>x</span>
@@ -2619,6 +2711,13 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                             min={1}
                                             value={Math.round(canvasSize.h)}
                                             onChange={e => setCanvasSize(prev => ({ ...prev, h: Math.max(1, parseInt(e.target.value) || 0) }))}
+                                            onFocus={() => { canvasSizeOnFocusRef.current = { ...canvasSize }; }}
+                                            onBlur={() => {
+                                                if (canvasSizeOnFocusRef.current && (canvasSizeOnFocusRef.current.w !== canvasSize.w || canvasSizeOnFocusRef.current.h !== canvasSize.h)) {
+                                                    pushHistory('actionTransform');
+                                                }
+                                                canvasSizeOnFocusRef.current = null;
+                                            }}
                                             style={{ width: 55, background: 'rgba(255,255,255,0.05)', border: '1px solid #444', color: '#fff', fontSize: '0.75rem', padding: '1px 4px', borderRadius: 3, textAlign: 'center', outline: 'none' }}
                                         />
                                         <span style={{ color: '#aaa', marginLeft: 2 }}>px</span>
@@ -2628,7 +2727,9 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                             onClick={(e) => {
                                                 e.stopPropagation();
                                                 if (originalSize) {
-                                                    setCanvasSize({ w: originalSize.w, h: originalSize.h });
+                                                    const newSize = { w: originalSize.w, h: originalSize.h };
+                                                    setCanvasSize(newSize);
+                                                    pushHistory('actionTransform', null, newSize);
                                                 }
                                             }}
                                             style={{ padding: '2px 6px', height: 'auto', border: 'none', background: 'transparent' }}
