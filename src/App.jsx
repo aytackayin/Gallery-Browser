@@ -3994,7 +3994,10 @@ function App() {
             let nextS = prev.s * factor;
 
             // Snap limits
-            if (nextS <= 1.05) return { s: 1, x: 0, y: 0 };
+            if (nextS <= 1.05) {
+                setZoomMode(false);
+                return { s: 1, x: 0, y: 0 };
+            }
             if (nextS > 40) nextS = 40; // Max 40x zoom
 
             // NEW OFFSET = MX - (MX - OLD_OFFSET) * (NEXT_S / PREV_S)
@@ -4427,7 +4430,7 @@ function App() {
 
             {
                 selectedMedia && !showVideoEditor && !showEditor && (
-                    <div className="viewer" onClick={() => resetAndClose()} onContextMenu={(e) => { e.preventDefault(); if (zoomMode && !hasMoved) { setZoomMode(false); setZoomScale(1); } }}>
+                    <div className="viewer" onClick={() => resetAndClose()} onContextMenu={(e) => { e.preventDefault(); if (zoomMode && !hasMoved) { setZoomMode(false); setZoom({ s: 1, x: 0, y: 0 }); } }}>
                         <div className="viewer-controls">
                             <div className="viewer-controls-inner">
                                 <button className="control-btn" data-tooltip={t.editInfoRename || 'Edit Info & Rename'} data-tooltip-pos="bottom" onClick={(e) => { e.stopPropagation(); openEditModal(selectedMedia); }} style={{ color: '#0071eb' }}>
