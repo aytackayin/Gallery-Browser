@@ -312,6 +312,8 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
     const [currentTime, setCurrentTime] = useState(0);
     const [isPlaying, setIsPlaying] = useState(false);
     const [isPickingColor, setIsPickingColor] = useState(false);
+    const [pickingColorPreview, setPickingColorPreview] = useState(null); // { x, y, color }
+    const pickingCanvasRef = useRef(null);
     const [isProcessing, setIsProcessing] = useState(false);
     const [canvasSize, setCanvasSize] = useState({ w: 1920, h: 1080 });
     const [originalSize, setOriginalSize] = useState(null);
@@ -1479,7 +1481,8 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
 
     const pickChromaColor = async () => {
         if (!window.EyeDropper) {
-            if (onShowToast) onShowToast("EyeDropper API not supported in this browser. Please enter hex color manually.");
+            setIsPickingColor(true);
+            if (onShowToast) onShowToast(t.pickColorFromPreview || "Pick color from preview");
             return;
         }
 
@@ -1501,6 +1504,61 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
         } catch (e) {
             console.log("EyeDropper cancelled or failed", e);
         }
+    };
+
+    const handlePickingMouseMove = (e) => {
+        if (!isPickingColor) return;
+        const rect = e.currentTarget.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+
+        if (!pickingCanvasRef.current) {
+            pickingCanvasRef.current = document.createElement('canvas');
+        }
+        const canvas = pickingCanvasRef.current;
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+        canvas.width = rect.width;
+        canvas.height = rect.height;
+
+        const container = e.currentTarget;
+        const elements = container.querySelectorAll('video, img');
+
+        ctx.fillStyle = 'black';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        elements.forEach(el => {
+            const style = window.getComputedStyle(el);
+            if (style.display === 'none' || style.visibility === 'hidden') return;
+            const elRect = el.getBoundingClientRect();
+            const relX = elRect.left - rect.left;
+            const relY = elRect.top - rect.top;
+            try {
+                ctx.save();
+                ctx.drawImage(el, relX, relY, elRect.width, elRect.height);
+                ctx.restore();
+            } catch (err) { }
+        });
+
+        const pixel = ctx.getImageData(x, y, 1, 1).data;
+        const hex = "#" + ("000000" + ((pixel[0] << 16) | (pixel[1] << 8) | pixel[2]).toString(16)).slice(-6);
+        setPickingColorPreview({ x, y, color: hex });
+    };
+
+    const handlePickingClick = (e) => {
+        if (!isPickingColor || !pickingColorPreview) return;
+        const newFilters = {
+            ...selectedClip.filters,
+            chromaKey: {
+                ...(selectedClip.filters?.chromaKey || { similarity: 0.05, blend: 0.05 }),
+                color: pickingColorPreview.color,
+                enabled: true
+            }
+        };
+        updateClip(selectedClipId, { filters: newFilters });
+        pushHistory('actionFilter');
+        setIsPickingColor(false);
+        setPickingColorPreview(null);
     };
 
     const handleCanvasMouseDown = (e) => {
@@ -2411,15 +2469,12 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                                 <button
                                                     onClick={() => pickChromaColor()}
                                                     style={{
-                                                        background: window.EyeDropper ? 'var(--netflix-red)' : 'var(--bg-secondary)',
+                                                        background: 'var(--netflix-red)',
                                                         border: 'none',
                                                         color: 'white',
-                                                        border: window.EyeDropper ? 'none' : '1px solid var(--border-color)',
-                                                        borderRadius: 3, padding: '2px 6px', fontSize: '0.65rem', cursor: 'pointer',
-                                                        opacity: window.EyeDropper ? 1 : 0.5
+                                                        borderRadius: 3, padding: '2px 6px', fontSize: '0.65rem', cursor: 'pointer'
                                                     }}
-                                                    title={window.EyeDropper ? t.pickColor : "EyeDropper not supported"}
-                                                    disabled={!window.EyeDropper}
+                                                    title={t.pickColor}
                                                 >
                                                     <Pipette size={12} />
                                                 </button>
@@ -2427,7 +2482,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
 
                                             <div className="control-item" style={{ gap: 2 }}>
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                    <label style={{ fontSize: '0.6rem', opacity: 0.8 }}>{t.chromaSimilarity || 'Similarity'}</label>
+                                                    <label style={{ fontSize: '0.6rem', opacity: 0.8 }} title="Renk eşleşme toleransı. Artırırsanız daha fazla renk tonu şeffaf olur.">{t.chromaSimilarity || 'Similarity'}</label>
                                                     <span style={{ fontSize: '0.6rem', color: 'var(--netflix-red)' }}>{(selectedClip.filters.chromaKey.similarity || 0.05).toFixed(2)}</span>
                                                 </div>
                                                 <input
@@ -2444,7 +2499,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
 
                                             <div className="control-item" style={{ gap: 2 }}>
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                    <label style={{ fontSize: '0.6rem', opacity: 0.8 }}>{t.chromaBlend || 'Blend'}</label>
+                                                    <label style={{ fontSize: '0.6rem', opacity: 0.8 }} title="Kenar yumuşatma. Şeffaflık geçişini pürüzsüzleştirir.">{t.chromaBlend || 'Blend'}</label>
                                                     <span style={{ fontSize: '0.6rem', color: 'var(--netflix-red)' }}>{(selectedClip.filters.chromaKey.blend || 0.05).toFixed(2)}</span>
                                                 </div>
                                                 <input
@@ -2689,26 +2744,25 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                                 const sim = ck.similarity || 0.05;
                                                 const blend = ck.blend || 0.05;
 
-                                                // Dynamic Matrix for Chroma Key preview
-                                                // We want to calculate: dist = |R-rt| + |G-gt| + |B-bt| (scaled)
-                                                // Then alpha = clamp((dist - similarity) / blend, 0, 1)
-                                                // This is still an approximation for SVG but much better
+                                                // Improved single-pass matrix for Chroma Key
+                                                // We want Alpha = clamp(1.0 - (Dist - similarity) / blend, 0, 1)
+                                                // Dist is approximated linearly for the target color dominance.
 
-                                                // Matrix approach: Detect dominance of target color
+                                                const s = 1.0 / Math.max(0.001, blend);
+                                                const offset = 1.0 + (sim / Math.max(0.001, blend));
+
                                                 let matrix = "1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 1 0";
 
-                                                // Scale factors based on similarity/blend
-                                                const s = 1.0 / Math.max(0.01, blend);
-                                                const b = -(sim / Math.max(0.01, blend));
-
-                                                if (gt > rt && gt > bt) { // Green screen
-                                                    matrix = `1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  ${s * 0.8} ${-s * 1.2} ${s * 0.8} 0 ${1 + b}`;
-                                                } else if (rt > gt && rt > bt) { // Red screen
-                                                    matrix = `1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  ${-s * 1.2} ${s * 0.8} ${s * 0.8} 0 ${1 + b}`;
-                                                } else if (bt > rt && bt > gt) { // Blue screen
-                                                    matrix = `1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  ${s * 0.8} ${s * 0.8} ${-s * 1.2} 0 ${1 + b}`;
-                                                } else { // Neutral/Other
-                                                    matrix = `1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  ${s * 0.5} ${-s * 0.5} ${s * 0.5} 0 ${1 + b}`;
+                                                if (gt > rt && gt > bt) { // Green Screen
+                                                    // Alpha = offset - s * (G - (R+B)/1.6)
+                                                    matrix = `1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  ${s * 0.62} ${-s} ${s * 0.62} 0 ${offset}`;
+                                                } else if (rt > gt && rt > bt) { // Red Screen
+                                                    matrix = `1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  ${-s} ${s * 0.62} ${s * 0.62} 0 ${offset}`;
+                                                } else if (bt > rt && bt > gt) { // Blue Screen
+                                                    matrix = `1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  ${s * 0.62} ${s * 0.62} ${-s} 0 ${offset}`;
+                                                } else { // Neutral
+                                                    const avg = (rt + gt + bt) / 3;
+                                                    matrix = `1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  ${rt > avg ? -s : s * 0.5} ${gt > avg ? -s : s * 0.5} ${bt > avg ? -s : s * 0.5} 0 ${offset}`;
                                                 }
 
                                                 return (
@@ -2724,7 +2778,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                                 const isMain = clip.id === activeVClip?.id;
                                                 const url = `http://localhost:3001/media/${encodeURIComponent(clip.path)}?t=${localRefreshKey}`;
                                                 const ck = clip.filters?.chromaKey;
-                                                const filterId = (ck && ck.enabled) ? `chroma-filter-${clip.id}` : null;
+                                                const filterId = (ck && ck.enabled && !isPickingColor) ? `chroma-filter-${clip.id}` : null;
 
                                                 if (clip.type === 'video') {
                                                     return (
@@ -2830,6 +2884,37 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                         })
                                     }} />
                                 ))}
+                                {isPickingColor && (
+                                    <div
+                                        style={{ position: 'absolute', inset: 0, zIndex: 1000, cursor: 'crosshair' }}
+                                        onMouseMove={handlePickingMouseMove}
+                                        onClick={handlePickingClick}
+                                        onMouseLeave={() => setPickingColorPreview(null)}
+                                    >
+                                        {pickingColorPreview && (
+                                            <div style={{
+                                                position: 'absolute',
+                                                left: pickingColorPreview.x + 15,
+                                                top: pickingColorPreview.y + 15,
+                                                width: 80, height: 80,
+                                                borderRadius: '50%',
+                                                border: '3px solid white',
+                                                boxShadow: '0 0 10px rgba(0,0,0,0.5)',
+                                                background: pickingColorPreview.color,
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                pointerEvents: 'none',
+                                                zIndex: 1001
+                                            }}>
+                                                <span style={{
+                                                    color: (parseInt(pickingColorPreview.color.slice(1, 3), 16) * 0.299 + parseInt(pickingColorPreview.color.slice(3, 5), 16) * 0.587 + parseInt(pickingColorPreview.color.slice(5, 7), 16) * 0.114) > 186 ? 'black' : 'white',
+                                                    fontSize: '0.6rem', fontWeight: 'bold'
+                                                }}>{pickingColorPreview.color.toUpperCase()}</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                             </div>
 
                             {!activeVClip && (
