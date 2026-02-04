@@ -480,6 +480,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
     const pickingCanvasRef = useRef(null);
     const [isProcessing, setIsProcessing] = useState(false);
     const [canvasSize, setCanvasSize] = useState({ w: 1920, h: 1080 });
+    const [targetPath, setTargetPath] = useState(item?.path); // Track current save target
     const [originalSize, setOriginalSize] = useState(null);
     const [audioBuffers, setAudioBuffers] = useState({});
     const audioContextRef = useRef(null);
@@ -2056,9 +2057,9 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    path: currentItem.path,
                     timeline: timelineData,
-                    newPath: options.newName,
+                    path: targetPath || currentItem.path, // Use dynamic target path
+                    newPath: options.newPath,
                     overwrite: options.overwrite || false
                 }),
                 signal: abortController.signal
@@ -2103,6 +2104,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                 setProcessingProgress(data.percent);
                                 if (data.processId) setProcessingId(data.processId);
                             } else if (data.type === 'success') {
+                                if (data.path) setTargetPath(data.path); // Update target for next save
                                 setProcessingProgress(100);
                                 setIsProcessing(false);
                                 setProcessingId(null);
@@ -3944,7 +3946,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                     <button className="btn btn-grey" onClick={() => setShowSaveAs(false)}>{t.cancel || 'Cancel'}</button>
                                     <button className="btn btn-primary" onClick={() => {
                                         setShowSaveAs(false);
-                                        handleSave({ newName: `${saveAsName}.${saveAsExt}` });
+                                        handleSave({ newPath: `${saveAsName}.${saveAsExt}` });
                                     }}>
                                         {t.save || 'Save'}
                                     </button>
