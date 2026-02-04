@@ -1367,7 +1367,7 @@ app.post('/api/process-video', async (req, res) => {
                 else if (clip.rotate === 270) vFilters.push('transpose=2');
             }
             if (clip.flipH) vFilters.push('hflip');
-            vFilters.push('format=yuv420p');
+            vFilters.push('format=yuva420p');
 
             filterComplex.push({
                 inputs: `${idx}:v`,
@@ -1436,7 +1436,7 @@ app.post('/api/process-video', async (req, res) => {
             const nextVLabel = `ov_${vClipCounter}`;
             filterComplex.push({
                 inputs: [currentVLabel, outLabel],
-                filter: `overlay=x=${overlayX}:y=${overlayY}:enable='between(t,${clip.offset},${clip.offset + clip.duration})':eof_action=pass`,
+                filter: `overlay=x=${overlayX}:y=${overlayY}:enable='between(t,${clip.offset},${clip.offset + clip.duration})':eof_action=pass:format=yuv420`,
                 outputs: nextVLabel
             });
             currentVLabel = nextVLabel;
@@ -1480,7 +1480,6 @@ app.post('/api/process-video', async (req, res) => {
             const speedFactor = sourceDur / timelineDur;
 
             let aFilters = [`atrim=start=${clip.start}:duration=${sourceDur}`, `asetpts=PTS-STARTPTS`];
-
             let tempSpeed = speedFactor;
             while (tempSpeed > 2.0) { aFilters.push(`atempo=2.0`); tempSpeed /= 2.0; }
             while (tempSpeed < 0.5) { aFilters.push(`atempo=0.5`); tempSpeed /= 0.5; }
@@ -1497,13 +1496,21 @@ app.post('/api/process-video', async (req, res) => {
             audioStreams.push(aLabel);
         });
 
+        // Final Video Format conversion (moved here to avoid stripping alpha during overlays)
+        const finalVLabel = `final_v`;
+        filterComplex.push({
+            inputs: currentVLabel,
+            filter: 'format=yuv420p',
+            outputs: finalVLabel
+        });
+
         let finalAudioLabel = null;
         if (audioStreams.length > 0) {
             filterComplex.push({ inputs: audioStreams, filter: `amix=inputs=${audioStreams.length}:normalize=0`, outputs: 'af' });
             finalAudioLabel = 'af';
         }
 
-        const outputLabels = [currentVLabel];
+        const outputLabels = [finalVLabel];
         if (finalAudioLabel) outputLabels.push(finalAudioLabel);
 
         // File existence already checked at the beginning of this function
