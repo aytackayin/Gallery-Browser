@@ -2272,9 +2272,9 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                             )}
 
                             {/* Viewer Controls */}
-                            <div style={{ position: 'absolute', bottom: -5, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 12, background: 'rgba(0,0,0,0.7)', padding: '6px 18px', borderRadius: 25, alignItems: 'center', backdropFilter: 'blur(5px)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                            <div style={{ position: 'absolute', bottom: -5, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 12, background: 'rgba(0,0,0,0.7)', padding: '6px 18px', borderRadius: 25, alignItems: 'center', backdropFilter: 'blur(5px)', border: '1px solid rgba(255,255,255,0.1)', zIndex: 10000 }}>
                                 {/* En Başa / Klip Başına */}
-                                <button className="action-btn" title={t.goToStart || "Go to Start"} style={{ background: 'transparent', border: 'none', color: 'white', display: 'flex', alignItems: 'center', padding: 4 }}
+                                <button className="action-btn" data-tooltip={t.goToStart || "Go to Start"} data-tooltip-pos="top" style={{ background: 'transparent', border: 'none', color: 'white', display: 'flex', alignItems: 'center', padding: 4 }}
                                     onClick={() => {
                                         const clip = getSelectedClip();
                                         setCurrentTime(clip ? clip.offset : 0);
@@ -2283,37 +2283,37 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                 </button>
 
                                 {/* Geri Sar (1s) */}
-                                <button className="action-btn" title="-1s" style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.7)', display: 'flex', alignItems: 'center', padding: 4 }}
+                                <button className="action-btn" data-tooltip="-1s" data-tooltip-pos="top" style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.7)', display: 'flex', alignItems: 'center', padding: 4 }}
                                     onClick={() => setCurrentTime(prev => Math.max(0, prev - 1))}>
                                     <ChevronsLeft size={18} />
                                 </button>
 
                                 {/* Hassas Geri (0.05s) */}
-                                <button className="action-btn" title="-0.05s" style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.9)', display: 'flex', alignItems: 'center', padding: 4 }}
+                                <button className="action-btn" data-tooltip="-0.05s" data-tooltip-pos="top" style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.9)', display: 'flex', alignItems: 'center', padding: 4 }}
                                     onClick={() => setCurrentTime(prev => Math.max(0, prev - 0.05))}>
                                     <ChevronLeft size={18} />
                                 </button>
 
                                 {/* Play / Pause (Merkez) */}
-                                <button className="action-btn" style={{ background: 'white', border: 'none', color: 'black', width: 30, height: 30, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'transform 0.1s', flexShrink: 0 }}
+                                <button className="action-btn" data-tooltip={isPlaying ? (t.pause || "Pause") : (t.play || "Play")} data-tooltip-pos="top" style={{ background: 'white', border: 'none', color: 'black', width: 30, height: 30, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'transform 0.1s', flexShrink: 0 }}
                                     onClick={togglePlay}>
                                     {isPlaying ? <Pause size={16} fill="black" /> : <Play size={16} fill="black" style={{ marginLeft: 1.5 }} />}
                                 </button>
 
                                 {/* Hassas İleri (0.05s) */}
-                                <button className="action-btn" title="+0.05s" style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.9)', display: 'flex', alignItems: 'center', padding: 4 }}
+                                <button className="action-btn" data-tooltip="+0.05s" data-tooltip-pos="top" style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.9)', display: 'flex', alignItems: 'center', padding: 4 }}
                                     onClick={() => setCurrentTime(prev => Math.min(timelineDuration, prev + 0.05))}>
                                     <ChevronRight size={18} />
                                 </button>
 
                                 {/* İleri Sar (1s) */}
-                                <button className="action-btn" title="+1s" style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.7)', display: 'flex', alignItems: 'center', padding: 4 }}
+                                <button className="action-btn" data-tooltip="+1s" data-tooltip-pos="top" style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.7)', display: 'flex', alignItems: 'center', padding: 4 }}
                                     onClick={() => setCurrentTime(prev => Math.min(timelineDuration, prev + 1))}>
                                     <ChevronsRight size={18} />
                                 </button>
 
                                 {/* En Sona / Klip Sonuna */}
-                                <button className="action-btn" title={t.goToEnd || "Go to End"} style={{ background: 'transparent', border: 'none', color: 'white', display: 'flex', alignItems: 'center', padding: 4 }}
+                                <button className="action-btn" data-tooltip={t.goToEnd || "Go to End"} data-tooltip-pos="top" style={{ background: 'transparent', border: 'none', color: 'white', display: 'flex', alignItems: 'center', padding: 4 }}
                                     onClick={() => {
                                         const clip = getSelectedClip();
                                         setCurrentTime(clip ? (clip.offset + clip.duration) : contentDuration);
