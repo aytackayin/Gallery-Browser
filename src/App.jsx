@@ -722,7 +722,16 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
     const [pickerItems, setPickerItems] = useState([]);
     const [pickerPath, setPickerPath] = useState('.');
     const [zoomLevel, setZoomLevel] = useState(25); // pixels per second
-    const [timelineHeight, setTimelineHeight] = useState(250); // pixels
+    // Timeline Height State with LocalStorage
+    const [timelineHeight, setTimelineHeight] = useState(() => {
+        const saved = localStorage.getItem('editor_timelineHeight');
+        return saved ? parseInt(saved) : 320;
+    });
+
+    // Save Timeline Height changes
+    useEffect(() => {
+        localStorage.setItem('editor_timelineHeight', timelineHeight.toString());
+    }, [timelineHeight]); // pixels
     const [processingProgress, setProcessingProgress] = useState(0);
     const [processingId, setProcessingId] = useState(null);
     const [showOverwriteConfirm, setShowOverwriteConfirm] = useState(false);
@@ -734,14 +743,37 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
     const lastZoomPoint = useRef({ time: null, x: null });
 
     // Draggable Panel System States
-    const [panels, setPanels] = useState({
-        properties: {
-            visible: true,
-            collapsed: false,
-            position: { x: window.innerWidth - 320, y: 70 },
-            size: { width: 300, height: 350 }
+    // Panels State with LocalStorage
+    const [panels, setPanels] = useState(() => {
+        const saved = localStorage.getItem('editor_panels');
+        if (saved) {
+            try {
+                return JSON.parse(saved);
+            } catch (e) {
+                console.error("Failed to parse panels from storage", e);
+            }
         }
+        // Default State
+        return {
+            properties: {
+                visible: true,
+                collapsed: false,
+                position: { x: window.innerWidth - 320, y: 70 },
+                size: { width: 300, height: 350 }
+            },
+            history: {
+                visible: false, // Default hidden
+                collapsed: false,
+                position: { x: 20, y: 70 },
+                size: { width: 250, height: 400 }
+            }
+        };
     });
+
+    // Save Panels changes
+    useEffect(() => {
+        localStorage.setItem('editor_panels', JSON.stringify(panels));
+    }, [panels]);
     const [draggingPanel, setDraggingPanel] = useState(null);
 
     // Panel Management Functions
@@ -771,6 +803,16 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
             [panelId]: {
                 ...prev[panelId],
                 position
+            }
+        }));
+    };
+
+    const togglePanelVisibility = (panelId) => {
+        setPanels(prev => ({
+            ...prev,
+            [panelId]: {
+                ...prev[panelId],
+                visible: !prev[panelId].visible
             }
         }));
     };
@@ -2509,7 +2551,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                         <button className="btn btn-grey" style={{ background: 'var(--bg-card)', color: history.index < history.stack.length - 1 ? 'var(--text-primary)' : '#555', border: '1px solid var(--border-color)', opacity: history.index < history.stack.length - 1 ? 1 : 0.5 }} onClick={redo} disabled={history.index >= history.stack.length - 1} data-tooltip={t.redo || 'Redo'} data-tooltip-pos="bottom" data-tooltip-align="end">
                             <Redo size={18} />
                         </button>
-                        <button className={`btn btn-grey ${showHistory ? 'active' : ''}`} style={{ background: showHistory ? 'var(--netflix-red)' : 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border-color)' }} onClick={() => setShowHistory(!showHistory)} data-tooltip={t.history || 'History'} data-tooltip-pos="bottom" data-tooltip-align="end">
+                        <button className={`btn btn-grey ${panels.history.visible ? 'active' : ''}`} style={{ background: panels.history.visible ? 'var(--netflix-red)' : 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border-color)' }} onClick={() => togglePanelVisibility('history')} data-tooltip={t.history || 'History'} data-tooltip-pos="bottom" data-tooltip-align="end">
                             <History size={18} />
                         </button>
                         <button className="btn btn-grey" style={{ background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border-color)' }} onClick={() => setShowHelp(true)} data-tooltip={t.help || 'Help'} data-tooltip-pos="bottom" data-tooltip-align="end">
@@ -2526,71 +2568,44 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                     </div>
                 </div>
 
-                {showHistory && (
-                    <div
-                        style={{
-                            position: 'absolute',
-                            top: historyPos.y,
-                            left: historyPos.x,
-                            width: 220,
-                            background: 'var(--bg-card)',
-                            border: '1px solid var(--border-color)',
-                            borderRadius: 8,
-                            zIndex: 9000,
-                            display: 'flex',
-                            flexDirection: 'column',
-                            boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
-                            userSelect: 'none'
-                        }}
-                    >
-                        <div
-                            style={{
-                                padding: '8px 12px',
-                                background: 'var(--bg-secondary)',
-                                borderBottom: '1px solid var(--border-color)',
-                                cursor: 'grab',
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                alignItems: 'center',
-                                borderTopLeftRadius: 8,
-                                borderTopRightRadius: 8
-                            }}
-                            onMouseDown={(e) => {
-                                e.stopPropagation();
-                                setIsDraggingHistory(true);
-                            }}
-                        >
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                <History size={14} color="var(--netflix-red)" />
-                                <span style={{ fontSize: '0.7rem', fontWeight: 'bold', letterSpacing: '0.5px' }}>{t.historyPanel || 'HISTORY'}</span>
+                {/* Draggable History Panel */}
+                <DraggablePanel
+                    id="history"
+                    title={t.historyPanel || 'HISTORY'}
+                    icon={<History size={14} color="var(--netflix-red)" />}
+                    visible={panels.history.visible}
+                    collapsed={panels.history.collapsed}
+                    position={panels.history.position}
+                    size={panels.history.size}
+                    onDragEnd={handlePanelDragEnd}
+                    onResize={handlePanelResize}
+                    onToggleCollapse={() => togglePanelCollapse('history')}
+                >
+                    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflowY: 'auto' }}>
+                        {history.stack.map((item, idx) => (
+                            <div
+                                key={idx}
+                                onClick={() => jumpToHistory(idx)}
+                                style={{
+                                    padding: '7px 12px',
+                                    fontSize: '0.65rem',
+                                    cursor: 'pointer',
+                                    background: idx === history.index ? 'rgba(229, 9, 20, 0.2)' : 'transparent',
+                                    color: idx === history.index ? 'var(--netflix-red)' : (idx > history.index ? '#666' : 'var(--text-primary)'),
+                                    borderLeft: idx === history.index ? '2px solid var(--netflix-red)' : '2px solid transparent',
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                    transition: 'all 0.2s'
+                                }}
+                            >
+                                <span style={{ fontWeight: idx === history.index ? 'bold' : 'normal' }}>{item.name}</span>
+                                <span style={{ opacity: 0.4, fontSize: '0.6rem' }}>{item.timestamp}</span>
                             </div>
-                            <X size={14} style={{ cursor: 'pointer', opacity: 0.6 }} onClick={() => setShowHistory(false)} />
-                        </div>
-                        <div style={{ maxHeight: 300, overflowY: 'auto', padding: '4px 0' }}>
-                            {history.stack.map((item, idx) => (
-                                <div
-                                    key={idx}
-                                    onClick={() => jumpToHistory(idx)}
-                                    style={{
-                                        padding: '7px 12px',
-                                        fontSize: '0.65rem',
-                                        cursor: 'pointer',
-                                        background: idx === history.index ? 'rgba(229, 9, 20, 0.2)' : 'transparent',
-                                        color: idx === history.index ? 'var(--netflix-red)' : (idx > history.index ? '#666' : 'var(--text-primary)'),
-                                        borderLeft: idx === history.index ? '2px solid var(--netflix-red)' : '2px solid transparent',
-                                        display: 'flex',
-                                        justifyContent: 'space-between',
-                                        alignItems: 'center',
-                                        transition: 'all 0.2s'
-                                    }}
-                                >
-                                    <span style={{ fontWeight: idx === history.index ? 'bold' : 'normal' }}>{item.name}</span>
-                                    <span style={{ opacity: 0.4, fontSize: '0.6rem' }}>{item.timestamp}</span>
-                                </div>
-                            ))}
-                        </div>
+                        ))}
                     </div>
-                )}
+                </DraggablePanel>
+
 
                 <div className="editor-grid" style={{
                     display: 'grid',
