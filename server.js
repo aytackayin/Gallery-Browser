@@ -1216,7 +1216,8 @@ app.post('/api/process-video', async (req, res) => {
 
             const bRatio = (clip.filters.brightness || 100) / 100;
             const cVal = (clip.filters.contrast || 100) / 100;
-            const s = (clip.filters.saturation || 100) / 100;
+            // CSS: saturate((saturation + vibrance)%) - vibrance saturation'a ekleniyor
+            const s = ((clip.filters.saturation || 100) + (clip.filters.vibrance || 0)) / 100;
             const g = (clip.filters.gamma || 1.0);
 
             // 1. ADIM: Klibi Hazırla (Loop + Crop)
@@ -1325,65 +1326,124 @@ app.post('/api/process-video', async (req, res) => {
                 }
             }
 
-            // Advanced Color Correction
+            // Advanced Color Correction - CSS Preview ile 1:1 eşleştirme
+
+            // EXPOSURE: CSS'te exposure/100 çarpan olarak uygulanıyor (feColorMatrix'te)
+            // FFmpeg'de eq filter kullanılabilir veya colorlevels ile simüle edilebilir
+            // CSS: exposure=150 -> 1.5x çarpan
+            // FFmpeg exposure filter: EV değeri kullanır, bu farklı bir mantık
+            // Bunun yerine colorlevels ile CSS davranışını simüle edelim
             const exposure = (clip.filters?.exposure ?? 100);
-            const ev = (exposure - 100) / 20;
-            if (ev !== 0) vFilters.push(`exposure=exposure=${ev}`);
-
-            const vibranceVal = (clip.filters?.vibrance ?? 0) / 100;
-            if (vibranceVal !== 0) vFilters.push(`vibrance=intensity=${vibranceVal}`);
-
-            const temp = (clip.filters?.temperature ?? 0);
-            if (temp !== 0) {
-                // colortemperature simulation via colorbalance
-                // temperature > 0: more yellow/red (warm)
-                // temperature < 0: more blue (cold)
-                const r = temp > 0 ? (temp / 200) : 0;
-                const b = temp < 0 ? (Math.abs(temp) / 200) : 0;
-                vFilters.push(`colorbalance=rm=${r}:bm=${b}`);
-            }
-
-            const tint = (clip.filters?.tint ?? 0);
-            if (tint !== 0) {
-                const gm = tint / 200;
-                vFilters.push(`colorbalance=gm=${gm}`);
-            }
-
-            const hueVal = (clip.filters?.hue ?? 0);
-            if (hueVal !== 0) vFilters.push(`hue=h=${hueVal}`);
-
-            const clarity = (clip.filters?.clarity ?? 0);
-            if (clarity > 0) {
-                // Stronger unsharp for visible effect
-                const amount = (clarity / 100) * 1.5;
-                vFilters.push(`unsharp=luma_msize_x=7:luma_msize_y=7:luma_amount=${amount}`);
-            }
-
-            const cb = clip.filters?.colorBalance;
-            if (cb) {
-                const rs = (cb.shadows?.r ?? 0) / 100;
-                const gs = (cb.shadows?.g ?? 0) / 100;
-                const bs = (cb.shadows?.b ?? 0) / 100;
-                const rm = (cb.midtones?.r ?? 0) / 100;
-                const gm = (cb.midtones?.g ?? 0) / 100;
-                const bm = (cb.midtones?.b ?? 0) / 100;
-                const rh = (cb.highlights?.r ?? 0) / 100;
-                const gh = (cb.highlights?.g ?? 0) / 100;
-                const bh = (cb.highlights?.b ?? 0) / 100;
-
-                if (rs !== 0 || gs !== 0 || bs !== 0 || rm !== 0 || gm !== 0 || bm !== 0 || rh !== 0 || gh !== 0 || bh !== 0) {
-                    vFilters.push(`colorbalance=rs=${rs}:gs=${gs}:bs=${bs}:rm=${rm}:gm=${gm}:bm=${bm}:rh=${rh}:gh=${gh}:bh=${bh}`);
+            const expRatio = exposure / 100;
+            if (expRatio !== 1) {
+                if (expRatio > 1) {
+                    // Exposure artırma: brightness gibi ama sadece aydınlık kısımlara etki eder
+                    // CSS'te exposure çarpan olarak uygulanıyor, aynı mantık
+                    const maxin = Math.min(1, 1 / expRatio);
+                    vFilters.push(`colorlevels=rimin=0:rimax=${maxin.toFixed(3)}:gimin=0:gimax=${maxin.toFixed(3)}:bimin=0:bimax=${maxin.toFixed(3)}`);
+                } else {
+                    // Exposure azaltma
+                    vFilters.push(`colorlevels=romax=${expRatio.toFixed(3)}:gomax=${expRatio.toFixed(3)}:bomax=${expRatio.toFixed(3)}`);
                 }
             }
 
-            // Selective Color (huesaturation) removed because it's not supported in standard ffmpeg builds
-            // and causing save errors. Substituting with extra vibrance if needed but better to just remove.
+            // NOT: Vibrance zaten saturation hesabına dahil edildi (satır 1219)
+            // CSS: saturate((saturation + vibrance)%) şeklinde uygulandığı için
 
+            // TEMPERATURE & TINT: CSS'te feColorMatrix ile uygulanıyor
+            // CSS formülü (colorMatrix'ten):
+            //   temp = temperature / 400 (yani 100 temperature = 0.25)
+            //   tint = tint / 400
+            //   r_m = 1 + temp - tint/2 + r_off
+            //   g_m = 1 + tint + g_off  
+            //   b_m = 1 - temp - tint/2 + b_off
+            // FFmpeg'de colorbalance ile simüle ediyoruz ama ölçek farklı
+            const temp = (clip.filters?.temperature ?? 0);
+            const tint = (clip.filters?.tint ?? 0);
+
+            if (temp !== 0 || tint !== 0) {
+                // CSS'teki ölçeği kullan: /400
+                const tempNorm = temp / 400;
+                const tintNorm = tint / 400;
+
+                // colorbalance yerine colorchannelmixer kullanarak daha doğru sonuç
+                // R kanalı: 1 + temp - tint/2
+                // G kanalı: 1 + tint
+                // B kanalı: 1 - temp - tint/2
+                const rr = (1 + tempNorm - tintNorm / 2).toFixed(3);
+                const gg = (1 + tintNorm).toFixed(3);
+                const bb = (1 - tempNorm - tintNorm / 2).toFixed(3);
+
+                vFilters.push(`colorchannelmixer=rr=${rr}:gg=${gg}:bb=${bb}`);
+            }
+
+            // HUE: CSS'te hue-rotate(Xdeg), FFmpeg'de hue=h=X
+            // CSS hue-rotate doğrudan derece alır, FFmpeg hue=h de öyle
+            const hueVal = (clip.filters?.hue ?? 0);
+            if (hueVal !== 0) vFilters.push(`hue=h=${hueVal}`);
+
+            // CLARITY: CSS'te feConvolveMatrix ile unsharp mask
+            // CSS kernelMatrix: 0 -c 0 -c (1+c/25) -c 0 -c 0 (c = clarity/100)
+            // FFmpeg unsharp: luma_amount ile benzer etki
+            const clarity = (clip.filters?.clarity ?? 0);
+            if (clarity > 0) {
+                // CSS kernelMatrix'teki merkez değer: 1 + clarity/25
+                // Bu, clarity=100 için merkez=5 veriyor (güçlü keskinlik)
+                // FFmpeg unsharp amount: 0.5-2.5 arası mantıklı
+                const amount = Math.min(2.5, (clarity / 100) * 1.5);
+                vFilters.push(`unsharp=luma_msize_x=5:luma_msize_y=5:luma_amount=${amount.toFixed(2)}`);
+            }
+
+            // COLOR BALANCE: CSS'te feColorMatrix offset değerleri olarak uygulanıyor
+            // CSS formülü: offset = (shadows + midtones + highlights) / 200
+            // Bu bir toplam offset, FFmpeg colorbalance ise ayrı ayrı shadow/mid/highlight uygular
+            // Doğru eşleştirme için: CSS'teki toplam offseti FFmpeg'e midtones olarak uygulayalım
+            const cb = clip.filters?.colorBalance;
+            if (cb) {
+                // CSS'teki toplam offset hesabı
+                const r_off = ((cb.shadows?.r ?? 0) + (cb.midtones?.r ?? 0) + (cb.highlights?.r ?? 0)) / 200;
+                const g_off = ((cb.shadows?.g ?? 0) + (cb.midtones?.g ?? 0) + (cb.highlights?.g ?? 0)) / 200;
+                const b_off = ((cb.shadows?.b ?? 0) + (cb.midtones?.b ?? 0) + (cb.highlights?.b ?? 0)) / 200;
+
+                if (r_off !== 0 || g_off !== 0 || b_off !== 0) {
+                    // colorchannelmixer ile offset uygula
+                    // Offset için: rr=1, ro=r_off gibi değerler kullanılır
+                    vFilters.push(`colorchannelmixer=rr=1:ro=${r_off.toFixed(3)}:gg=1:go=${g_off.toFixed(3)}:bb=1:bo=${b_off.toFixed(3)}`);
+                }
+            }
+
+            // CURVES PRESETS: CSS'te feComponentTransfer table values kullanılıyor
+            // FFmpeg'de curves=preset kullanılabilir ama CSS eşleştirmesi farklı
+            // CSS table values vs FFmpeg preset eşleştirmesi:
             const curves = clip.filters?.curves;
             if (curves && curves !== 'none') {
-                if (curves === 'underwater') {
-                    vFilters.push(`curves=r='0/0 0.5/0.6 1/1':b='0/0 0.5/0.45 1/0.95'`);
+                // CSS'teki preset değerlerini FFmpeg curves=psfile veya manuel eğrilerle eşleştir
+                if (curves === 'color_negative') {
+                    // CSS: r="1 0", g="1 0", b="1 0" - ters çevirme
+                    vFilters.push(`curves=preset=color_negative`);
+                } else if (curves === 'darker') {
+                    // CSS: "0 0.25 1" - karartma
+                    vFilters.push(`curves=preset=darker`);
+                } else if (curves === 'lighter') {
+                    // CSS: "0 0.75 1" - aydınlatma
+                    vFilters.push(`curves=preset=lighter`);
+                } else if (curves === 'increase_contrast' || curves === 'medium_contrast') {
+                    // CSS: "0 0.2 0.8 1" - S eğrisi
+                    vFilters.push(`curves=preset=increase_contrast`);
+                } else if (curves === 'strong_contrast') {
+                    vFilters.push(`curves=preset=strong_contrast`);
+                } else if (curves === 'vintage') {
+                    // CSS: r="0.2 0.5 1", g="0 0.5 0.8", b="0 0.2 0.6"
+                    vFilters.push(`curves=preset=vintage`);
+                } else if (curves === 'underwater') {
+                    // CSS: r="0 0.6 1", g="0 0.5 1", b="0 0.4 0.9"
+                    // Manuel eğri - kırmızıyı artır, maviyi azalt
+                    vFilters.push(`curves=r='0/0 0.5/0.6 1/1':b='0/0 0.5/0.4 1/0.9'`);
+                } else if (curves === 'cross_process') {
+                    // CSS: r="0 0.8 1", g="0 1", b="0.2 0.4 1"
+                    vFilters.push(`curves=preset=cross_process`);
                 } else {
+                    // Diğer presetler için doğrudan FFmpeg preset kullan
                     vFilters.push(`curves=preset=${curves}`);
                 }
             }
