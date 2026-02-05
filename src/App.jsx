@@ -1469,7 +1469,8 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
             // Sync volume for the main video or based on clip settings
             const isMain = clip.id === activeVClip?.id;
             const clipVolume = (typeof clip.volume === 'number') ? clip.volume : 100;
-            video.volume = isMain ? (clipVolume / 100) : 0;
+            const safeVolume = Math.max(0, Math.min(1, (clipVolume / 100) || 0));
+            video.volume = isMain ? safeVolume : 0;
             video.muted = !isMain;
 
             // Seek if needed
@@ -3045,6 +3046,11 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                     </select>
                                 </div>
 
+                                <button className="action-btn" style={{ width: '100%', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', justifyContent: 'center', marginTop: 4, marginBottom: 4 }}
+                                    onClick={() => historyUpdateClip('actionResetFilters', selectedClipId, { filters: { brightness: 100, contrast: 100, saturation: 100, exposure: 100, temperature: 0, tint: 0, vibrance: 0, hue: 0, clarity: 0, gamma: 1.0, colorBalance: { shadows: { r: 0, g: 0, b: 0 }, midtones: { r: 0, g: 0, b: 0 }, highlights: { r: 0, g: 0, b: 0 } }, curves: 'none' }, volume: 100 })}>
+                                    <RotateCw size={14} style={{ marginRight: 6 }} /> {t.resetFilters || 'Reset'}
+                                </button>
+
                                 <div className="control-item">
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                         <label>{t.volume || 'Volume'}</label>
@@ -3162,10 +3168,6 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                     </div>
 
                                 </div>
-                                <button className="action-btn" style={{ width: '100%', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', justifyContent: 'center', marginTop: 4 }}
-                                    onClick={() => historyUpdateClip('actionResetFilters', selectedClipId, { filters: { brightness: 100, contrast: 100, saturation: 100, exposure: 100, temperature: 0, tint: 0, vibrance: 0, hue: 0, clarity: 0, gamma: 1.0, colorBalance: { shadows: { r: 0, g: 0, b: 0 }, midtones: { r: 0, g: 0, b: 0 }, highlights: { r: 0, g: 0, b: 0 } }, curves: 'none' }, volume: 100 })}>
-                                    <RotateCw size={14} style={{ marginRight: 6 }} /> {t.resetFilters || 'Reset'}
-                                </button>
 
                             </div>
                         ) : (
