@@ -1336,14 +1336,13 @@ app.post('/api/process-video', async (req, res) => {
             const exposure = (clip.filters?.exposure ?? 100);
             const expRatio = exposure / 100;
             if (expRatio !== 1) {
-                if (expRatio > 1) {
-                    // Exposure artırma: brightness gibi ama sadece aydınlık kısımlara etki eder
-                    // CSS'te exposure çarpan olarak uygulanıyor, aynı mantık
-                    const maxin = Math.min(1, 1 / expRatio);
+                // Exposure için yumuşak bir etki - CSS'ten biraz daha az etkili olsun
+                const softExpRatio = 1 + (expRatio - 1) * 0.3;
+                if (softExpRatio > 1) {
+                    const maxin = Math.min(1, 1 / softExpRatio);
                     vFilters.push(`colorlevels=rimin=0:rimax=${maxin.toFixed(3)}:gimin=0:gimax=${maxin.toFixed(3)}:bimin=0:bimax=${maxin.toFixed(3)}`);
                 } else {
-                    // Exposure azaltma
-                    vFilters.push(`colorlevels=romax=${expRatio.toFixed(3)}:gomax=${expRatio.toFixed(3)}:bomax=${expRatio.toFixed(3)}`);
+                    vFilters.push(`colorlevels=romax=${softExpRatio.toFixed(3)}:gomax=${softExpRatio.toFixed(3)}:bomax=${softExpRatio.toFixed(3)}`);
                 }
             }
 
@@ -1362,11 +1361,11 @@ app.post('/api/process-video', async (req, res) => {
             const tint = (clip.filters?.tint ?? 0);
 
             if (temp !== 0 || tint !== 0) {
-                // CSS'teki ölçeği kullan: /400
-                const tempNorm = temp / 400;
-                const tintNorm = tint / 400;
+                // CSS'teki ölçeği kullan: /400, ama %75 yumuşatma uygula
+                const tempNorm = (temp / 400) * 0.30;
+                const tintNorm = (tint / 400) * 0.30;
 
-                // colorbalance yerine colorchannelmixer kullanarak daha doğru sonuç
+                // colorchannelmixer ile renk çarpımı
                 // R kanalı: 1 + temp - tint/2
                 // G kanalı: 1 + tint
                 // B kanalı: 1 - temp - tint/2
@@ -1383,21 +1382,17 @@ app.post('/api/process-video', async (req, res) => {
             if (hueVal !== 0) vFilters.push(`hue=h=${hueVal}`);
 
             // CLARITY: CSS'te feConvolveMatrix ile unsharp mask
-            // CSS kernelMatrix: 0 -c 0 -c (1+c/25) -c 0 -c 0 (c = clarity/100)
-            // FFmpeg unsharp: luma_amount ile benzer etki
+            // CSS kernelMatrix: center = 1 + clarity/25 (clarity=100 için center=5)
             const clarity = (clip.filters?.clarity ?? 0);
             if (clarity > 0) {
-                // CSS kernelMatrix'teki merkez değer: 1 + clarity/25
-                // Bu, clarity=100 için merkez=5 veriyor (güçlü keskinlik)
-                // FFmpeg unsharp amount: 0.5-2.5 arası mantıklı
-                const amount = Math.min(2.5, (clarity / 100) * 1.5);
+                // Güçlü keskinlik efekti için amount'ı artır
+                const amount = Math.min(7, (clarity / 100) * 5);
                 vFilters.push(`unsharp=luma_msize_x=5:luma_msize_y=5:luma_amount=${amount.toFixed(2)}`);
             }
-
             // COLOR BALANCE: CSS'te feColorMatrix offset değerleri olarak uygulanıyor
             // CSS formülü: offset = (shadows + midtones + highlights) / 200
-            // Bu bir toplam offset, FFmpeg colorbalance ise ayrı ayrı shadow/mid/highlight uygular
-            // Doğru eşleştirme için: CSS'teki toplam offseti FFmpeg'e midtones olarak uygulayalım
+            // colorchannelmixer'da offset (ro, go, bo) FFmpeg'de problem çıkarabiliyor
+            // Bunun yerine colorbalance kullan - daha stabil
             const cb = clip.filters?.colorBalance;
             if (cb) {
                 // CSS'teki toplam offset hesabı
@@ -1406,44 +1401,45 @@ app.post('/api/process-video', async (req, res) => {
                 const b_off = ((cb.shadows?.b ?? 0) + (cb.midtones?.b ?? 0) + (cb.highlights?.b ?? 0)) / 200;
 
                 if (r_off !== 0 || g_off !== 0 || b_off !== 0) {
-                    // colorchannelmixer ile offset uygula
-                    // Offset için: rr=1, ro=r_off gibi değerler kullanılır
-                    vFilters.push(`colorchannelmixer=rr=1:ro=${r_off.toFixed(3)}:gg=1:go=${g_off.toFixed(3)}:bb=1:bo=${b_off.toFixed(3)}`);
+                    // colorbalance ile midtones olarak uygula
+                    vFilters.push(`colorbalance=rm=${r_off.toFixed(3)}:gm=${g_off.toFixed(3)}:bm=${b_off.toFixed(3)}`);
                 }
             }
 
-            // CURVES PRESETS: CSS'te feComponentTransfer table values kullanılıyor
-            // FFmpeg'de curves=preset kullanılabilir ama CSS eşleştirmesi farklı
-            // CSS table values vs FFmpeg preset eşleştirmesi:
+            // CURVES PRESETS: CSS feComponentTransfer table values -> FFmpeg curves
+            // CSS table format: "out0 out1 out2..." eşit aralıklı input noktaları için output değerleri
+            // FFmpeg curves format: "in/out in/out ..."
             const curves = clip.filters?.curves;
             if (curves && curves !== 'none') {
-                // CSS'teki preset değerlerini FFmpeg curves=psfile veya manuel eğrilerle eşleştir
+                // CSS table values'ı FFmpeg curves formatına çevir
                 if (curves === 'color_negative') {
-                    // CSS: r="1 0", g="1 0", b="1 0" - ters çevirme
-                    vFilters.push(`curves=preset=color_negative`);
+                    // CSS: r="1 0" -> input 0->out 1, input 1->out 0
+                    vFilters.push(`curves=all='0/1 1/0'`);
                 } else if (curves === 'darker') {
-                    // CSS: "0 0.25 1" - karartma
-                    vFilters.push(`curves=preset=darker`);
+                    // CSS: "0 0.25 1" -> 3 nokta: in0->0, in0.5->0.25, in1->1
+                    vFilters.push(`curves=all='0/0 0.5/0.25 1/1'`);
                 } else if (curves === 'lighter') {
-                    // CSS: "0 0.75 1" - aydınlatma
-                    vFilters.push(`curves=preset=lighter`);
+                    // CSS: "0 0.75 1" -> in0->0, in0.5->0.75, in1->1
+                    vFilters.push(`curves=all='0/0 0.5/0.75 1/1'`);
                 } else if (curves === 'increase_contrast' || curves === 'medium_contrast') {
-                    // CSS: "0 0.2 0.8 1" - S eğrisi
-                    vFilters.push(`curves=preset=increase_contrast`);
+                    // CSS: "0 0.2 0.8 1" -> S eğrisi
+                    // 4 nokta: in0->0, in0.33->0.2, in0.67->0.8, in1->1
+                    vFilters.push(`curves=all='0/0 0.33/0.2 0.67/0.8 1/1'`);
                 } else if (curves === 'strong_contrast') {
-                    vFilters.push(`curves=preset=strong_contrast`);
+                    // Daha keskin S eğrisi
+                    vFilters.push(`curves=all='0/0 0.25/0.1 0.5/0.5 0.75/0.9 1/1'`);
                 } else if (curves === 'vintage') {
                     // CSS: r="0.2 0.5 1", g="0 0.5 0.8", b="0 0.2 0.6"
-                    vFilters.push(`curves=preset=vintage`);
+                    // Sepia benzeri sıcak ton
+                    vFilters.push(`curves=r='0/0.2 0.5/0.5 1/1':g='0/0 0.5/0.5 1/0.8':b='0/0 0.5/0.2 1/0.6'`);
                 } else if (curves === 'underwater') {
                     // CSS: r="0 0.6 1", g="0 0.5 1", b="0 0.4 0.9"
-                    // Manuel eğri - kırmızıyı artır, maviyi azalt
-                    vFilters.push(`curves=r='0/0 0.5/0.6 1/1':b='0/0 0.5/0.4 1/0.9'`);
+                    vFilters.push(`curves=r='0/0 0.5/0.6 1/1':g='0/0 0.5/0.5 1/1':b='0/0 0.5/0.4 1/0.9'`);
                 } else if (curves === 'cross_process') {
                     // CSS: r="0 0.8 1", g="0 1", b="0.2 0.4 1"
-                    vFilters.push(`curves=preset=cross_process`);
+                    vFilters.push(`curves=r='0/0 0.5/0.8 1/1':g='0/0 1/1':b='0/0.2 0.5/0.4 1/1'`);
                 } else {
-                    // Diğer presetler için doğrudan FFmpeg preset kullan
+                    // Bilinmeyen presetler için FFmpeg preset dene
                     vFilters.push(`curves=preset=${curves}`);
                 }
             }
