@@ -1391,14 +1391,14 @@ app.post('/api/process-video', async (req, res) => {
             }
             // COLOR BALANCE: CSS'te feColorMatrix offset değerleri olarak uygulanıyor
             // CSS formülü: offset = (shadows + midtones + highlights) / 200
-            // colorchannelmixer'da offset (ro, go, bo) FFmpeg'de problem çıkarabiliyor
-            // Bunun yerine colorbalance kullan - daha stabil
+            // FFmpeg colorbalance CSS'ten çok daha güçlü etki yapıyor, yumuşatma gerekli
             const cb = clip.filters?.colorBalance;
             if (cb) {
-                // CSS'teki toplam offset hesabı
-                const r_off = ((cb.shadows?.r ?? 0) + (cb.midtones?.r ?? 0) + (cb.highlights?.r ?? 0)) / 200;
-                const g_off = ((cb.shadows?.g ?? 0) + (cb.midtones?.g ?? 0) + (cb.highlights?.g ?? 0)) / 200;
-                const b_off = ((cb.shadows?.b ?? 0) + (cb.midtones?.b ?? 0) + (cb.highlights?.b ?? 0)) / 200;
+                // CSS'teki toplam offset hesabı + %30 yumuşatma (diğer filtrelerle tutarlı)
+                const softFactor = 0.30;
+                const r_off = (((cb.shadows?.r ?? 0) + (cb.midtones?.r ?? 0) + (cb.highlights?.r ?? 0)) / 200) * softFactor;
+                const g_off = (((cb.shadows?.g ?? 0) + (cb.midtones?.g ?? 0) + (cb.highlights?.g ?? 0)) / 200) * softFactor;
+                const b_off = (((cb.shadows?.b ?? 0) + (cb.midtones?.b ?? 0) + (cb.highlights?.b ?? 0)) / 200) * softFactor;
 
                 if (r_off !== 0 || g_off !== 0 || b_off !== 0) {
                     // colorbalance ile midtones olarak uygula
