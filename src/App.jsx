@@ -573,6 +573,15 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                 ? prev.stack.slice(0, prev.index + 1)
                 : [...prev.stack];
 
+            // Prevent duplicate history entries (if no changes made)
+            if (newStack.length > 0) {
+                const lastState = newStack[newStack.length - 1];
+                const isTracksSame = JSON.stringify(lastState.tracks) === JSON.stringify(tracksToSave);
+                const isCanvasSame = JSON.stringify(lastState.canvasSize) === JSON.stringify(canvasToSave);
+
+                if (isTracksSame && isCanvasSame) return prev;
+            }
+
             newStack.push({
                 tracks: JSON.parse(JSON.stringify(tracksToSave)),
                 canvasSize: JSON.parse(JSON.stringify(canvasToSave)),
@@ -741,29 +750,50 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                 setCanvasSize({ w, h });
 
                 // Klibin metadatasını güncelle
-                setTracks(prev => prev.map(track => ({
-                    ...track,
-                    clips: track.clips.map(c => {
-                        if (c.id === 'clip-0') {
-                            return {
-                                ...c,
-                                sourceWidth: w,
-                                sourceHeight: h,
-                                sourceDuration: duration || c.sourceDuration || c.sourceDuration, // Keep existing if api fails
-                                // Eğer duration çok kısaysa (0.1 gibi placeholder), gerçeği kullan.
-                                // Resimse duration'a dokunma (default 5sn kalsın).
-                                duration: (!isImage && duration > 0.5 && c.duration < 0.2) ? duration : c.duration,
-                                transform: {
-                                    ...(c.transform || {}),
-                                    x: 0,
-                                    y: 0,
-                                    scale: 1
-                                }
-                            };
-                        }
-                        return c;
-                    })
-                })));
+                // Klibin metadatasını güncelle
+                setTracks(prev => {
+                    const newTracks = prev.map(track => ({
+                        ...track,
+                        clips: track.clips.map(c => {
+                            if (c.id === 'clip-0') {
+                                return {
+                                    ...c,
+                                    sourceWidth: w,
+                                    sourceHeight: h,
+                                    sourceDuration: duration || c.sourceDuration || c.sourceDuration,
+                                    duration: (!isImage && duration > 0.5 && c.duration < 0.2) ? duration : c.duration,
+                                    transform: {
+                                        ...(c.transform || {}),
+                                        x: 0,
+                                        y: 0,
+                                        scale: 1
+                                    }
+                                };
+                            }
+                            return c;
+                        })
+                    }));
+
+                    // Update initial history state to match loaded dimensions
+                    setTimeout(() => {
+                        setHistory(h => {
+                            if (h.stack.length <= 1) {
+                                return {
+                                    stack: [{
+                                        tracks: JSON.parse(JSON.stringify(newTracks)),
+                                        canvasSize: { w, h },
+                                        name: 'Initial',
+                                        timestamp: new Date().toLocaleTimeString().split(' ')[0]
+                                    }],
+                                    index: 0
+                                };
+                            }
+                            return h;
+                        });
+                    }, 0);
+
+                    return newTracks;
+                });
             }
         };
 
@@ -1051,13 +1081,44 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
     };
 
     const updateClip = (clipId, updates) => {
-        setTracks(prev => prev.map(track => ({
-            ...track,
-            clips: track.clips.map(c => c.id === clipId ? { ...c, ...updates } : c)
-        })));
+        setTracks(prev => {
+            let hasChange = false;
+            const newTracks = prev.map(track => {
+                const newClips = track.clips.map(c => {
+                    if (c.id === clipId) {
+                        for (const key in updates) {
+                            if (JSON.stringify(c[key]) !== JSON.stringify(updates[key])) {
+                                hasChange = true;
+                                return { ...c, ...updates };
+                            }
+                        }
+                        return c;
+                    }
+                    return c;
+                });
+                return { ...track, clips: newClips };
+            });
+            return hasChange ? newTracks : prev;
+        });
     };
 
     const historyUpdateClip = (name, clipId, updates) => {
+        // Pre-check for changes to avoid redundant history
+        let isChanged = false;
+        const currentTrack = tracks.find(t => t.clips.some(c => c.id === clipId));
+        const currentClip = currentTrack?.clips.find(c => c.id === clipId);
+
+        if (currentClip) {
+            for (const key in updates) {
+                if (JSON.stringify(currentClip[key]) !== JSON.stringify(updates[key])) {
+                    isChanged = true;
+                    break;
+                }
+            }
+        }
+
+        if (!isChanged) return;
+
         const updatedTracks = tracks.map(track => ({
             ...track,
             clips: track.clips.map(c => c.id === clipId ? { ...c, ...updates } : c)
