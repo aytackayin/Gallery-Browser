@@ -1406,43 +1406,8 @@ app.post('/api/process-video', async (req, res) => {
                 }
             }
 
-            // CURVES PRESETS: CSS feComponentTransfer table values -> FFmpeg curves
-            // CSS table format: "out0 out1 out2..." eşit aralıklı input noktaları için output değerleri
-            // FFmpeg curves format: "in/out in/out ..."
-            const curves = clip.filters?.curves;
-            if (curves && curves !== 'none') {
-                // CSS table values'ı FFmpeg curves formatına çevir
-                if (curves === 'color_negative') {
-                    // CSS: r="1 0" -> input 0->out 1, input 1->out 0
-                    vFilters.push(`curves=all='0/1 1/0'`);
-                } else if (curves === 'darker') {
-                    // CSS: "0 0.25 1" -> 3 nokta: in0->0, in0.5->0.25, in1->1
-                    vFilters.push(`curves=all='0/0 0.5/0.25 1/1'`);
-                } else if (curves === 'lighter') {
-                    // CSS: "0 0.75 1" -> in0->0, in0.5->0.75, in1->1
-                    vFilters.push(`curves=all='0/0 0.5/0.75 1/1'`);
-                } else if (curves === 'increase_contrast' || curves === 'medium_contrast') {
-                    // CSS: "0 0.2 0.8 1" -> S eğrisi
-                    // 4 nokta: in0->0, in0.33->0.2, in0.67->0.8, in1->1
-                    vFilters.push(`curves=all='0/0 0.33/0.2 0.67/0.8 1/1'`);
-                } else if (curves === 'strong_contrast') {
-                    // Daha keskin S eğrisi
-                    vFilters.push(`curves=all='0/0 0.25/0.1 0.5/0.5 0.75/0.9 1/1'`);
-                } else if (curves === 'vintage') {
-                    // CSS: r="0.2 0.5 1", g="0 0.5 0.8", b="0 0.2 0.6"
-                    // Sepia benzeri sıcak ton
-                    vFilters.push(`curves=r='0/0.2 0.5/0.5 1/1':g='0/0 0.5/0.5 1/0.8':b='0/0 0.5/0.2 1/0.6'`);
-                } else if (curves === 'underwater') {
-                    // CSS: r="0 0.6 1", g="0 0.5 1", b="0 0.4 0.9"
-                    vFilters.push(`curves=r='0/0 0.5/0.6 1/1':g='0/0 0.5/0.5 1/1':b='0/0 0.5/0.4 1/0.9'`);
-                } else if (curves === 'cross_process') {
-                    // CSS: r="0 0.8 1", g="0 1", b="0.2 0.4 1"
-                    vFilters.push(`curves=r='0/0 0.5/0.8 1/1':g='0/0 1/1':b='0/0.2 0.5/0.4 1/1'`);
-                } else {
-                    // Bilinmeyen presetler için FFmpeg preset dene
-                    vFilters.push(`curves=preset=${curves}`);
-                }
-            }
+
+
 
             // 4. ADIM: Scale (Fit + Zoom)
             // Legacy Fit Logic Removed to match Frontend 1:1 pixel mapping

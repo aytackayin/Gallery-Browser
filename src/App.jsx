@@ -1015,22 +1015,8 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
         return `${r_m * exposure} 0 0 0 0 0 ${g_m * exposure} 0 0 0 0 0 ${b_m * exposure} 0 0 0 0 0 1 0`;
     }, [activeVClip?.filters]);
 
-    // Curves Preset Values for SVG Preview
-    const curveValues = useMemo(() => {
-        const preset = activeVClip?.filters?.curves || 'none';
-        const def = "0 1";
+    // Curves Preview Removed
 
-        if (preset === 'color_negative') return { r: "1 0", g: "1 0", b: "1 0" };
-        if (preset === 'darker') return { r: "0 0.25 1", g: "0 0.25 1", b: "0 0.25 1" };
-        if (preset === 'lighter') return { r: "0 0.75 1", g: "0 0.75 1", b: "0 0.75 1" };
-        if (preset === 'increase_contrast' || preset === 'medium_contrast' || preset === 'strong_contrast')
-            return { r: "0 0.2 0.8 1", g: "0 0.2 0.8 1", b: "0 0.2 0.8 1" };
-        if (preset === 'vintage') return { r: "0.2 0.5 1", g: "0 0.5 0.8", b: "0 0.2 0.6" }; // Sepia-ish
-        if (preset === 'underwater') return { r: "0 0.6 1", g: "0 0.5 1", b: "0 0.4 0.9" }; // Red Boost, Blue Cut
-        if (preset === 'cross_process') return { r: "0 0.8 1", g: "0 1", b: "0.2 0.4 1" };
-
-        return { r: def, g: def, b: def };
-    }, [activeVClip?.filters?.curves]);
 
     const contentDuration = useMemo(() => {
         let max = 0;
@@ -2624,11 +2610,13 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
             <svg width="0" height="0" style={{ position: 'absolute' }}>
                 <filter id="preview-color-correction">
                     <feColorMatrix type="matrix" values={colorMatrix} />
+                    {/* Curves removed
                     <feComponentTransfer>
                         <feFuncR type="table" tableValues={curveValues.r} />
                         <feFuncG type="table" tableValues={curveValues.g} />
                         <feFuncB type="table" tableValues={curveValues.b} />
                     </feComponentTransfer>
+                    */}
                     {activeVClip?.filters?.clarity > 0 && (
                         <feConvolveMatrix
                             order="3"
@@ -2984,27 +2972,6 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                         </div>
                                     ))}
                                 </div>
-                                <div className="control-item">
-                                    <label style={{ fontSize: '0.65rem', opacity: 0.8 }}>CURVES PRESET</label>
-                                    <select
-                                        value={selectedClip.filters?.curves ?? 'none'}
-                                        onChange={e => historyUpdateClip('Curves Preset', selectedClipId, { filters: { ...selectedClip.filters, curves: e.target.value } })}
-                                        style={{ width: '100%', background: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', fontSize: '0.7rem', padding: '3px', borderRadius: 3 }}
-                                    >
-                                        <option value="none">None</option>
-                                        <option value="color_negative">Color Negative</option>
-                                        <option value="cross_process">Cross Process</option>
-                                        <option value="darker">Darker</option>
-                                        <option value="lighter">Lighter</option>
-                                        <option value="increase_contrast">Increase Contrast</option>
-                                        <option value="linear_contrast">Linear Contrast</option>
-                                        <option value="medium_contrast">Medium Contrast</option>
-                                        <option value="strong_contrast">Strong Contrast</option>
-                                        <option value="vintage">Vintage</option>
-                                        <option value="underwater">Underwater (Red Boost)</option>
-                                    </select>
-                                </div>
-
                                 <button className="action-btn" style={{ width: '100%', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', justifyContent: 'center', marginTop: 4, marginBottom: 4 }}
                                     onClick={() => historyUpdateClip('actionResetFilters', selectedClipId, { filters: { brightness: 100, contrast: 100, saturation: 100, exposure: 100, temperature: 0, tint: 0, vibrance: 0, hue: 0, clarity: 0, gamma: 1.0, colorBalance: { shadows: { r: 0, g: 0, b: 0 }, midtones: { r: 0, g: 0, b: 0 }, highlights: { r: 0, g: 0, b: 0 } }, curves: 'none' }, volume: 100 })}>
                                     <RotateCw size={14} style={{ marginRight: 6 }} /> {t.resetFilters || 'Reset'}
