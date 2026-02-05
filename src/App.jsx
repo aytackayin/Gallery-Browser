@@ -1358,7 +1358,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
             if (zoomTimeoutRef.current) clearTimeout(zoomTimeoutRef.current);
             zoomTimeoutRef.current = setTimeout(() => {
                 if (pushHistoryRef.current) {
-                    pushHistoryRef.current('actionTransform');
+                    pushHistoryRef.current('Scale');
                 }
             }, 1000);
         };
@@ -2654,8 +2654,8 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
             if (hasMoved) {
                 if (isDragging.type === 'timeline-clip-move' || isDragging.type === 'clip') actionName = 'actionMove';
                 else if (isDragging.type === 'timeline-clip-resize' || isDragging.type === 'resize-edge') actionName = 'actionResize';
-                else if (isDragging.type === 'canvas-pan') actionName = 'actionTransform';
-                else if (isDragging.type === 'canvas-resize') actionName = 'actionCanvasResize';
+                else if (isDragging.type === 'canvas-pan') actionName = 'Move';
+                else if (isDragging.type === 'canvas-resize') actionName = 'Canvas Size';
                 else if (isDragging.type === 'crop') actionName = 'actionCrop';
             }
 
@@ -2789,107 +2789,108 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                         <label>{t.brightness || 'Brightness'}</label>
                                         <input type="number" value={selectedClip.filters?.brightness ?? 100} onWheel={e => handleInputWheel(e, selectedClip.filters?.brightness ?? 100, (val) => updateClip(selectedClipId, { filters: { ...selectedClip.filters, brightness: val } }))}
+                                            onBlur={() => pushHistory('Brightness')}
                                             onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, brightness: parseInt(e.target.value) || 0 } })}
                                         />
                                     </div>
                                     <input type="range" min="0" max="200" value={selectedClip.filters?.brightness ?? 100}
-                                        onMouseUp={() => pushHistory('actionFilter')}
+                                        onMouseUp={() => pushHistory('Brightness')}
                                         onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, brightness: parseInt(e.target.value) } })} />
                                 </div>
                                 <div className="control-item">
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                         <label>{t.contrast || 'Contrast'}</label>
                                         <input type="number" value={selectedClip.filters?.contrast ?? 100} onWheel={e => handleInputWheel(e, selectedClip.filters?.contrast ?? 100, (val) => updateClip(selectedClipId, { filters: { ...selectedClip.filters, contrast: val } }))}
-                                            onBlur={() => pushHistory('actionFilter')}
+                                            onBlur={() => pushHistory('Contrast')}
                                             onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, contrast: parseInt(e.target.value) || 0 } })}
                                         />
                                     </div>
                                     <input type="range" min="0" max="200" value={selectedClip.filters?.contrast ?? 100}
-                                        onMouseUp={() => pushHistory('actionFilter')}
+                                        onMouseUp={() => pushHistory('Contrast')}
                                         onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, contrast: parseInt(e.target.value) } })} />
                                 </div>
                                 <div className="control-item">
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                         <label>{t.saturation || 'Saturation'}</label>
                                         <input type="number" value={selectedClip.filters?.saturation ?? 100} onWheel={e => handleInputWheel(e, selectedClip.filters?.saturation ?? 100, (val) => updateClip(selectedClipId, { filters: { ...selectedClip.filters, saturation: val } }))}
-                                            onBlur={() => pushHistory('actionFilter')}
+                                            onBlur={() => pushHistory('Saturation')}
                                             onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, saturation: parseInt(e.target.value) || 0 } })}
                                         />
                                     </div>
                                     <input type="range" min="0" max="200" value={selectedClip.filters?.saturation ?? 100}
-                                        onMouseUp={() => pushHistory('actionFilter')}
+                                        onMouseUp={() => pushHistory('Saturation')}
                                         onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, saturation: parseInt(e.target.value) } })} />
                                 </div>
                                 <div className="control-item">
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                         <label>{t.exposure || 'Exposure'}</label>
                                         <input type="number" value={selectedClip.filters?.exposure ?? 100} onWheel={e => handleInputWheel(e, selectedClip.filters?.exposure ?? 100, (val) => updateClip(selectedClipId, { filters: { ...selectedClip.filters, exposure: val } }))}
-                                            onBlur={() => pushHistory('actionFilter')}
+                                            onBlur={() => pushHistory('Exposure')}
                                             onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, exposure: parseInt(e.target.value) || 0 } })}
                                         />
                                     </div>
                                     <input type="range" min="0" max="200" value={selectedClip.filters?.exposure ?? 100}
-                                        onMouseUp={() => pushHistory('actionFilter')}
+                                        onMouseUp={() => pushHistory('Exposure')}
                                         onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, exposure: parseInt(e.target.value) } })} />
                                 </div>
                                 <div className="control-item">
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                         <label>{t.temperature || 'Temperature'}</label>
                                         <input type="number" value={selectedClip.filters?.temperature ?? 0} onWheel={e => handleInputWheel(e, selectedClip.filters?.temperature ?? 0, (val) => updateClip(selectedClipId, { filters: { ...selectedClip.filters, temperature: val } }))}
-                                            onBlur={() => pushHistory('actionFilter')}
+                                            onBlur={() => pushHistory('Temperature')}
                                             onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, temperature: parseInt(e.target.value) || 0 } })}
                                         />
                                     </div>
                                     <input type="range" min="-100" max="100" value={selectedClip.filters?.temperature ?? 0}
-                                        onMouseUp={() => pushHistory('actionFilter')}
+                                        onMouseUp={() => pushHistory('Temperature')}
                                         onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, temperature: parseInt(e.target.value) } })} />
                                 </div>
                                 <div className="control-item">
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                         <label>{t.tint || 'Tint'}</label>
                                         <input type="number" value={selectedClip.filters?.tint ?? 0} onWheel={e => handleInputWheel(e, selectedClip.filters?.tint ?? 0, (val) => updateClip(selectedClipId, { filters: { ...selectedClip.filters, tint: val } }))}
-                                            onBlur={() => pushHistory('actionFilter')}
+                                            onBlur={() => pushHistory('Tint')}
                                             onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, tint: parseInt(e.target.value) || 0 } })}
                                         />
                                     </div>
                                     <input type="range" min="-100" max="100" value={selectedClip.filters?.tint ?? 0}
-                                        onMouseUp={() => pushHistory('actionFilter')}
+                                        onMouseUp={() => pushHistory('Tint')}
                                         onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, tint: parseInt(e.target.value) } })} />
                                 </div>
                                 <div className="control-item">
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                         <label>{t.vibrance || 'Vibrance'}</label>
                                         <input type="number" value={selectedClip.filters?.vibrance ?? 0} onWheel={e => handleInputWheel(e, selectedClip.filters?.vibrance ?? 0, (val) => updateClip(selectedClipId, { filters: { ...selectedClip.filters, vibrance: val } }))}
-                                            onBlur={() => pushHistory('actionFilter')}
+                                            onBlur={() => pushHistory('Vibrance')}
                                             onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, vibrance: parseInt(e.target.value) || 0 } })}
                                         />
                                     </div>
                                     <input type="range" min="-100" max="100" value={selectedClip.filters?.vibrance ?? 0}
-                                        onMouseUp={() => pushHistory('actionFilter')}
+                                        onMouseUp={() => pushHistory('Vibrance')}
                                         onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, vibrance: parseInt(e.target.value) } })} />
                                 </div>
                                 <div className="control-item">
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                         <label>{t.clarity || 'Clarity'}</label>
                                         <input type="number" value={selectedClip.filters?.clarity ?? 0} onWheel={e => handleInputWheel(e, selectedClip.filters?.clarity ?? 0, (val) => updateClip(selectedClipId, { filters: { ...selectedClip.filters, clarity: val } }))}
-                                            onBlur={() => pushHistory('actionFilter')}
+                                            onBlur={() => pushHistory('Clarity')}
                                             onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, clarity: parseInt(e.target.value) || 0 } })}
                                         />
                                     </div>
                                     <input type="range" min="0" max="100" value={selectedClip.filters?.clarity ?? 0}
-                                        onMouseUp={() => pushHistory('actionFilter')}
+                                        onMouseUp={() => pushHistory('Clarity')}
                                         onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, clarity: parseInt(e.target.value) } })} />
                                 </div>
                                 <div className="control-item">
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                         <label>{t.hue || 'Hue'}</label>
                                         <input type="number" value={selectedClip.filters?.hue ?? 0} onWheel={e => handleInputWheel(e, selectedClip.filters?.hue ?? 0, (val) => updateClip(selectedClipId, { filters: { ...selectedClip.filters, hue: val } }))}
-                                            onBlur={() => pushHistory('actionFilter')}
+                                            onBlur={() => pushHistory('Hue')}
                                             onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, hue: parseInt(e.target.value) || 0 } })}
                                         />
                                     </div>
                                     <input type="range" min="-180" max="180" value={selectedClip.filters?.hue ?? 0}
-                                        onMouseUp={() => pushHistory('actionFilter')}
+                                        onMouseUp={() => pushHistory('Hue')}
                                         onChange={e => updateClip(selectedClipId, { filters: { ...selectedClip.filters, hue: parseInt(e.target.value) } })} />
                                 </div>
 
@@ -3017,7 +3018,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                                             type="range" min="-100" max="100"
                                                             value={selectedClip.filters?.colorBalance?.[type]?.[color] ?? 0}
                                                             style={{ height: 2, accentColor: color === 'r' ? '#ff5252' : (color === 'g' ? '#69f0ae' : '#448aff') }}
-                                                            onMouseUp={() => pushHistory('actionFilter')}
+                                                            onMouseUp={() => pushHistory('Color Balance')}
                                                             onChange={e => {
                                                                 const newVal = parseInt(e.target.value);
                                                                 const newCB = { ...selectedClip.filters.colorBalance };
@@ -3035,7 +3036,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                     <label style={{ fontSize: '0.65rem', opacity: 0.8 }}>CURVES PRESET</label>
                                     <select
                                         value={selectedClip.filters?.curves ?? 'none'}
-                                        onChange={e => historyUpdateClip('actionFilter', selectedClipId, { filters: { ...selectedClip.filters, curves: e.target.value } })}
+                                        onChange={e => historyUpdateClip('Curves Preset', selectedClipId, { filters: { ...selectedClip.filters, curves: e.target.value } })}
                                         style={{ width: '100%', background: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', fontSize: '0.7rem', padding: '3px', borderRadius: 3 }}
                                     >
                                         <option value="none">None</option>
@@ -3086,13 +3087,13 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                         <label>{t.scale || 'Scale'}</label>
                                         <input type="number" step="0.01" value={isFinite(selectedClip.transform?.scale) ? parseFloat(selectedClip.transform.scale).toFixed(2) : "1.00"}
                                             onWheel={e => handleInputWheel(e, isFinite(selectedClip.transform?.scale) ? selectedClip.transform.scale : 1, (val) => updateClip(selectedClipId, { transform: { ...(selectedClip.transform || { x: 0, y: 0 }), scale: val } }), 0.01)}
-                                            onBlur={() => pushHistory('actionTransform')}
+                                            onBlur={() => pushHistory('Scale')}
                                             onChange={e => updateClip(selectedClipId, { transform: { ...(selectedClip.transform || { x: 0, y: 0 }), scale: parseFloat(e.target.value) || 1 } })}
 
                                         />
                                     </div>
                                     <input type="range" min="0.1" max="10" step="0.01" value={isFinite(selectedClip.transform?.scale) ? selectedClip.transform.scale : 1}
-                                        onMouseUp={() => pushHistory('actionTransform')}
+                                        onMouseUp={() => pushHistory('Scale')}
                                         onChange={e => updateClip(selectedClipId, { transform: { ...(selectedClip.transform || { x: 0, y: 0 }), scale: parseFloat(e.target.value) || 1 } })} />
                                 </div>
                                 <div className="control-item">
@@ -3127,17 +3128,17 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                 </div>
                                 <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
                                     <button className="action-btn" style={{ flex: 1, background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', justifyContent: 'center', padding: '4px' }}
-                                        onClick={() => historyUpdateClip('actionTransform', selectedClipId, { rotate: ((selectedClip.rotate || 0) + 90) % 360 })}
+                                        onClick={() => historyUpdateClip('Rotate', selectedClipId, { rotate: ((selectedClip.rotate || 0) + 90) % 360 })}
                                         data-tooltip={t?.rotate || 'Rotate'}>
                                         <RotateCw size={14} />
                                     </button>
                                     <button className={`action-btn ${selectedClip.flipH ? 'active' : ''}`} style={{ flex: 1, background: selectedClip.flipH ? 'var(--netflix-red)' : 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'white', justifyContent: 'center', padding: '4px' }}
-                                        onClick={() => historyUpdateClip('actionTransform', selectedClipId, { flipH: !selectedClip.flipH })}
+                                        onClick={() => historyUpdateClip('Flip H', selectedClipId, { flipH: !selectedClip.flipH })}
                                         data-tooltip={t?.flipH || 'Flip H'}>
                                         <Maximize2 size={14} style={{ transform: 'rotate(90deg)' }} />
                                     </button>
                                     <button className={`action-btn ${selectedClip.flipV ? 'active' : ''}`} style={{ flex: 1, background: selectedClip.flipV ? 'var(--netflix-red)' : 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'white', justifyContent: 'center', padding: '4px' }}
-                                        onClick={() => historyUpdateClip('actionTransform', selectedClipId, { flipV: !selectedClip.flipV })}
+                                        onClick={() => historyUpdateClip('Flip V', selectedClipId, { flipV: !selectedClip.flipV })}
                                         data-tooltip={t?.flipV || 'Flip V'}>
                                         <Maximize2 size={14} />
                                     </button>
@@ -3153,7 +3154,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                             if (!canvasSize) return;
                                             const sw = selectedClip.sourceWidth || canvasSize.w;
                                             const sh = selectedClip.sourceHeight || canvasSize.h;
-                                            historyUpdateClip('actionTransform', selectedClipId, { transform: { ...(selectedClip.transform || { x: 0, y: 0 }), x: (canvasSize.w - sw) / 2, y: (canvasSize.h - sh) / 2 } });
+                                            historyUpdateClip('Center', selectedClipId, { transform: { ...(selectedClip.transform || { x: 0, y: 0 }), x: (canvasSize.w - sw) / 2, y: (canvasSize.h - sh) / 2 } });
                                         }}
                                         data-tooltip={t.center || 'Center'}>
                                         <Monitor size={14} style={{ marginRight: 4 }} /> {t.center || 'Center'}
@@ -3477,7 +3478,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                             onFocus={() => { canvasSizeOnFocusRef.current = { ...canvasSize }; }}
                                             onBlur={() => {
                                                 if (canvasSizeOnFocusRef.current && (canvasSizeOnFocusRef.current.w !== canvasSize.w || canvasSizeOnFocusRef.current.h !== canvasSize.h)) {
-                                                    pushHistory('actionTransform');
+                                                    pushHistory('Canvas Size');
                                                 }
                                                 canvasSizeOnFocusRef.current = null;
                                             }}
@@ -3492,7 +3493,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                             onFocus={() => { canvasSizeOnFocusRef.current = { ...canvasSize }; }}
                                             onBlur={() => {
                                                 if (canvasSizeOnFocusRef.current && (canvasSizeOnFocusRef.current.w !== canvasSize.w || canvasSizeOnFocusRef.current.h !== canvasSize.h)) {
-                                                    pushHistory('actionTransform');
+                                                    pushHistory('Canvas Size');
                                                 }
                                                 canvasSizeOnFocusRef.current = null;
                                             }}
@@ -3507,7 +3508,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                                 if (originalSize) {
                                                     const newSize = { w: originalSize.w, h: originalSize.h };
                                                     setCanvasSize(newSize);
-                                                    pushHistory('actionCanvasResize', null, newSize);
+                                                    pushHistory('Canvas Size', null, newSize);
                                                 }
                                             }}
                                             style={{ padding: '2px 6px', height: 'auto', border: 'none', background: 'transparent' }}
