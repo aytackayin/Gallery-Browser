@@ -1277,8 +1277,32 @@ app.post('/api/process-video', async (req, res) => {
             vFilters.push(`setpts=PTS+(${clip.offset}/TB)`); // Move to timeline position
 
             // 3. ADIM: Filtreler (EQ & Renk Düzeltme)
+            // CSS brightness() doğrudan RGB değerlerini çarpar, FFmpeg eq brightness ise YUV'da offset yapar
+            // CSS brightness(200%) = her piksel * 2.0, CSS brightness(50%) = her piksel * 0.5
+            // Doğru dönüşüm: colorlevels ile input aralığını daraltarak brightness simüle edilir
+            // Alternatif: lutyuv ile Y kanalını çarpmak daha doğru sonuç verir
+
+            // Önce contrast, saturation, gamma uygula (brightness hariç)
             vFilters.push(`eq=brightness=0:contrast=${cVal}:saturation=${s}:gamma=${g}`);
-            if (bRatio !== 1) vFilters.push(`lutyuv=y=val*${bRatio}`);
+
+            // CSS brightness() simülasyonu için colorlevels kullan
+            // brightness > 100: çıktıyı artır (omax > 1 mümkün değil, o yüzden imin ile sıkıştır)
+            // brightness < 100: çıktıyı azalt
+            if (bRatio !== 1) {
+                if (bRatio > 1) {
+                    // Parlaklık artırma: Siyah noktayı yükselt ve beyazı sınırla
+                    // CSS brightness(200%) için: her piksel * 2 = 0 -> 0, 128 -> 255 (clipped)
+                    // FFmpeg karşılığı: inputları sıkıştırarak çıktıyı açmak
+                    // minout = 0, maxout = 1, minin = 0, maxin = 1/bRatio
+                    const maxin = Math.min(1, 1 / bRatio);
+                    vFilters.push(`colorlevels=rimin=0:rimax=${maxin}:gimin=0:gimax=${maxin}:bimin=0:bimax=${maxin}`);
+                } else {
+                    // Parlaklık azaltma: Çıktı aralığını daralt
+                    // CSS brightness(50%) için: her piksel * 0.5 = 0 -> 0, 255 -> 128
+                    // FFmpeg karşılığı: maxout = bRatio
+                    vFilters.push(`colorlevels=romax=${bRatio}:gomax=${bRatio}:bomax=${bRatio}`);
+                }
+            }
 
             // Advanced Color Correction
             const exposure = (clip.filters?.exposure ?? 100);
