@@ -1277,13 +1277,34 @@ app.post('/api/process-video', async (req, res) => {
             vFilters.push(`setpts=PTS+(${clip.offset}/TB)`); // Move to timeline position
 
             // 3. ADIM: Filtreler (EQ & Renk Düzeltme)
-            // CSS brightness() doğrudan RGB değerlerini çarpar, FFmpeg eq brightness ise YUV'da offset yapar
-            // CSS brightness(200%) = her piksel * 2.0, CSS brightness(50%) = her piksel * 0.5
-            // Doğru dönüşüm: colorlevels ile input aralığını daraltarak brightness simüle edilir
-            // Alternatif: lutyuv ile Y kanalını çarpmak daha doğru sonuç verir
+            // CSS brightness() ve contrast() RGB'de çalışır, FFmpeg eq ise YUV'da çalışır
+            // Bu nedenle colorlevels ile CSS davranışını simüle ediyoruz
 
-            // Önce contrast, saturation, gamma uygula (brightness hariç)
-            vFilters.push(`eq=brightness=0:contrast=${cVal}:saturation=${s}:gamma=${g}`);
+            // Sadece saturation ve gamma için eq kullan (brightness ve contrast hariç)
+            vFilters.push(`eq=brightness=0:contrast=1:saturation=${s}:gamma=${g}`);
+
+            // CSS contrast() simülasyonu
+            // Formül: output = (input - 0.5) * contrast + 0.5
+            // contrast > 1: orta gri etrafında genişlet (siyahlar daha siyah, beyazlar daha beyaz)
+            // contrast < 1: orta gri etrafında daralt
+            // colorlevels ile: imin = 0.5 - 0.5/contrast, imax = 0.5 + 0.5/contrast
+            if (cVal !== 1) {
+                if (cVal > 1) {
+                    // Kontrast artırma: input aralığını ortadan sıkıştır
+                    // contrast=2 için: 0.25-0.75 aralığını 0-1'e map et
+                    const halfRange = 0.5 / cVal;
+                    const imin = Math.max(0, 0.5 - halfRange);
+                    const imax = Math.min(1, 0.5 + halfRange);
+                    vFilters.push(`colorlevels=rimin=${imin.toFixed(3)}:rimax=${imax.toFixed(3)}:gimin=${imin.toFixed(3)}:gimax=${imax.toFixed(3)}:bimin=${imin.toFixed(3)}:bimax=${imax.toFixed(3)}`);
+                } else {
+                    // Kontrast azaltma: output aralığını ortaya doğru daralt
+                    // contrast=0.5 için: 0-1 aralığını 0.25-0.75'e map et
+                    const halfRange = 0.5 * cVal;
+                    const omin = 0.5 - halfRange;
+                    const omax = 0.5 + halfRange;
+                    vFilters.push(`colorlevels=romin=${omin.toFixed(3)}:romax=${omax.toFixed(3)}:gomin=${omin.toFixed(3)}:gomax=${omax.toFixed(3)}:bomin=${omin.toFixed(3)}:bomax=${omax.toFixed(3)}`);
+                }
+            }
 
             // CSS brightness() simülasyonu için colorlevels kullan
             // brightness > 100: çıktıyı artır (omax > 1 mümkün değil, o yüzden imin ile sıkıştır)
