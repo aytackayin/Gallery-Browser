@@ -408,10 +408,10 @@ const DraggablePanel = ({ id, title, icon, visible, collapsed, position, size, o
             ref={panelRef}
             className={`draggable-panel ${collapsed ? 'collapsed' : ''}`}
             style={{
-                left: position.x,
-                top: position.y,
-                width: collapsed ? 'auto' : (size?.width || 300),
-                height: collapsed ? 'auto' : (size?.height || 350),
+                left: isFinite(position.x) ? position.x : 0,
+                top: isFinite(position.y) ? position.y : 0,
+                width: collapsed ? 'auto' : (isFinite(size?.width) ? size.width : 300),
+                height: collapsed ? 'auto' : (isFinite(size?.height) ? size.height : 350),
                 zIndex: 8000
             }}
         >
@@ -572,12 +572,17 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
         const tracksToSave = customTracks || tracks;
         const canvasToSave = customCanvas || canvasSize;
         setHistory(prev => {
+            // If history isn't initialized yet, we can't push meaningful changes
+            if (prev.stack.length === 0) return prev;
+
             const newStack = (prev.index < prev.stack.length - 1)
                 ? prev.stack.slice(0, prev.index + 1)
                 : [...prev.stack];
 
             // Prevent duplicate history entries (if no changes made)
-            if (newStack.length > 0) {
+            // Only check for duplicates if we have more than 1 item in history (NOT initial state)
+            // This fixes the issue where undoing to Initial State locks the buttons
+            if (newStack.length > 1) {
                 const lastState = newStack[newStack.length - 1];
                 const isTracksSame = JSON.stringify(lastState.tracks) === JSON.stringify(tracksToSave);
                 const isCanvasSame = JSON.stringify(lastState.canvasSize) === JSON.stringify(canvasToSave);
@@ -608,7 +613,9 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
             const prevIdx = history.index - 1;
             const targetState = history.stack[prevIdx];
             setTracks(JSON.parse(JSON.stringify(targetState.tracks)));
-            if (targetState.canvasSize) setCanvasSize(JSON.parse(JSON.stringify(targetState.canvasSize)));
+            if (targetState.canvasSize) {
+                setCanvasSize(JSON.parse(JSON.stringify(targetState.canvasSize)));
+            }
             setHistory(prev => ({ ...prev, index: prevIdx }));
         }
     }, [history.index, history.stack]);
@@ -618,7 +625,9 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
             const nextIdx = history.index + 1;
             const targetState = history.stack[nextIdx];
             setTracks(JSON.parse(JSON.stringify(targetState.tracks)));
-            if (targetState.canvasSize) setCanvasSize(JSON.parse(JSON.stringify(targetState.canvasSize)));
+            if (targetState.canvasSize) {
+                setCanvasSize(JSON.parse(JSON.stringify(targetState.canvasSize)));
+            }
             setHistory(prev => ({ ...prev, index: nextIdx }));
         }
     }, [history.index, history.stack]);
@@ -627,24 +636,15 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
         if (idx >= 0 && idx < history.stack.length) {
             const targetState = history.stack[idx];
             setTracks(JSON.parse(JSON.stringify(targetState.tracks)));
-            if (targetState.canvasSize) setCanvasSize(JSON.parse(JSON.stringify(targetState.canvasSize)));
+            if (targetState.canvasSize) {
+                setCanvasSize(JSON.parse(JSON.stringify(targetState.canvasSize)));
+            }
             setHistory(prev => ({ ...prev, index: idx }));
         }
     };
 
-    // Initialize history when editor opens
+    // History clearing on unmount only
     useEffect(() => {
-        if (history.stack.length === 0) {
-            setHistory({
-                stack: [{
-                    tracks: JSON.parse(JSON.stringify(tracks)),
-                    canvasSize: JSON.parse(JSON.stringify(canvasSize)),
-                    name: t.initialState || 'Initial State',
-                    timestamp: new Date().toLocaleTimeString().split(' ')[0]
-                }],
-                index: 0
-            });
-        }
         return () => {
             // Clear history when editor closes (component unmounts)
             setHistory({ stack: [], index: -1 });
@@ -666,36 +666,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
         return () => window.removeEventListener('keydown', handleKeys);
     }, [undo, redo]);
 
-    // Use initialDuration to avoid state conflict
-    useEffect(() => {
-        if (initialDuration > 0) {
-            setDuration(prev => Math.max(prev, initialDuration));
-            setTracks(prev => {
-                const newTracks = prev.map(t => ({
-                    ...t,
-                    clips: t.clips.map(c => (c.id === 'clip-0' && (c.duration <= 0.1 || c.duration < initialDuration)) ? { ...c, duration: initialDuration, sourceDuration: initialDuration } : c)
-                }));
-
-                // Sync history initial state with corrected tracks
-                setTimeout(() => {
-                    setHistory(h => {
-                        if (h.stack.length === 1 && h.index === 0) {
-                            return {
-                                ...h,
-                                stack: [{
-                                    ...h.stack[0],
-                                    tracks: JSON.parse(JSON.stringify(newTracks))
-                                }]
-                            };
-                        }
-                        return h;
-                    });
-                }, 0);
-
-                return newTracks;
-            });
-        }
-    }, [initialDuration]);
+    // Unified duration sync is moved to loadInitialDimensions to avoid redundancy
 
     // Load audio buffer for initial audio file
     useEffect(() => {
@@ -732,28 +703,29 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
 
             let w = item.width;
             let h = item.height;
-            let duration = 0;
+            let dur = 0;
 
-            if (!w || !h) {
-                try {
-                    const res = await fetch(`/api/info?path=${encodeURIComponent(item.path)}`);
-                    const data = await res.json();
-                    if (data) {
-                        if (data.width) w = data.width;
-                        if (data.height) h = data.height;
-                        if (data.durationSeconds) duration = data.durationSeconds;
-                    }
-                } catch (e) {
-                    console.error("Failed to load initial dimensions", e);
+            try {
+                const res = await fetch(`/api/info?path=${encodeURIComponent(item.path)}`);
+                const data = await res.json();
+                if (data) {
+                    if (data.width) w = data.width;
+                    if (data.height) h = data.height;
+                    if (data.durationSeconds) dur = data.durationSeconds;
                 }
+            } catch (e) {
+                console.error("Failed to load metadata", e);
             }
 
             if (w && h) {
-                // Canvas boyutunu videonun boyutuna eşitle
+                // 1. Set basic metadata states
+                setOriginalSize({ w, h });
+                if (dur > 0) setDuration(dur);
+
+                // 2. Set Canvas Size
                 setCanvasSize({ w, h });
 
-                // Klibin metadatasını güncelle
-                // Klibin metadatasını güncelle
+                // 3. Update Tracks and THEN record Initial History
                 setTracks(prev => {
                     const newTracks = prev.map(track => ({
                         ...track,
@@ -763,13 +735,11 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                     ...c,
                                     sourceWidth: w,
                                     sourceHeight: h,
-                                    sourceDuration: duration || c.sourceDuration || c.sourceDuration,
-                                    duration: (!isImage && duration > 0.5 && c.duration < 0.2) ? duration : c.duration,
+                                    sourceDuration: dur || c.sourceDuration,
+                                    duration: (!isImage && dur > 0.5) ? dur : (c.duration < 0.2 ? 0.1 : c.duration),
                                     transform: {
-                                        ...(c.transform || {}),
-                                        x: 0,
-                                        y: 0,
-                                        scale: 1
+                                        x: 0, y: 0, scale: 1, rotate: 0, flipH: false, flipV: false,
+                                        ...(c.transform || {})
                                     }
                                 };
                             }
@@ -777,22 +747,24 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                         })
                     }));
 
-                    // Update initial history state to match loaded dimensions
+                    // SEQUENCE: Record history ONLY after dimensions are applied to tracks
                     setTimeout(() => {
-                        setHistory(h => {
-                            if (h.stack.length <= 1) {
+                        setHistory(hStack => {
+                            // Only initialize if stack is empty (this is the TRUE first load)
+                            if (hStack.stack.length === 0) {
                                 return {
                                     stack: [{
                                         tracks: JSON.parse(JSON.stringify(newTracks)),
                                         canvasSize: { w, h },
-                                        name: 'Initial',
+                                        name: t.initialState || 'Initial State',
                                         timestamp: new Date().toLocaleTimeString().split(' ')[0]
                                     }],
                                     index: 0
                                 };
                             }
-                            return h;
+                            return hStack;
                         });
+                        updateVideoRect(); // Ensure UI updates
                     }, 0);
 
                     return newTracks;
@@ -801,7 +773,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
         };
 
         loadInitialDimensions();
-    }, [item?.path]);
+    }, [item?.path, propRefreshKey]);
 
     const [selectedClipId, setSelectedClipId] = useState('clip-0');
     const [activeTool, setActiveTool] = useState('select'); // select, split, delete
@@ -850,7 +822,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
             properties: {
                 visible: true,
                 collapsed: false,
-                position: { x: window.innerWidth - 320, y: 70 },
+                position: { x: isFinite(window.innerWidth) ? window.innerWidth - 320 : 1000, y: 70 },
                 size: { width: 300, height: 350 }
             },
             history: {
@@ -1123,14 +1095,16 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
             }
         }
 
-        if (!isChanged) return;
-
-        const updatedTracks = tracks.map(track => ({
-            ...track,
-            clips: track.clips.map(c => c.id === clipId ? { ...c, ...updates } : c)
-        }));
-        setTracks(updatedTracks);
-        pushHistory(name, updatedTracks);
+        // Bug fix: Always allow update if at index 0 (Initial State) 
+        // OR if the optimization check passes. This prevents buttons from locking.
+        if (isChanged || (history.index === 0)) {
+            const updatedTracks = tracks.map(track => ({
+                ...track,
+                clips: track.clips.map(c => c.id === clipId ? { ...c, ...updates } : c)
+            }));
+            setTracks(updatedTracks);
+            pushHistory(name, updatedTracks);
+        }
     };
 
     const filteredPickerItems = useMemo(() => {
@@ -1209,7 +1183,12 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
             rt = (container.clientHeight - rh) / 2;
             rl = (container.clientWidth - rw) / 2;
         }
-        setVideoRect({ left: rl, top: rt, width: rw, height: rh });
+        const safeLeft = isFinite(rl) ? rl : 0;
+        const safeTop = isFinite(rt) ? rt : 0;
+        const safeWidth = isFinite(rw) ? rw : 100;
+        const safeHeight = isFinite(rh) ? rh : 100;
+
+        setVideoRect({ left: safeLeft, top: safeTop, width: safeWidth, height: safeHeight });
     };
 
     useEffect(() => {
@@ -1257,33 +1236,6 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
 
         setTimeout(updateVideoRect, 100);
     };
-
-    // Hibrit Metadata: Sunucudan gerçek süreyi çek
-    useEffect(() => {
-        if (!item.path) return;
-        const fetchDuration = async () => {
-            try {
-                const res = await fetch(`/api/info?path=${encodeURIComponent(item.path)}`);
-                const info = await res.json();
-                if (info) {
-                    if (info.width && info.height) {
-                        setOriginalSize({ w: info.width, h: info.height });
-                    }
-                    if (info.durationSeconds) {
-                        syncDuration(info.durationSeconds);
-                        // Also update initial clip duration if it's missing
-                        setTracks(prev => prev.map(t => ({
-                            ...t,
-                            clips: t.clips.map(c => (c.id === 'clip-0' && (c.duration <= 0.1)) ? { ...c, duration: info.durationSeconds, sourceDuration: info.durationSeconds } : c)
-                        })));
-                    }
-                }
-            } catch (e) {
-                console.error("API duration fetch failed:", e);
-            }
-        };
-        fetchDuration();
-    }, [item.path, propRefreshKey]);
 
     // Zoom sonrası scroll konumunu sabitlemek için useLayoutEffect (Render'dan hemen sonra, DOM boyutu güncellenmişken çalışır)
     useLayoutEffect(() => {
@@ -3409,8 +3361,8 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                         {pickingColorPreview && (
                                             <div style={{
                                                 position: 'absolute',
-                                                left: pickingColorPreview.x + 15,
-                                                top: pickingColorPreview.y + 15,
+                                                left: (isFinite(pickingColorPreview.x) ? pickingColorPreview.x : 0) + 15,
+                                                top: (isFinite(pickingColorPreview.y) ? pickingColorPreview.y : 0) + 15,
                                                 width: 80, height: 80,
                                                 borderRadius: '50%',
                                                 border: '3px solid white',
@@ -3921,7 +3873,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                         position: 'absolute',
                                         top: 28, // Ruler (28px) hemen bitiminden başlasın
                                         bottom: 0,
-                                        left: 80 + (currentTime * zoomLevel) - 1,
+                                        left: 80 + (isFinite(currentTime) && isFinite(zoomLevel) ? currentTime * zoomLevel : 0) - 1,
                                         width: 12,
                                         marginLeft: -5,
                                         zIndex: 900, // Header (950) ve Ruler (1000) altında kalmalı

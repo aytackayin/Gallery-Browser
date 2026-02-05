@@ -17,7 +17,7 @@ const getSharedVideo = (videoPath) => {
         video.preload = 'metadata'; // Faster initial load
         video.muted = true;
         video.playsInline = true;
-        video.src = `http://localhost:3001/media/${encodeURIComponent(videoPath)}`;
+        video.src = `/api/file?path=${encodeURIComponent(videoPath)}`;
 
         videoCache.set(videoPath, {
             element: video,
