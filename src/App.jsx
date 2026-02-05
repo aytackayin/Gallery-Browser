@@ -920,6 +920,9 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
     };
 
     const handleInputWheel = (e, currentVal, updateLogic, step = 1) => {
+        // Only allow scroll changes if the input is focused
+        if (document.activeElement !== e.target) return;
+
         // Scroll prevent default (Zen Browser/Firefox fix)
         e.preventDefault();
         e.stopPropagation();
