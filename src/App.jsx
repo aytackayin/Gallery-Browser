@@ -479,7 +479,10 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
     const [pickingColorPreview, setPickingColorPreview] = useState(null); // { x, y, color }
     const pickingCanvasRef = useRef(null);
     const [isProcessing, setIsProcessing] = useState(false);
-    const [canvasSize, setCanvasSize] = useState({ w: 1920, h: 1080 });
+    const [canvasSize, setCanvasSize] = useState(() => {
+        if (item && item.width && item.height) return { w: item.width, h: item.height };
+        return null;
+    });
     const [targetPath, setTargetPath] = useState(item?.path); // Track current save target
     const [originalSize, setOriginalSize] = useState(null);
     const [audioBuffers, setAudioBuffers] = useState({});
@@ -518,8 +521,8 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
     };
 
     const [showHelp, setShowHelp] = useState(false);
-    const VIDEO_WIDTH = canvasSize.w;
-    const VIDEO_HEIGHT = canvasSize.h;
+    const VIDEO_WIDTH = canvasSize ? canvasSize.w : 1920;
+    const VIDEO_HEIGHT = canvasSize ? canvasSize.h : 1080;
 
     const [timelineScroll, setTimelineScroll] = useState(0);
 
@@ -1182,7 +1185,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
 
     const updateVideoRect = () => {
         const container = containerRef.current;
-        if (!container) return;
+        if (!container || !canvasSize) return;
 
         // Safety margin for handles (40px each side)
         const margin = 80;
@@ -3144,6 +3147,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, marginTop: 4 }}>
                                     <button className="action-btn" style={{ background: 'var(--netflix-red)', color: 'white', border: 'none', justifyContent: 'center', padding: '4px' }}
                                         onClick={() => {
+                                            if (!canvasSize) return;
                                             const sw = selectedClip.sourceWidth || canvasSize.w;
                                             const sh = selectedClip.sourceHeight || canvasSize.h;
                                             historyUpdateClip('actionTransform', selectedClipId, { transform: { ...(selectedClip.transform || { x: 0, y: 0 }), x: (canvasSize.w - sw) / 2, y: (canvasSize.h - sh) / 2 } });
@@ -3183,7 +3187,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                             onMouseDown={handleCanvasMouseDown}
                             onContextMenu={(e) => e.preventDefault()}
                         >
-                            {(!duration || duration === -1) && (
+                            {(!canvasSize || !duration || duration === -1) && (
                                 <div style={{ position: 'absolute', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
                                     {duration === -1 ? (
                                         <span style={{ color: 'var(--netflix-red)', fontSize: '0.8rem' }}>{t.errorLoadingMedia || 'Error loading media. Try again.'}</span>
@@ -3222,6 +3226,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                 boxShadow: '0 0 20px rgba(0,0,0,0.5)'
                             }}>
                                 {(() => {
+                                    if (!canvasSize) return null;
                                     const viewScaleX = videoRect.width && canvasSize.w ? (videoRect.width / canvasSize.w) : 1;
                                     const viewScaleY = videoRect.height && canvasSize.h ? (videoRect.height / canvasSize.h) : 1;
 
@@ -3335,6 +3340,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                                             onLoad={(e) => {
                                                                 const nw = e.target.naturalWidth;
                                                                 const nh = e.target.naturalHeight;
+                                                                if (!canvasSize) return;
                                                                 if (!clip.sourceWidth || clip.sourceWidth === 0) {
                                                                     const dx = (canvasSize.w - nw) / 2;
                                                                     const dy = (canvasSize.h - nh) / 2;
@@ -3428,7 +3434,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                 </div>
                             )}
 
-                            {activeTool === 'crop' && videoRect.width && (
+                            {activeTool === 'crop' && videoRect.width && canvasSize && (
                                 <div
                                     style={{
                                         position: 'absolute',
