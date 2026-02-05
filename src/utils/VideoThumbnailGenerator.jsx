@@ -11,17 +11,19 @@ const operationQueues = new Map();
  * Get or create a shared video element and its queue
  */
 const getSharedVideo = (videoPath) => {
+    if (!videoPath) return { data: null, queue: Promise.resolve(), updateQueue: () => { } };
     if (!videoCache.has(videoPath)) {
         const video = document.createElement('video');
         video.crossOrigin = 'anonymous';
         video.preload = 'metadata'; // Faster initial load
         video.muted = true;
         video.playsInline = true;
-        video.src = `/api/file?path=${encodeURIComponent(videoPath)}`;
+        video.src = `/media/${videoPath.split('/').map(p => encodeURIComponent(p)).join('/')}`;
 
         videoCache.set(videoPath, {
             element: video,
             ready: false,
+            error: false,
             duration: 0,
             waitingCallbacks: []
         });
@@ -39,8 +41,14 @@ const getSharedVideo = (videoPath) => {
             }
         });
 
-        video.addEventListener('error', () => {
-            console.error(`Video load error for: ${videoPath}`);
+        video.addEventListener('error', (e) => {
+            const cache = videoCache.get(videoPath);
+            if (cache) {
+                cache.error = true;
+                cache.waitingCallbacks.forEach(cb => cb(new Error('Video load failed')));
+                cache.waitingCallbacks = [];
+            }
+            console.error(`Video load error for: ${videoPath}`, video.error);
         });
     }
     return {
@@ -101,6 +109,7 @@ export const VideoThumbnailCanvas = ({ videoPath, startTime, width, height, onLo
         }
 
         const { data: videoData, queue, updateQueue } = getSharedVideo(videoPath);
+        if (!videoData) return;
         const video = videoData.element;
 
         // Queue the operation to prevent seek collisions
@@ -110,8 +119,10 @@ export const VideoThumbnailCanvas = ({ videoPath, startTime, width, height, onLo
             try {
                 // Wait for metadata
                 if (!videoData.ready) {
-                    await new Promise(resolve => {
-                        videoData.waitingCallbacks.push(resolve);
+                    if (videoData.error) throw new Error('Video previously failed to load');
+                    await new Promise((resolve, reject) => {
+                        const onReady = (err) => err ? reject(err) : resolve();
+                        videoData.waitingCallbacks.push(onReady);
                     });
                 }
 
@@ -122,7 +133,7 @@ export const VideoThumbnailCanvas = ({ videoPath, startTime, width, height, onLo
                 video.currentTime = seekTime;
 
                 await new Promise((resolve, reject) => {
-                    const timeout = setTimeout(() => reject(new Error('Seek timeout')), 3000);
+                    const timeout = setTimeout(() => reject(new Error('Seek timeout')), 10000);
                     const onSeeked = () => {
                         clearTimeout(timeout);
                         video.removeEventListener('seeked', onSeeked);
