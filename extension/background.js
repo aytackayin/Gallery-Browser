@@ -37,7 +37,6 @@ chrome.webRequest.onHeadersReceived.addListener((details) => {
         if (url.includes('1080p')) label = '1080p Video';
         else if (url.includes('720p')) label = '720p Video';
 
-        // Thumbnail (Eğer varsa)
         const tabThumb = tabMetadata.get(details.tabId);
 
         const meta = {
@@ -46,7 +45,7 @@ chrome.webRequest.onHeadersReceived.addListener((details) => {
             mime: contentType || 'video/mp4',
             contentLength: contentLength,
             thumbnail: tabThumb || null,
-            tabId: details.tabId, // Tab Eşleşmesi İçin
+            tabId: details.tabId,
             timestamp: Date.now()
         };
 
@@ -66,12 +65,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
             tabMetadata.set(tabId, thumb);
 
-            // LATE BINDING: Video önce yakalandıysa, thumbnail'i şimdi güncelle
             let updated = false;
             for (let [key, meta] of capturedVideos.entries()) {
                 if (meta.tabId === tabId && !meta.thumbnail) {
                     meta.thumbnail = thumb;
-                    // Reference update is mostly enough as object is shared, but set again to be safe
                     capturedVideos.set(key, meta);
                     updated = true;
                 }
@@ -84,8 +81,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     }
 
     if (msg.type === "GET_CAPTURED_URLS") {
+        // TARTIŞMALI: Hepsini mi dönelim yoksa sadece aktif sekmeyi mi?
+        // Popup.js şu an hepsini alıp filter yapmıyor (googlevideo hariç).
+        // Kullanıcı karışıklık istemediği için, SADECE AKTİF TAB'a ait olanları filtreleyip dönmek daha mantıklı olabilir mi?
+        // Hayır, Popup.js tabId'sini bilmiyor (sendMessage callback içinde).
+        // En iyisi Hepsini dön but onUpdated ile temizlendiği için sorun kalmaz.
+
         const list = Array.from(capturedVideos.values()).reverse();
-        if (list.length > 20) list.length = 20;
+        if (list.length > 50) list.length = 50;
         sendResponse(list);
     }
 
@@ -99,8 +102,38 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     }
 });
 
+// TEMİZLİK: Sayfa yenilendiğinde veya URL değiştiğinde o tab'ın önceki videolarını sil
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+    if (changeInfo.status === 'loading') {
+        const url = tab.url || "";
+        // YouTube hariç (YouTube kendi state'ini yönetiyor veya content script yolluyor)
+        // Ama YouTube için de temizlense fena olmaz.
+
+        // Metadata sil
+        tabMetadata.delete(tabId);
+
+        // O tab'a ait videoları sil
+        let deleted = false;
+        for (let [key, meta] of capturedVideos.entries()) {
+            if (meta.tabId === tabId) {
+                capturedVideos.delete(key);
+                deleted = true;
+            }
+        }
+
+        if (deleted) {
+            chrome.runtime.sendMessage({ type: "NEW_VIDEO_URL" });
+        }
+    }
+});
+
 chrome.tabs.onRemoved.addListener((tabId) => {
     tabMetadata.delete(tabId);
+    for (let [key, meta] of capturedVideos.entries()) {
+        if (meta.tabId === tabId) {
+            capturedVideos.delete(key);
+        }
+    }
 });
 
 function notifyServer(downloadId, url, title, hostname) {
