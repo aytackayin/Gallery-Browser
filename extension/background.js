@@ -1,18 +1,16 @@
 // Background Script for Zen Browser / Firefox (Manifest V2 Compatible)
 
-// Key: BaseURL (parametreler hariç), Value: Video Meta
 const capturedVideos = new Map();
+const tabMetadata = new Map(); // Key: TabID, Value: Thumbnail URL
 
-// Web Request Listener (Headers Received - Daha doğru analiz için)
+// Web Request Listener
 chrome.webRequest.onHeadersReceived.addListener((details) => {
     const url = details.url;
 
-    // Temel Filtreler
     if (url.includes('google.com') && !url.includes('googlevideo.com')) return;
     if (url.includes('analytics') || url.includes('tracker') || url.includes('ads')) return;
-    if (url.includes('youtube.com')) return; // YouTube'u popup.js yönetiyor
+    if (url.includes('youtube.com')) return;
 
-    // Header Analizi
     const headers = details.responseHeaders || [];
     const typeHeader = headers.find(h => h.name.toLowerCase() === 'content-type');
     const lenHeader = headers.find(h => h.name.toLowerCase() === 'content-length');
@@ -20,47 +18,39 @@ chrome.webRequest.onHeadersReceived.addListener((details) => {
     const contentType = typeHeader ? typeHeader.value.toLowerCase() : '';
     const contentLength = lenHeader ? parseInt(lenHeader.value) : 0;
 
-    // Video Kontrolü
     const isVideoType = contentType.includes('video') || contentType.includes('mpegurl') || contentType.includes('application/x-mpegURL');
     const isVideoExt = url.includes('.mp4') || url.includes('.m3u8') || url.includes('.webm') || url.includes('.mov');
 
     if (isVideoType || isVideoExt) {
 
-        // 1. Kural: Çok küçük dosyaları (1MB altı) ele (Reklam, icon, preview vs.)
-        // Ancak HLS (.m3u8) playlist dosyaları küçüktür, onları eleme!
         const isHLS = contentType.includes('mpegurl') || url.includes('.m3u8');
-
         if (!isHLS && contentLength > 0 && contentLength < 1024 * 1024) {
-            // 1MB altı video dosyası (mp4/webm) -> Yoksay
             return;
         }
 
-        // 2. Kural: Duplicate Önleme
-        // URL'in soru işaretinden önceki kısmını (Base URL) anahtar olarak kullan.
-        // Böylece aynı videonun farklı token/zaman damgasıyla gelen istekleri listeyi doldurmaz, günceller.
         const baseUrl = url.split('?')[0];
 
-        // Dosya adını etikete koy (daha açıklayıcı olması için)
-        // url: .../my-video.mp4?token=... -> "my-video.mp4"
         let filename = baseUrl.split('/').pop();
         if (filename.length > 25) filename = filename.substring(0, 25) + '...';
 
-        // Etiket
         let label = filename || 'Video File';
         if (url.includes('1080p')) label = '1080p Video';
         else if (url.includes('720p')) label = '720p Video';
 
+        // Thumbnail (Eğer varsa)
+        const tabThumb = tabMetadata.get(details.tabId);
+
         const meta = {
-            url: url, // İndirme için TAM URL (tokenlı)
+            url: url,
             label: label,
             mime: contentType || 'video/mp4',
             contentLength: contentLength,
+            thumbnail: tabThumb || null,
+            tabId: details.tabId, // Tab Eşleşmesi İçin
             timestamp: Date.now()
         };
 
         capturedVideos.set(baseUrl, meta);
-
-        // Popup'a bildir
         chrome.runtime.sendMessage({ type: "NEW_VIDEO_URL" });
     }
 
@@ -69,10 +59,32 @@ chrome.webRequest.onHeadersReceived.addListener((details) => {
 // Message Listener
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
+    if (msg.type === "UPDATE_TAB_METADATA") {
+        if (sender.tab) {
+            const tabId = sender.tab.id;
+            const thumb = msg.thumbnail;
+
+            tabMetadata.set(tabId, thumb);
+
+            // LATE BINDING: Video önce yakalandıysa, thumbnail'i şimdi güncelle
+            let updated = false;
+            for (let [key, meta] of capturedVideos.entries()) {
+                if (meta.tabId === tabId && !meta.thumbnail) {
+                    meta.thumbnail = thumb;
+                    // Reference update is mostly enough as object is shared, but set again to be safe
+                    capturedVideos.set(key, meta);
+                    updated = true;
+                }
+            }
+
+            if (updated) {
+                chrome.runtime.sendMessage({ type: "NEW_VIDEO_URL" });
+            }
+        }
+    }
+
     if (msg.type === "GET_CAPTURED_URLS") {
-        // Sadece capturedVideos map'ini döndür
-        const list = Array.from(capturedVideos.values()).reverse(); // En son yakalanan en üstte
-        // Sınırla (Son 20 video yeterli)
+        const list = Array.from(capturedVideos.values()).reverse();
         if (list.length > 20) list.length = 20;
         sendResponse(list);
     }
@@ -85,6 +97,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         capturedVideos.clear();
         chrome.runtime.sendMessage({ type: "NEW_VIDEO_URL" });
     }
+});
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+    tabMetadata.delete(tabId);
 });
 
 function notifyServer(downloadId, url, title, hostname) {
