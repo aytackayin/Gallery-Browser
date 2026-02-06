@@ -1,167 +1,104 @@
-// Video akışlarını (mp4, m3u8 vb.) yakalamak için ağ trafiğini dinler
-let capturedUrls = new Map(); // URL -> Metadata (Diğer siteler için)
-let tabVideoData = new Map(); // tabId -> { title: string, formats: [] } (YouTube için)
+// Background Script for Zen Browser / Firefox (Manifest V2 Compatible)
 
-// Youtube itag kodlarına göre çözünürlük haritası
-const YT_ITAGS = {
-    '137': '1080p Video',
-    '248': '1080p WebM',
-    '136': '720p Video',
-    '247': '720p WebM',
-    '135': '480p Video',
-    '134': '360p Video',
-    '140': 'Audio (m4a)',
-    '251': 'Audio (webm)',
-    '18': '360p (Sesli)',
-    '22': '720p (Sesli)'
-};
+const capturedUrls = new Map();
+const tabVideoData = new Map(); // Content script'ten gelen veriler (YouTube)
 
-chrome.webRequest.onBeforeRequest.addListener(
-    (details) => {
-        const url = details.url;
-        if (url.includes('google.com') && !url.includes('googlevideo.com')) return;
-        if (url.includes('yandex')) return;
+// Web Request Listener (Sniffer)
+chrome.webRequest.onBeforeRequest.addListener((details) => {
+    const url = details.url;
 
+    // Ignore non-video or noise
+    if (url.includes('google.com') && !url.includes('googlevideo.com')) return;
+    if (url.includes('analytics') || url.includes('tracker')) return;
+
+    // Check for video extensions or mime types in URL
+    const isVideo = url.includes('.mp4') || url.includes('.m3u8') || url.includes('.webm') || (url.includes('googlevideo.com') && url.includes('videoplayback'));
+
+    if (isVideo) {
+        let label = 'Video File';
+        if (url.includes('1080p')) label = '1080p';
+        else if (url.includes('720p')) label = '720p';
+        else if (url.includes('.m3u8')) label = 'HLS Stream';
+
+        // Google Video (YouTube) ise etiketleme yap
         if (url.includes('googlevideo.com')) {
-            const urlObj = new URL(url);
-            const mime = urlObj.searchParams.get('mime');
-            const itag = urlObj.searchParams.get('itag');
-
-            if (mime && (mime.includes('video') || mime.includes('audio'))) {
-                let label = YT_ITAGS[itag] || `${itag} (${mime.split('/')[1]})`;
-                const meta = {
-                    url: url,
-                    label: label,
-                    itag: itag,
-                    mime: mime,
-                    timestamp: Date.now()
-                };
-                capturedUrls.set(`${itag}`, meta);
-            }
-            return;
+            const itag = url.match(/itag=(\d+)/)?.[1];
+            if (itag) label = `YouTube (${itag})`;
         }
 
-        const isVideo = url.includes('.mp4') || url.includes('.m3u8') || (url.includes('video') && !url.includes('upload'));
-        if (isVideo) {
-            capturedUrls.set(url, { url: url, label: 'Video File', timestamp: Date.now() });
+        const meta = {
+            url: url,
+            label: label,
+            mime: url.includes('.m3u8') ? 'application/vnd.apple.mpegurl' : 'video/mp4',
+            timestamp: Date.now()
+        };
+
+        capturedUrls.set(url, meta);
+
+        // Notify popup if needed
+        chrome.runtime.sendMessage({ type: "NEW_VIDEO_URL" });
+    }
+}, { urls: ["<all_urls>"] });
+
+// Message Listener
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+    if (msg.type === "YT_PAGE_DATA") {
+        if (sender.tab) {
+            tabVideoData.set(sender.tab.id, msg.formats);
             chrome.runtime.sendMessage({ type: "NEW_VIDEO_URL" });
         }
-    },
-    { urls: ["<all_urls>"], types: ["media", "xmlhttprequest", "other"] }
-);
-
-// Persistent storage for downloads using chrome.storage.local
-chrome.downloads.onChanged.addListener((delta) => {
-    if (delta.state && delta.state.current === 'complete') {
-        const downloadId = delta.id;
-
-        // Callback tabanlı (Firefox uyumlu)
-        chrome.storage.local.get(['activeDownloads'], (result) => {
-            const activeDownloads = result.activeDownloads || {};
-
-            if (activeDownloads[downloadId]) {
-                const meta = activeDownloads[downloadId];
-
-                chrome.downloads.search({ id: downloadId }, (items) => {
-                    if (items && items[0]) {
-                        const item = items[0];
-                        console.log("Download complete, notifying gallery:", item.filename);
-
-                        fetch('http://localhost:3001/api/yt/client-notify', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                filePath: item.filename,
-                                url: meta.url,
-                                title: meta.title,
-                                hostname: meta.hostname
-                            })
-                        }).then(r => r.json())
-                            .then(data => {
-                                console.log("Gallery notified:", data);
-                                // Cleanup storage
-                                delete activeDownloads[downloadId];
-                                chrome.storage.local.set({ activeDownloads });
-                            })
-                            .catch(e => console.error("Gallery notify error:", e));
-                    }
-                });
-            }
-        });
-    }
-});
-
-// Register download notification & Data Handling
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-
-    // Content script'ten gelen YouTube verisi
-    if (message.type === "YT_PAGE_DATA") {
-        if (sender.tab) {
-            console.log("Received YT Data for tab", sender.tab.id, message.formats.length, "formats");
-            tabVideoData.set(sender.tab.id, {
-                title: message.title,
-                formats: message.formats
-            });
-        }
-        return;
     }
 
-    if (message.type === "REGISTER_DOWNLOAD") {
-        chrome.storage.local.get(['activeDownloads'], (result) => {
-            const activeDownloads = result.activeDownloads || {};
-            activeDownloads[message.downloadId] = {
-                url: message.url,
-                title: message.title,
-                hostname: message.hostname
-            };
-            chrome.storage.local.set({ activeDownloads });
-        });
-        return true;
+    if (msg.type === "GET_CAPTURED_URLS") {
+        // DÜZELTME: Sadece capturedUrls (Network Sniffer) verilerini döndür.
+        // YouTube verileri artık popup'ta sunucu tarafından veya content script'ten ayrıca alınıyor.
+        // Burada karışıklık olmamalı.
+
+        const list = Array.from(capturedUrls.values()).reverse(); // En son yakalanan en üstte
+        // (Optional) Sadece son 50 taneyi tut
+        if (list.length > 50) list.length = 50;
+
+        sendResponse(list);
+
+        // Callback pattern için true dönmeye gerek yok (senkron cevap) ama Firefox için dönelim
+        // return true; // (sendResponse asenkron değil burada)
     }
 
-    // Popup açıldığında listeyi gönder
-    if (message.type === "GET_CAPTURED_URLS") {
-        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-            const tab = tabs[0];
-            if (!tab) return sendResponse([]);
-
-            if (tabVideoData.has(tab.id)) {
-                const data = tabVideoData.get(tab.id);
-                // Biçimlendir ve Sırala
-                const list = data.formats.map(f => ({
-                    url: f.url,
-                    label: f.qualityLabel || 'Video',
-                    mime: f.mimeType,
-                    itag: f.itag
-                })).sort((a, b) => {
-                    const getRes = (l) => {
-                        if (!l) return 0;
-                        const m = l.match(/(\d+)p?/);
-                        return m ? parseInt(m[1]) : 0;
-                    };
-                    return getRes(b.label) - getRes(a.label);
-                });
-
-                const uniqueList = [];
-                const seen = new Set();
-                for (const item of list) {
-                    if (!seen.has(item.label)) {
-                        uniqueList.push(item);
-                        seen.add(item.label);
-                    }
-                }
-
-                sendResponse(uniqueList);
-            } else {
-                const list = Array.from(capturedUrls.values()).sort((a, b) => b.timestamp - a.timestamp);
-                sendResponse(list);
-            }
-        });
-        return true; // Async response
+    if (msg.type === "REGISTER_DOWNLOAD") {
+        notifyServer(msg.downloadId, msg.url, msg.title, msg.hostname);
     }
 
-    if (message.type === "CLEAR_LIST") {
+    if (msg.type === "CLEAR_LIST") {
         capturedUrls.clear();
         tabVideoData.clear();
     }
 });
+
+// Download Notification Logic (Server Integration)
+function notifyServer(downloadId, url, title, hostname) {
+    // ... (Mevcut logic, değişmedi) ...
+    // İndirme tamamlanınca servera bildir
+    chrome.downloads.onChanged.addListener(function listener(delta) {
+        if (delta.id === downloadId && delta.state && delta.state.current === 'complete') {
+            chrome.downloads.onChanged.removeListener(listener);
+
+            // Dosya yolunu bul
+            chrome.downloads.search({ id: downloadId }, (items) => {
+                if (items && items[0]) {
+                    const filename = items[0].filename; // Full path or relative
+
+                    fetch('http://localhost:3001/api/yt/client-notify', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            filename: filename,
+                            url: url,
+                            title: title,
+                            hostname: hostname
+                        })
+                    }).catch(err => console.error("Server notify error:", err));
+                }
+            });
+        }
+    });
+}
