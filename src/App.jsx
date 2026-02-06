@@ -1906,9 +1906,13 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
     };
 
     const pickChromaColor = async () => {
-        if (!window.EyeDropper) {
+        const startManualPicker = () => {
             setIsPickingColor(true);
             if (onShowToast) onShowToast(t.pickColorFromPreview || "Pick color from preview");
+        };
+
+        if (!window.EyeDropper) {
+            startManualPicker();
             return;
         }
 
@@ -1929,6 +1933,13 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
             }
         } catch (e) {
             console.log("EyeDropper cancelled or failed", e);
+            // If user simply cancelled (e.g. Esc), we might not want to start manual picker immediately,
+            // but for "failed" cases like Zen Browser returning black or error, fallback might be useful.
+            // However, distinguishing cancel vs error is hard across browsers.
+            // Let's assume if EyeDropper fails, we try manual.
+            if (!e.toString().includes('aborted')) {
+                startManualPicker();
+            }
         }
     };
 
@@ -1947,7 +1958,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
         canvas.width = rect.width;
         canvas.height = rect.height;
 
-        const container = e.currentTarget;
+        const container = e.currentTarget.parentElement;
         const elements = container.querySelectorAll('video, img');
 
         ctx.fillStyle = 'black';
@@ -3259,6 +3270,7 @@ const VideoEditor = ({ item, t = {}, onSave, onClose, refreshKey: propRefreshKey
                                                         <img
                                                             key={clip.id}
                                                             src={url}
+                                                            crossOrigin="anonymous"
                                                             draggable={false}
                                                             onLoad={(e) => {
                                                                 const nw = e.target.naturalWidth;
@@ -5533,6 +5545,7 @@ function App() {
                             {selectedMedia.type.startsWith('image/') ? (
                                 <img
                                     src={getMediaUrl(selectedMedia.path)}
+                                    crossOrigin="anonymous"
                                     className="full-media"
                                     style={{
                                         transform: `translate(${zoom.x}px, ${zoom.y}px) scale(${zoom.s})`,
