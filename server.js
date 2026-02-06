@@ -2156,70 +2156,89 @@ app.get('/api/yt/download-stream', (req, res) => {
 // Browser Extension Notification Handler
 app.post('/api/yt/client-notify', async (req, res) => {
     try {
-        const { filePath, url, title, hostname } = req.body;
+        const { filename, url, title, hostname } = req.body;
         console.log("Client Notification:", req.body);
 
-        // Tahmini Downloads klasörü
+        if (!filename) return res.status(400).json({ error: "Filename missing" });
+
         const userDownloads = path.join(process.env.USERPROFILE || process.env.HOME, 'Downloads');
-        const sourcePath = path.join(userDownloads, filePath);
 
-        // Hedef klasör (Site adı veya hostname)
-        // Hostname: www.youtube.com -> youtube
-        let siteName = hostname.split('.')[0] === 'www' ? hostname.split('.')[1] : hostname.split('.')[0];
-        if (hostname.includes('youtube')) siteName = 'YouTube'; // Özel adlandırma
+        let sourcePath = filename;
+        if (!path.isAbsolute(filename)) {
+            sourcePath = path.join(userDownloads, filename);
+        }
 
-        // Hedef: rootGalleryPath/SiteName
+        // Hostname temizliği (Site Adı Klasörü)
+        let siteName = "Web";
+        try {
+            // www.youtube.com -> youtube
+            // ukdevilz.com -> ukdevilz
+            const hostParts = hostname.replace('www.', '').split('.');
+            siteName = hostParts[0];
+        } catch (e) { siteName = hostname || "Web"; }
+
+        // Hedef Klasör
         const targetDir = path.join(rootGalleryPath, siteName);
         if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
 
-        const fileName = path.basename(filePath);
-        // Eğer dosya adı .mp4 ile bitmiyorsa ve video ise ekle (opsiyonel)
-        let finalFileName = fileName;
-        if (!path.extname(fileName)) finalFileName += '.mp4';
+        const targetPath = path.join(targetDir, path.basename(filename));
 
-        const targetPath = path.join(targetDir, finalFileName);
-
-        // Dosyanın inmesi tamamlanmış olmalı, ama bazen gecikme olabilir.
-        // Dosyayı taşı
-        // Bekle ve taşı (tarayıcı dosyayı serbest bırakana kadar)
+        // Dosya Taşıma (Retry ile)
         let attempts = 0;
         const moveFile = () => {
             if (fs.existsSync(sourcePath)) {
                 try {
-                    // İsim çakışması varsa
+                    // Çakışma kontrolü
                     let finalTarget = targetPath;
                     if (fs.existsSync(finalTarget)) {
-                        const namePart = path.parse(finalFileName).name;
-                        const extPart = path.parse(finalFileName).ext;
-                        finalTarget = path.join(targetDir, `${namePart}_${Date.now()}${extPart}`);
+                        const p = path.parse(targetPath);
+                        finalTarget = path.join(targetDir, `${p.name}_${Date.now()}${p.ext}`);
                     }
 
-                    fs.renameSync(sourcePath, finalTarget);
+                    // Kopyala ve Sil (Güvenli Taşıma)
+                    fs.copyFileSync(sourcePath, finalTarget);
+                    try { fs.unlinkSync(sourcePath); } catch (delErr) { console.error("Source delete error:", delErr); }
 
-                    // DB Kaydı
+                    // DB Güncelleme
                     const relPath = path.relative(rootGalleryPath, finalTarget).replace(/\\/g, '/');
-                    const infoNote = `${siteName}\n${hostname}\n${url}`;
-                    db.prepare('INSERT OR REPLACE INTO item_info (path, info) VALUES (?, ?)').run(relPath, infoNote);
+                    const infoNote = `URL: ${url}\nSite: ${hostname}\nTitle: ${title || ""}`;
 
-                    // Thumbnail oluştur
-                    // getThumbPath(finalTarget) ... (Otomatik thumb bulucu yapacak zaten)
+                    try {
+                        const stmt = db.prepare('INSERT OR REPLACE INTO item_info (path, info) VALUES (?, ?)');
+                        stmt.run(relPath, infoNote);
+                    } catch (dbErr) {
+                        console.error("DB Error:", dbErr);
+                    }
+
+                    // Thumbnail tetikle
+                    try {
+                        // getThumbPath fonksiyonu zaten serverda var ama burada sadece request gelince çalışıyor.
+                        // Arka planda thumb oluşturmayı tetiklemek için ffmpeg gerekebilir.
+                        // Şimdilik sadece dosyayı taşıdık, galeri tarayınca thumb oluşturur.
+                    } catch (e) { }
 
                     res.json({ success: true, path: relPath });
                 } catch (e) {
-                    if (attempts < 10) {
+                    if (attempts < 5) {
                         attempts++;
-                        setTimeout(moveFile, 1000); // 1 saniye sonra tekrar dene (dosya kilitli olabilir)
+                        setTimeout(moveFile, 1500);
                     } else {
-                        res.status(500).json({ error: "File locked or move failed: " + e.message });
+                        res.status(500).json({ error: "Move failed: " + e.message });
                     }
                 }
             } else {
-                res.status(404).json({ error: "Source file not found in Downloads" });
+                console.log("Source file not found (Retrying):", sourcePath);
+                if (attempts < 5) {
+                    attempts++;
+                    setTimeout(moveFile, 2000);
+                } else {
+                    res.status(404).json({ error: "File not found in Downloads. Make sure it is downloaded to default folder." });
+                }
             }
         };
 
-        // Hemen dene
-        setTimeout(moveFile, 1000); // Tarayıcının dosyayı kapatması için ufak bir bekleme
+        // Tarayıcının dosyayı serbest bırakması için bekle
+        setTimeout(moveFile, 1500);
 
     } catch (e) {
         res.status(500).json({ error: e.message });
