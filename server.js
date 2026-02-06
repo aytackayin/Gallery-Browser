@@ -1835,6 +1835,7 @@ app.get('/api/yt/formats', (req, res) => {
 
                     res.json({
                         title: data.title,
+                        thumbnail: data.thumbnail,
                         formats: formats.reverse() // En kaliteliler genelde sonda olur yt-dlp'de
                     });
                 } catch (e) {
