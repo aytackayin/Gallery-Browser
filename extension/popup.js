@@ -59,33 +59,63 @@ function updateList() {
 
         function renderItems(items, title, host) {
             list.innerHTML = "";
+            const uniqueMap = new Map();
 
-            items.sort((a, b) => {
+            items.forEach(item => {
+                // GÖRSEL AYNIŞTIRMA (Deduplication Logic)
+                // Kullanıcıya gösterilen alanlar (Başlık, Kalite, Format) birebir aynıysa,
+                // bunları aynı video kabul et ve sadece en iyi (boyutlu) olanı göster.
+
+                let displayTitle = item.title || title || "Video";
+                // Eğer title yoksa ve label dosya adı gibi uzunsa, title'a alıyoruz (createRow mantığıyla aynı olmalı)
+                if (!item.title && item.label && (item.label.includes('.') || item.label.length > 15)) {
+                    displayTitle = item.label;
+                }
+
+                let displayQuality = item.label || "Video";
+                if (!item.title && displayTitle === item.label) displayQuality = "Video";
+
+                // Format (Badge)
+                let ext = 'MP4';
+                if (item.mime && item.mime.includes('webm')) ext = 'WEBM';
+                else if (item.mime && item.mime.includes('m3u8')) ext = 'HLS';
+
+                // UNIQUE KEY: Görsel Bileşenler
+                const uniqueKey = `${displayTitle}_${displayQuality}_${ext}`;
+
+                const currentSize = item.contentLength || 0;
+                const existing = uniqueMap.get(uniqueKey);
+                const existingSize = existing ? (existing.contentLength || 0) : -1;
+
+                // KURAL: Boyutu büyük/var olanı tut
+                if (currentSize > existingSize) {
+                    uniqueMap.set(uniqueKey, item);
+                }
+                // Eğer boyutlar eşitse ve yeni link daha kısaysa (daha temiz url), onu tut? (Opsiyonel)
+            });
+
+            // Map -> List
+            const sortedItems = Array.from(uniqueMap.values()).sort((a, b) => {
+                const sizeA = a.contentLength || 0;
+                const sizeB = b.contentLength || 0;
+                if (sizeA !== sizeB) return sizeB - sizeA;
+
                 const getVal = s => parseInt((s.label || "").replace(/\D/g, '')) || 0;
                 return getVal(b) - getVal(a);
             });
 
-            const seen = new Set();
-            const unique = [];
+            if (sortedItems.length === 0) {
+                list.innerHTML = "<p style='color:#666;text-align:center;padding:20px'>Format yok.</p>";
+                return;
+            }
 
-            items.forEach(item => {
-                const lbl = item.label || "Video";
-                if (seen.has(item.url)) return;
-                if (item.mime.includes('video') || lbl.includes('p')) {
-                    seen.add(item.url);
-                    unique.push(item);
-                }
-            });
-
-            if (unique.length === 0) list.innerHTML = "<p style='color:#666;text-align:center;padding:20px'>Format yok.</p>";
-            unique.slice(0, 10).forEach(meta => createRow(meta, title, host, list));
+            sortedItems.slice(0, 10).forEach(meta => createRow(meta, title, host, list));
         }
     });
 }
 
 function createRow(meta, pageTitle, hostname, list) {
     const box = document.createElement('div');
-    // Flex row container
     box.style.cssText = `
         margin-bottom: 8px;
         padding: 10px;
@@ -101,7 +131,7 @@ function createRow(meta, pageTitle, hostname, list) {
         gap: 12px;
     `;
 
-    // 1. SOL: Thumbnail
+    // 1. SOL: Thumbnail veya İkon
     if (meta.thumbnail) {
         const thumb = document.createElement('img');
         thumb.src = meta.thumbnail;
@@ -109,30 +139,38 @@ function createRow(meta, pageTitle, hostname, list) {
         box.appendChild(thumb);
     } else {
         const icon = document.createElement('div');
-        icon.innerText = "▶";
-        icon.style.cssText = "width:40px; height:40px; background:#333; display:flex; justify-content:center; align-items:center; border-radius:4px; font-size:18px; color:#666; flex-shrink:0;";
+        icon.innerHTML = `<svg width="24" height="24" viewBox="0 0 24 24" fill="#888" stroke="none"><path d="M8 5v14l11-7z"/></svg>`;
+        icon.style.cssText = "width:60px; height:45px; background:#333; display:flex; justify-content:center; align-items:center; border-radius:4px; flex-shrink:0;";
         box.appendChild(icon);
     }
 
     // 2. ORTA: Başlık + Kalite
+    // createRow içindeki logic ile uniqueKey oluştururkenki logic BİREBİR AYNI olmalı
     const infoGroup = document.createElement('div');
     infoGroup.style.cssText = "display:flex; flex-direction:column; flex:1; overflow:hidden;";
 
-    const displayTitle = meta.title || pageTitle || "Video";
+    let displayTitle = meta.title || pageTitle || "Video";
+    let displayQuality = meta.label || "Video";
+
+    if (!meta.title && meta.label && (meta.label.includes('.') || meta.label.length > 15)) {
+        displayTitle = meta.label;
+        displayQuality = "Video";
+    }
+
     const titleSpan = document.createElement('span');
     titleSpan.innerText = displayTitle;
     titleSpan.style.cssText = "font-size:12px; color:#ddd; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-bottom:4px; font-weight:500;";
     titleSpan.title = displayTitle;
 
     const qualitySpan = document.createElement('span');
-    qualitySpan.innerText = meta.label || "Video";
+    qualitySpan.innerText = displayQuality;
     qualitySpan.style.cssText = "font-weight:700; font-size:15px; color:#fff;";
 
     infoGroup.appendChild(titleSpan);
     infoGroup.appendChild(qualitySpan);
     box.appendChild(infoGroup);
 
-    // 3. SAĞ: Boyut + Tip (Kırmızı Tag)
+    // 3. SAĞ: Boyut + Tip
     const metaGroup = document.createElement('div');
     metaGroup.style.cssText = "display:flex; flex-direction:column; align-items:flex-end; font-size:10px; color:#aaa; min-width:50px;";
 
@@ -150,14 +188,13 @@ function createRow(meta, pageTitle, hostname, list) {
 
     const extSpan = document.createElement('span');
     extSpan.innerText = ext;
-    // KIRMIZI TAG STİLİ
     extSpan.style.cssText = "font-size:9px; background:#e50914; color:#fff; padding:2px 5px; border-radius:3px; font-weight:bold; margin-top:3px;";
 
     metaGroup.appendChild(extSpan);
 
     box.appendChild(metaGroup);
 
-    // Etkileşimler
+    // Events
     box.onmouseover = () => { if (!box.dataset.active) box.style.background = "#333"; };
     box.onmouseout = () => { if (!box.dataset.active) box.style.background = "#252525"; };
     box.onmousedown = () => { if (!box.dataset.active) box.style.transform = "scale(0.98)"; };
@@ -188,11 +225,10 @@ function createRow(meta, pageTitle, hostname, list) {
                 box.style.borderColor = "#f44";
                 qualitySpan.innerText = "Hata";
                 qualitySpan.style.color = "#f44";
-                alert("Hata: " + chrome.runtime.lastError.message);
+                console.error(chrome.runtime.lastError);
                 box.dataset.active = "";
                 return;
             }
-
             chrome.runtime.sendMessage({
                 type: "REGISTER_DOWNLOAD",
                 downloadId: downloadId,
@@ -200,7 +236,6 @@ function createRow(meta, pageTitle, hostname, list) {
                 title: pageTitle,
                 hostname: hostname
             });
-
             qualitySpan.innerText = "✅ Başladı";
         });
     };
