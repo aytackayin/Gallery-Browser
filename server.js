@@ -1782,7 +1782,72 @@ app.post('/api/clear-timeline-cache', (req, res) => {
 });
 
 // Helper to get yt-dlp path
+// Helper to get yt-dlp path
 const getYtDlpPath = () => path.join(process.cwd(), 'yt-dlp.exe');
+
+// Helper to get ffmpeg path
+const getFfmpegPath = () => {
+    const local = path.join(process.cwd(), 'ffmpeg.exe');
+    if (fs.existsSync(local)) return local;
+
+    // Check specific C:/ffmpeg/bin/ffmpeg.exe (Common install)
+    const common = 'C:\\ffmpeg\\bin\\ffmpeg.exe';
+    if (fs.existsSync(common)) return common;
+
+    return 'ffmpeg'; // Fallback to PATH
+};
+
+app.get('/api/yt/formats', (req, res) => {
+    const { url } = req.query;
+    if (!url) return res.status(400).json({ error: "URL required" });
+
+    try {
+        const ytDlpPath = getYtDlpPath();
+        const args = [
+            '--dump-json',
+            '--no-playlist',
+            // Varsayılan ayarlara dön
+            url
+        ];
+
+        const proc = spawn(ytDlpPath, args);
+        let stdout = '';
+
+        proc.stdout.on('data', d => stdout += d);
+
+        proc.on('close', code => {
+            if (code === 0) {
+                try {
+                    const data = JSON.parse(stdout);
+                    // Formatları filtrele ve sadeleştir
+                    const formats = data.formats
+                        .filter(f => (f.vcodec !== 'none' || f.acodec !== 'none') && f.url)
+                        .map(f => ({
+                            url: f.url,
+                            ext: f.ext,
+                            note: f.format_note,
+                            height: f.height,
+                            filesize: f.filesize,
+                            vcodec: f.vcodec,
+                            acodec: f.acodec,
+                            format_id: f.format_id
+                        }));
+
+                    res.json({
+                        title: data.title,
+                        formats: formats.reverse() // En kaliteliler genelde sonda olur yt-dlp'de
+                    });
+                } catch (e) {
+                    res.status(500).json({ error: "Parse error" });
+                }
+            } else {
+                res.status(500).json({ error: "yt-dlp error" });
+            }
+        });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
 
 app.get('/api/yt/info', async (req, res) => {
     try {
@@ -1790,7 +1855,22 @@ app.get('/api/yt/info', async (req, res) => {
         if (!url) return res.status(400).json({ error: "URL is required" });
 
         const ytDlpPath = getYtDlpPath();
-        const proc = spawn(ytDlpPath, ['--dump-json', '--flat-playlist', url]);
+
+        // Tarayıcı çerezlerini bul
+        const zenProfileDir = path.join(process.env.APPDATA || '', 'zen', 'Profiles');
+        const firefoxProfileDir = path.join(process.env.APPDATA || '', 'Mozilla', 'Firefox', 'Profiles');
+
+        const args = ['--dump-json', '--flat-playlist'];
+
+        if (fs.existsSync(zenProfileDir)) {
+            args.unshift('--cookies-from-browser', `firefox:${zenProfileDir}`);
+        } else if (fs.existsSync(firefoxProfileDir)) {
+            args.unshift('--cookies-from-browser', 'firefox');
+        }
+
+        args.push(url);
+
+        const proc = spawn(ytDlpPath, args);
 
         let output = '';
         let errorOutput = '';
@@ -1818,7 +1898,27 @@ app.get('/api/yt/info', async (req, res) => {
                         uploader_id: vid.uploader_id || "",
                         uploader_url: vid.uploader_url || vid.channel_url || "",
                         url: vid.webpage_url || url,
-                        thumbnails: vid.thumbnails
+                        thumbnails: vid.thumbnails,
+                        formats: vid.formats ? [...new Set(vid.formats
+                            .filter(f => f.height && f.width && f.vcodec !== 'none')
+                            .map(f => {
+                                // Determine resolution based on the SHORTEST dimension (handles vertical videos)
+                                const minDim = Math.min(f.width, f.height);
+
+                                // Round to standard resolutions
+                                if (minDim > 130 && minDim < 160) return 144;
+                                if (minDim > 230 && minDim < 250) return 240;
+                                if (minDim > 350 && minDim < 370) return 360;
+                                if (minDim > 470 && minDim < 490) return 480;
+                                if (minDim > 710 && minDim < 730) return 720;
+                                if (minDim > 1070 && minDim < 1090) return 1080;
+                                if (minDim > 1430 && minDim < 1450) return 1440;
+                                if (minDim > 2150 && minDim < 2170) return 2160;
+                                return minDim;
+                            })
+                            .filter(h => [144, 240, 360, 480, 720, 1080, 1440, 2160, 4320].includes(h))
+                            .sort((a, b) => b - a))] : [],
+                        isVertical: (vid.width && vid.height && vid.height > vid.width) ? true : false
                     });
                 } else {
                     // Playlist
@@ -1836,7 +1936,8 @@ app.get('/api/yt/info', async (req, res) => {
                             url: e.url || e.webpage_url,
                             uploader: e.uploader || e.channel || playlist.uploader || playlist.channel || "YouTube",
                             uploader_id: e.uploader_id || playlist.uploader_id || "",
-                            uploader_url: e.uploader_url || playlist.uploader_url || ""
+                            uploader_url: e.uploader_url || playlist.uploader_url || "",
+                            isVertical: (e.width && e.height && e.height > e.width) ? true : false
                         }))
                     });
                 }
@@ -1890,6 +1991,7 @@ app.get('/api/yt/download-stream', (req, res) => {
                 sendUpdate({ type: 'video_start', index: i, title: video.title, processId });
 
                 const ytDlpPath = getYtDlpPath();
+                const ffmpegPath = getFfmpegPath() || 'ffmpeg'; // Use system ffmpeg if not found
                 const outputTemplate = path.join(targetDir, '%(title)s.%(ext)s');
 
                 // Only create directory if we are actually about to start downloading
@@ -1905,9 +2007,26 @@ app.get('/api/yt/download-stream', (req, res) => {
                     '--no-mtime',
                     '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                     '--referer', 'https://www.youtube.com/',
-                    '--extractor-args', 'youtube:player_client=android',
-                    '--ffmpeg-location', 'C:\\ffmpeg\\bin',
+                    '--ffmpeg-location', ffmpegPath,
                 ];
+
+                // Tarayıcı çerezlerini bul (Zen Browser, Firefox, Chrome, Edge)
+                const zenProfileDir = path.join(process.env.APPDATA || '', 'zen', 'Profiles');
+                const firefoxProfileDir = path.join(process.env.APPDATA || '', 'Mozilla', 'Firefox', 'Profiles');
+
+                let cookiesAdded = false;
+                if (fs.existsSync(zenProfileDir)) {
+                    args.push('--cookies-from-browser', `firefox:${zenProfileDir}`);
+                    cookiesAdded = true;
+                } else if (fs.existsSync(firefoxProfileDir)) {
+                    args.push('--cookies-from-browser', 'firefox');
+                    cookiesAdded = true;
+                }
+
+                // Çerez bulunamazsa Android client'ı kullan (düşük kalite ama çalışır)
+                if (!cookiesAdded) {
+                    args.push('--extractor-args', 'youtube:player_client=android');
+                }
 
                 if (asAudio) {
                     args.push(
@@ -1916,10 +2035,21 @@ app.get('/api/yt/download-stream', (req, res) => {
                         '--audio-quality', '0'
                     );
                 } else {
-                    args.push(
-                        '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
-                        '--merge-output-format', 'mp4'
-                    );
+                    const h = video.selectedHeight || 1080;
+
+                    if (cookiesAdded) {
+                        // Çerezli indirme - yüksek kalite mümkün
+                        args.push(
+                            '-f', `bestvideo[height<=${h}]+bestaudio/best[height<=${h}]/best`,
+                            '--merge-output-format', 'mp4'
+                        );
+                    } else {
+                        // Android client - sadece 360p-480p
+                        args.push(
+                            '-f', 'best',
+                            '--merge-output-format', 'mp4'
+                        );
+                    }
                 }
 
                 args.push('-o', outputTemplate, video.url);
@@ -2021,6 +2151,80 @@ app.get('/api/yt/download-stream', (req, res) => {
         res.end();
     }
 });
+
+// Browser Extension Notification Handler
+app.post('/api/yt/client-notify', async (req, res) => {
+    try {
+        const { filePath, url, title, hostname } = req.body;
+        console.log("Client Notification:", req.body);
+
+        // Tahmini Downloads klasörü
+        const userDownloads = path.join(process.env.USERPROFILE || process.env.HOME, 'Downloads');
+        const sourcePath = path.join(userDownloads, filePath);
+
+        // Hedef klasör (Site adı veya hostname)
+        // Hostname: www.youtube.com -> youtube
+        let siteName = hostname.split('.')[0] === 'www' ? hostname.split('.')[1] : hostname.split('.')[0];
+        if (hostname.includes('youtube')) siteName = 'YouTube'; // Özel adlandırma
+
+        // Hedef: rootGalleryPath/SiteName
+        const targetDir = path.join(rootGalleryPath, siteName);
+        if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
+
+        const fileName = path.basename(filePath);
+        // Eğer dosya adı .mp4 ile bitmiyorsa ve video ise ekle (opsiyonel)
+        let finalFileName = fileName;
+        if (!path.extname(fileName)) finalFileName += '.mp4';
+
+        const targetPath = path.join(targetDir, finalFileName);
+
+        // Dosyanın inmesi tamamlanmış olmalı, ama bazen gecikme olabilir.
+        // Dosyayı taşı
+        // Bekle ve taşı (tarayıcı dosyayı serbest bırakana kadar)
+        let attempts = 0;
+        const moveFile = () => {
+            if (fs.existsSync(sourcePath)) {
+                try {
+                    // İsim çakışması varsa
+                    let finalTarget = targetPath;
+                    if (fs.existsSync(finalTarget)) {
+                        const namePart = path.parse(finalFileName).name;
+                        const extPart = path.parse(finalFileName).ext;
+                        finalTarget = path.join(targetDir, `${namePart}_${Date.now()}${extPart}`);
+                    }
+
+                    fs.renameSync(sourcePath, finalTarget);
+
+                    // DB Kaydı
+                    const relPath = path.relative(rootGalleryPath, finalTarget).replace(/\\/g, '/');
+                    const infoNote = `${siteName}\n${hostname}\n${url}`;
+                    db.prepare('INSERT OR REPLACE INTO item_info (path, info) VALUES (?, ?)').run(relPath, infoNote);
+
+                    // Thumbnail oluştur
+                    // getThumbPath(finalTarget) ... (Otomatik thumb bulucu yapacak zaten)
+
+                    res.json({ success: true, path: relPath });
+                } catch (e) {
+                    if (attempts < 10) {
+                        attempts++;
+                        setTimeout(moveFile, 1000); // 1 saniye sonra tekrar dene (dosya kilitli olabilir)
+                    } else {
+                        res.status(500).json({ error: "File locked or move failed: " + e.message });
+                    }
+                }
+            } else {
+                res.status(404).json({ error: "Source file not found in Downloads" });
+            }
+        };
+
+        // Hemen dene
+        setTimeout(moveFile, 1000); // Tarayıcının dosyayı kapatması için ufak bir bekleme
+
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 
 app.post('/api/yt/cancel', (req, res) => {
     const { processId } = req.body;

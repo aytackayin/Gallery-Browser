@@ -4214,6 +4214,7 @@ function App() {
     const [ytDownloads, setYtDownloads] = useState([]); // Array of { id, title, percent, status }
     const [ytMinimized, setYtMinimized] = useState(true);
     const [ytAsAudio, setYtAsAudio] = useState(false);
+    const [ytSelectedFormat, setYtSelectedFormat] = useState(1080);
 
     // YouTube Fetch Info Handler
     const handleYtFetchInfo = async () => {
@@ -4227,6 +4228,14 @@ function App() {
                 alert(t.errorYouTube || data.error);
             } else {
                 setYtInfo(data);
+
+                // Initialize selected format
+                if (data.formats && data.formats.length > 0) {
+                    setYtSelectedFormat(data.formats[0]);
+                } else {
+                    setYtSelectedFormat(1080);
+                }
+
                 if (data.type === 'video') {
                     setYtSelectedUrls(new Set([data.url]));
                 } else if (data.entries) {
@@ -4259,8 +4268,8 @@ function App() {
         if (!ytInfo || ytSelectedUrls.size === 0) return;
 
         const selectedVideos = ytInfo.type === 'video'
-            ? [ytInfo]
-            : ytInfo.entries.filter(e => ytSelectedUrls.has(e.url));
+            ? [{ ...ytInfo, selectedHeight: ytSelectedFormat }]
+            : ytInfo.entries.filter(e => ytSelectedUrls.has(e.url)).map(e => ({ ...e, selectedHeight: ytSelectedFormat }));
 
         const queryParams = new URLSearchParams({
             videos: JSON.stringify(selectedVideos),
@@ -5963,6 +5972,29 @@ function App() {
                                             <label htmlFor="yt-as-audio" style={{ fontSize: '0.85rem', cursor: 'pointer', color: '#ccc' }}>
                                                 {t.downloadAsMp3 || 'Download as MP3'}
                                             </label>
+
+                                            {!ytAsAudio && ytInfo.formats && ytInfo.formats.length > 0 && (
+                                                <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 5 }}>
+                                                    <span style={{ fontSize: '0.8rem', color: '#aaa' }}>{t.quality || 'Quality'}:</span>
+                                                    <select
+                                                        value={ytSelectedFormat || 1080}
+                                                        onChange={(e) => setYtSelectedFormat(parseInt(e.target.value))}
+                                                        style={{
+                                                            background: 'rgba(0,0,0,0.3)',
+                                                            border: '1px solid rgba(255,255,255,0.1)',
+                                                            color: '#fff',
+                                                            padding: '4px 8px',
+                                                            borderRadius: 4,
+                                                            fontSize: '0.8rem',
+                                                            cursor: 'pointer'
+                                                        }}
+                                                    >
+                                                        {ytInfo.formats.map(h => (
+                                                            <option key={h} value={h}>{h}p</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            )}
                                         </div>
 
                                         <button

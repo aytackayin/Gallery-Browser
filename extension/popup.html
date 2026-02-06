@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body { width: 300px; padding: 15px; font-family: sans-serif; background: #1a1a1a; color: #fff; }
+        .url-item { 
+            padding: 8px; border-bottom: 1px solid #333; cursor: pointer; 
+            font-size: 11px; word-break: break-all; overflow: hidden;
+        }
+        .url-item:hover { background: #333; }
+        h3 { margin-top: 0; color: #e50914; font-size: 16px; }
+        .btn { 
+            background: #e50914; color: white; border: none; padding: 5px 10px; 
+            border-radius: 4px; cursor: pointer; width: 100%; margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h3>Bulunan Videolar</h3>
+    <div id="urlList"></div>
+    <button id="clearBtn" class="btn" style="background: #444;">Listeyi Temizle</button>
+    <p style="font-size: 10px; color: #888; margin-top: 10px;">
+        Videoyu Gallery-Browser'a göndermek için linke tıklayın.
+    </p>
+    <script src="popup.js"></script>
+</body>
+</html>

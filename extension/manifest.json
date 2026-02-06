@@ -1,0 +1,40 @@
+{
+    "manifest_version": 2,
+    "name": "Gallery Browser Helper",
+    "version": "1.0",
+    "permissions": [
+        "webRequest",
+        "webRequestBlocking",
+        "activeTab",
+        "downloads",
+        "storage",
+        "*://*.youtube.com/*",
+        "<all_urls>"
+    ],
+    "browser_action": {
+        "default_popup": "popup.html",
+        "default_icon": {
+            "48": "icons/icon48.png"
+        }
+    },
+    "background": {
+        "scripts": [
+            "background.js"
+        ],
+        "persistent": true
+    },
+    "content_scripts": [
+        {
+            "matches": [
+                "*://*.youtube.com/*"
+            ],
+            "js": [
+                "content.js"
+            ],
+            "run_at": "document_end"
+        }
+    ],
+    "web_accessible_resources": [
+        "inject.js"
+    ]
+}
