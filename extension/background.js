@@ -79,10 +79,36 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 chrome.webRequest.onHeadersReceived.addListener((details) => {
     const url = details.url;
     if (url.includes('google.com') || url.includes('youtube.com') || url.includes('analytics')) return;
-    const ct = (details.responseHeaders.find(h => h.name.toLowerCase() === 'content-type') || {}).value || '';
-    if (ct.includes('video') || url.includes('.mp4')) {
-        const baseUrl = url.split('?')[0];
-        capturedVideos.set(baseUrl, { url, label: baseUrl.split('/').pop() || 'Video', mime: ct, tabId: details.tabId });
+
+    const headers = details.responseHeaders || [];
+    const ct = (headers.find(h => h.name.toLowerCase() === 'content-type') || {}).value || '';
+    const path = url.split('?')[0].toLowerCase();
+
+    // ZEKİ FİLTRE: 
+    // 1. Resim uzantılarını kesinlikle engelle
+    const isImage = path.endsWith('.jpg') || path.endsWith('.jpeg') || path.endsWith('.png') || path.endsWith('.webp') || path.endsWith('.gif');
+    if (isImage) return;
+
+    // 2. Video olduğunu doğrula (MIME tipinden veya uzantıdan)
+    const isVideo = ct.toLowerCase().includes('video') ||
+        path.endsWith('.mp4') || path.endsWith('.webm') ||
+        path.endsWith('.m3u8') || path.endsWith('.mov');
+
+    if (isVideo) {
+        // Çirkin ve uzun CDN linkleri yerine daha temiz görünen linkleri tercih etmek için
+        // baseUrl temizliğini geliştiriyoruz.
+        let baseUrl = path;
+        // Eğer url bir klasörle bitiyorsa (/), sonundaki slaşı atalım
+        if (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1);
+
+        const label = baseUrl.split('/').pop() || 'Video';
+
+        capturedVideos.set(baseUrl, {
+            url,
+            label,
+            mime: ct,
+            tabId: details.tabId
+        });
         chrome.runtime.sendMessage({ type: "NEW_VIDEO_URL" });
     }
 }, { urls: ["<all_urls>"] }, ["responseHeaders"]);

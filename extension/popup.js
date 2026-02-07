@@ -34,8 +34,29 @@ function updateList() {
         }
 
         chrome.runtime.sendMessage({ type: "GET_CAPTURED_URLS" }, (urls) => {
-            const filtered = (urls || []).filter(u => !u.url.includes('googlevideo.com'));
-            renderItems(filtered, tab.title, hostname, tab.id, tab.url);
+            const filtered = (urls || []).filter(u => {
+                // Ekstra Güvenlik: Uzantıya bakarak resimleri buradan da eliyoruz
+                const path = u.url.split('?')[0].toLowerCase();
+                return !path.endsWith('.jpg') && !path.endsWith('.png') && !path.endsWith('.jpeg') && !path.endsWith('.webp');
+            });
+
+            // Mükerrer Kaydı Domain Fark Etmeksizin Engelle
+            // Eğer dosya adı (label) aynıysa, bunu tek video sayıyoruz
+            const siteUniqueMap = new Map();
+            filtered.forEach(u => {
+                const pureLabel = u.label.toLowerCase();
+                if (!siteUniqueMap.has(pureLabel)) {
+                    siteUniqueMap.set(pureLabel, u);
+                } else {
+                    // Eğer mevcut link bir CDN linkiyse ama yeni gelen sitenin kendi linkiyse (get_file vb.)
+                    // Sitenin kendi linkini tercih et (Kullanıcının istediği bu)
+                    if (u.url.includes(hostname.toLowerCase()) || u.url.includes('get_file')) {
+                        siteUniqueMap.set(pureLabel, u);
+                    }
+                }
+            });
+
+            renderItems(Array.from(siteUniqueMap.values()), tab.title, hostname, tab.id, tab.url);
         });
 
         function renderItems(items, title, host, currentTabId, currentTabUrl) {
@@ -124,10 +145,9 @@ function createRow(meta, pageTitle, hostname, list, tabId, originalPageUrl) {
         qualitySpan.innerText = "🚀 Başlatıldı";
         qualitySpan.style.color = "#28a745";
 
-        const safeName = (meta.title || pageTitle || "Video").replace(/[/\\?%*:|"<>]/g, '_').substring(0, 80);
-        const qualityTag = (meta.label || "video").replace(/\D/g, '');
+        const safeName = (meta.title || pageTitle || "Video").replace(/[/\\?%*:|"<>]/g, '_').substring(0, 100);
         const fileExt = ext === 'WEBM' ? '.webm' : '.mp4';
-        const suggestedFilename = `${safeName}_${qualityTag}p${fileExt}`;
+        const suggestedFilename = `${safeName}${fileExt}`;
 
         chrome.runtime.sendMessage({
             type: "START_DOWNLOAD",
