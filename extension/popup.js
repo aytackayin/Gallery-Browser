@@ -1,3 +1,6 @@
+// Thumbnail Hafızası (Göz kırpmayı engellemek için)
+const thumbCache = new Map();
+
 function updateList() {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
         const tab = tabs[0];
@@ -35,21 +38,16 @@ function updateList() {
 
         chrome.runtime.sendMessage({ type: "GET_CAPTURED_URLS" }, (urls) => {
             const filtered = (urls || []).filter(u => {
-                // Ekstra Güvenlik: Uzantıya bakarak resimleri buradan da eliyoruz
                 const path = u.url.split('?')[0].toLowerCase();
                 return !path.endsWith('.jpg') && !path.endsWith('.png') && !path.endsWith('.jpeg') && !path.endsWith('.webp');
             });
 
-            // Mükerrer Kaydı Domain Fark Etmeksizin Engelle
-            // Eğer dosya adı (label) aynıysa, bunu tek video sayıyoruz
             const siteUniqueMap = new Map();
             filtered.forEach(u => {
                 const pureLabel = u.label.toLowerCase();
                 if (!siteUniqueMap.has(pureLabel)) {
                     siteUniqueMap.set(pureLabel, u);
                 } else {
-                    // Eğer mevcut link bir CDN linkiyse ama yeni gelen sitenin kendi linkiyse (get_file vb.)
-                    // Sitenin kendi linkini tercih et (Kullanıcının istediği bu)
                     if (u.url.includes(hostname.toLowerCase()) || u.url.includes('get_file')) {
                         siteUniqueMap.set(pureLabel, u);
                     }
@@ -74,6 +72,51 @@ function updateList() {
     });
 }
 
+// *** GELİŞMİŞ THUMBNAİL ÜRETİCİ (CACHE VE ORTADAN KARE) ***
+function generateThumbnail(videoUrl, imgElement) {
+    // 1. CACHE KONTROLÜ (Göz kırpmayı engeller)
+    if (thumbCache.has(videoUrl)) {
+        imgElement.src = thumbCache.get(videoUrl);
+        imgElement.style.display = 'block';
+        return;
+    }
+
+    const video = document.createElement('video');
+    video.style.display = 'none';
+    video.src = videoUrl;
+    video.muted = true;
+    video.crossOrigin = "anonymous";
+
+    video.onloadedmetadata = () => {
+        // 2. ORTADAN KARE ALMA (Duration varsa tam ortasına git, yoksa 5. sn)
+        const midTime = video.duration ? video.duration / 2 : 5;
+        video.currentTime = midTime;
+    };
+
+    video.onseeked = () => {
+        try {
+            const canvas = document.createElement('canvas');
+            canvas.width = 160;
+            canvas.height = 90;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+
+            // CACHE'e kaydet
+            thumbCache.set(videoUrl, dataUrl);
+
+            imgElement.src = dataUrl;
+            imgElement.style.display = 'block';
+        } catch (e) {
+            console.warn("Thumbnail üretilemedi:", videoUrl);
+        }
+        video.remove();
+    };
+
+    video.onerror = () => video.remove();
+    setTimeout(() => { if (video) video.remove(); }, 8000);
+}
+
 function createRow(meta, pageTitle, hostname, list, tabId, originalPageUrl) {
     const box = document.createElement('div');
     box.style.cssText = `
@@ -83,20 +126,35 @@ function createRow(meta, pageTitle, hostname, list, tabId, originalPageUrl) {
         user-select: none; gap: 12px; position: relative;
     `;
 
-    // 1. SOL: Thumbnail
+    // Thumbnail Alanı
+    const thumbWrapper = document.createElement('div');
+    thumbWrapper.style.cssText = "width:80px; height:45px; background:#333; border-radius:4px; flex-shrink:0; display:flex; justify-content:center; align-items:center; overflow:hidden;";
+
+    const thumbImg = document.createElement('img');
+    thumbImg.style.cssText = "width:100%; height:100%; object-fit:cover; display:none;";
+
+    const placeholderIcon = document.createElement('div');
+    placeholderIcon.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="#666"><path d="M8 5v14l11-7z"/></svg>`;
+
+    thumbWrapper.appendChild(placeholderIcon);
+    thumbWrapper.appendChild(thumbImg);
+    box.appendChild(thumbWrapper);
+
     if (meta.thumbnail) {
-        const thumb = document.createElement('img');
-        thumb.src = meta.thumbnail;
-        thumb.style.cssText = "width:80px; height:45px; object-fit:cover; border-radius:4px; flex-shrink:0;";
-        box.appendChild(thumb);
+        thumbImg.src = meta.thumbnail;
+        thumbImg.style.display = 'block';
+        placeholderIcon.style.display = 'none';
+        // YouTube resimlerini de cache'le
+        thumbCache.set(meta.url, meta.thumbnail);
     } else {
-        const icon = document.createElement('div');
-        icon.innerHTML = `<svg width="24" height="24" viewBox="0 0 24 24" fill="#888"><path d="M8 5v14l11-7z"/></svg>`;
-        icon.style.cssText = "width:60px; height:45px; background:#333; display:flex; justify-content:center; align-items:center; border-radius:4px; flex-shrink:0;";
-        box.appendChild(icon);
+        thumbImg.onload = () => {
+            thumbImg.style.display = 'block';
+            placeholderIcon.style.display = 'none';
+        };
+        generateThumbnail(meta.url, thumbImg);
     }
 
-    // 2. ORTA: Bilgiler
+    // Orta Alan
     const infoGroup = document.createElement('div');
     infoGroup.style.cssText = "display:flex; flex-direction:column; flex:1; overflow:hidden;";
 
@@ -112,7 +170,7 @@ function createRow(meta, pageTitle, hostname, list, tabId, originalPageUrl) {
     infoGroup.appendChild(qualitySpan);
     box.appendChild(infoGroup);
 
-    // 3. SAĞ: Badge (Size & Ext)
+    // Sağ Alan
     const metaGroup = document.createElement('div');
     metaGroup.style.cssText = "display:flex; flex-direction:column; align-items:flex-end; font-size:10px; min-width:55px;";
 
@@ -134,7 +192,6 @@ function createRow(meta, pageTitle, hostname, list, tabId, originalPageUrl) {
     metaGroup.appendChild(extSpan);
     box.appendChild(metaGroup);
 
-    // Events
     box.onmouseover = () => { if (!box.dataset.active) box.style.background = "#333"; };
     box.onmouseout = () => { if (!box.dataset.active) box.style.background = "#252525"; };
 
@@ -145,7 +202,7 @@ function createRow(meta, pageTitle, hostname, list, tabId, originalPageUrl) {
         qualitySpan.innerText = "🚀 Başlatıldı";
         qualitySpan.style.color = "#28a745";
 
-        const safeName = (meta.title || pageTitle || "Video").replace(/[/\\?%*:|"<>]/g, '_').substring(0, 100);
+        const safeName = (meta.title || pageTitle || "Video").replace(/[/\\?%*:|"<>]/g, '_').substring(0, 80);
         const fileExt = ext === 'WEBM' ? '.webm' : '.mp4';
         const suggestedFilename = `${safeName}${fileExt}`;
 
@@ -165,6 +222,7 @@ function createRow(meta, pageTitle, hostname, list, tabId, originalPageUrl) {
 }
 
 document.getElementById('clearBtn').onclick = () => {
+    thumbCache.clear(); // Listeyi temizleyince cache'i de temizleyelim
     chrome.runtime.sendMessage({ type: "CLEAR_LIST" });
     updateList();
 };
