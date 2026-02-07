@@ -144,5 +144,10 @@ function createRow(meta, pageTitle, hostname, list, tabId, originalPageUrl) {
     list.appendChild(box);
 }
 
+document.getElementById('clearBtn').onclick = () => {
+    chrome.runtime.sendMessage({ type: "CLEAR_LIST" });
+    updateList();
+};
+
 updateList();
 chrome.runtime.onMessage.addListener((msg) => { if (msg.type === "NEW_VIDEO_URL") updateList(); });
