@@ -25,6 +25,12 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
+// RADAR: Gelen her isteği terminale bas
+app.use((req, res, next) => {
+    if (req.url !== '/api/ping') console.log(`[AĞ] ${req.method} ${req.url}`);
+    next();
+});
+
 const getConfigs = () => {
     let rootPath = process.cwd();
     let autoPlay = false;
@@ -87,6 +93,7 @@ if (!fs.existsSync(timelineCacheDir)) fs.mkdirSync(timelineCacheDir, { recursive
 const dbPath = path.join(rootGalleryPath, 'gallery_data.db');
 const db = new Database(dbPath);
 db.pragma('journal_mode = WAL');
+db.pragma('busy_timeout = 10000'); // Kilitlenmeyi önlemek için 10 sn bekleme süresi
 db.exec(`CREATE TABLE IF NOT EXISTS item_info (path TEXT PRIMARY KEY, info TEXT, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)`);
 db.exec(`CREATE TABLE IF NOT EXISTS thumb_map (path TEXT PRIMARY KEY, hash TEXT)`);
 
@@ -1748,8 +1755,8 @@ app.post('/api/admin/cleanup-thumbs', async (req, res) => {
     }
 });
 
-app.listen(PORT, () => {
-    console.log(`Sunucu çalışıyor.`);
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Sunucu çalışıyor: http://127.0.0.1:${PORT}`);
     const runCycle = async () => {
         await discoverThumbs();
         await cleanupMap();
@@ -1836,7 +1843,8 @@ app.get('/api/yt/formats', (req, res) => {
                     res.json({
                         title: data.title,
                         thumbnail: data.thumbnail,
-                        formats: formats.reverse() // En kaliteliler genelde sonda olur yt-dlp'de
+                        formats: formats.reverse(),
+                        uploader_id: data.uploader_id || data.uploader || data.channel || ""
                     });
                 } catch (e) {
                     res.status(500).json({ error: "Parse error" });
@@ -1896,7 +1904,8 @@ app.get('/api/yt/info', async (req, res) => {
                         type: 'video',
                         title: vid.title,
                         uploader: vid.uploader || vid.channel || vid.uploader_id || "YouTube",
-                        uploader_id: vid.uploader_id || "",
+                        uploader_id: vid.uploader_id || vid.uploader || vid.channel || "",
+                        channel: vid.channel || "",
                         uploader_url: vid.uploader_url || vid.channel_url || "",
                         url: vid.webpage_url || url,
                         thumbnails: vid.thumbnails,
@@ -2153,95 +2162,96 @@ app.get('/api/yt/download-stream', (req, res) => {
     }
 });
 
-// Browser Extension Notification Handler
 app.post('/api/yt/client-notify', async (req, res) => {
     try {
-        const { filename, url, title, hostname } = req.body;
-        console.log("Client Notification:", req.body);
+        const { filename, url, title, hostname, channelHandle } = req.body;
 
-        if (!filename) return res.status(400).json({ error: "Filename missing" });
-
-        const userDownloads = path.join(process.env.USERPROFILE || process.env.HOME, 'Downloads');
-
-        let sourcePath = filename;
-        if (!path.isAbsolute(filename)) {
-            sourcePath = path.join(userDownloads, filename);
+        if (filename === 'LOG_DEBUG') {
+            const chanInfo = channelHandle ? ` | Kanal: ${channelHandle}` : "";
+            console.log(`[DEBUG] ${title}${chanInfo}`);
+            return res.json({ success: true });
         }
 
-        // Hostname temizliği (Site Adı Klasörü)
-        let siteName = "Web";
+        console.log(`\n[!] BİLDİRİM GELDİ: ${title || "İsimsiz"}`);
+        console.log(`[!] Kanal: ${channelHandle || "BELİRSİZ"}, Dosya: ${filename}`);
+
+        if (!filename || filename === "UNKNOWN") return res.status(400).json({ error: "Filename missing" });
+
+        const userDownloads = path.join(process.env.USERPROFILE || process.env.HOME, 'Downloads');
+        let sourcePath = path.isAbsolute(filename) ? filename : path.join(userDownloads, filename);
+
+        // Klasör Belirleme
+        let subFolder = "Web";
         try {
-            // www.youtube.com -> youtube
-            // ukdevilz.com -> ukdevilz
             const hostParts = hostname.replace('www.', '').split('.');
-            siteName = hostParts[0];
-        } catch (e) { siteName = hostname || "Web"; }
+            subFolder = hostParts[0];
+        } catch (e) { subFolder = hostname || "Web"; }
 
-        // Hedef Klasör
-        const targetDir = path.join(rootGalleryPath, siteName);
-        if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
-
-        const targetPath = path.join(targetDir, path.basename(filename));
-
-        // Dosya Taşıma (Retry ile)
-        let attempts = 0;
-        const moveFile = () => {
-            if (fs.existsSync(sourcePath)) {
-                try {
-                    // Çakışma kontrolü
-                    let finalTarget = targetPath;
-                    if (fs.existsSync(finalTarget)) {
-                        const p = path.parse(targetPath);
-                        finalTarget = path.join(targetDir, `${p.name}_${Date.now()}${p.ext}`);
-                    }
-
-                    // Kopyala ve Sil (Güvenli Taşıma)
-                    fs.copyFileSync(sourcePath, finalTarget);
-                    try { fs.unlinkSync(sourcePath); } catch (delErr) { console.error("Source delete error:", delErr); }
-
-                    // DB Güncelleme
-                    const relPath = path.relative(rootGalleryPath, finalTarget).replace(/\\/g, '/');
-                    const infoNote = `URL: ${url}\nSite: ${hostname}\nTitle: ${title || ""}`;
-
-                    try {
-                        const stmt = db.prepare('INSERT OR REPLACE INTO item_info (path, info) VALUES (?, ?)');
-                        stmt.run(relPath, infoNote);
-                    } catch (dbErr) {
-                        console.error("DB Error:", dbErr);
-                    }
-
-                    // Thumbnail tetikle
-                    try {
-                        // getThumbPath fonksiyonu zaten serverda var ama burada sadece request gelince çalışıyor.
-                        // Arka planda thumb oluşturmayı tetiklemek için ffmpeg gerekebilir.
-                        // Şimdilik sadece dosyayı taşıdık, galeri tarayınca thumb oluşturur.
-                    } catch (e) { }
-
-                    res.json({ success: true, path: relPath });
-                } catch (e) {
-                    if (attempts < 5) {
-                        attempts++;
-                        setTimeout(moveFile, 1500);
-                    } else {
-                        res.status(500).json({ error: "Move failed: " + e.message });
-                    }
+        if (hostname && hostname.toLowerCase().includes('youtube')) {
+            subFolder = 'YouTube';
+            if (channelHandle) {
+                const cleanHandle = channelHandle.toString().replace('@', '').replace(/[^a-zA-Z0-9_\-]/g, '');
+                if (cleanHandle) {
+                    subFolder = path.join('YouTube', cleanHandle);
+                    console.log(`[!] Hedef Alt Klasör: ${subFolder}`);
                 }
-            } else {
-                console.log("Source file not found (Retrying):", sourcePath);
+            }
+        }
+
+        const targetDir = path.join(rootGalleryPath, subFolder);
+        if (!fs.existsSync(targetDir)) {
+            console.log(`[!] Klasör Oluşturuluyor: ${targetDir}`);
+            fs.mkdirSync(targetDir, { recursive: true });
+        }
+
+        const fileNameBase = path.basename(filename);
+        let attempts = 0;
+
+        const moveFile = () => {
+            if (!fs.existsSync(sourcePath)) {
+                if (attempts < 20) { // Toplam 40 saniye deneme
+                    attempts++;
+                    if (attempts % 5 === 0) console.log(`[?] Dosya henüz görünür değil, tekrar deneniyor (${attempts}/20)...`);
+                    return setTimeout(moveFile, 2000);
+                }
+                console.log(`[X] DURDURULDU: Dosya diskte bulunamadı: ${sourcePath}`);
+                return res.status(404).json({ error: "Source not found" });
+            }
+
+            try {
+                let targetPath = path.join(targetDir, fileNameBase);
+                if (fs.existsSync(targetPath)) {
+                    const p = path.parse(fileNameBase);
+                    targetPath = path.join(targetDir, `${p.name}_${Date.now()}${p.ext}`);
+                }
+
+                console.log(`[>] Taşıma Başlatıldı: ${fileNameBase}`);
+                fs.copyFileSync(sourcePath, targetPath);
+                try { fs.unlinkSync(sourcePath); } catch (e) { }
+
+                const relPath = path.relative(rootGalleryPath, targetPath).replace(/\\/g, '/');
+                const infoNote = `URL: ${url}\nSite: ${hostname}\nChannel: ${channelHandle || ""}\nTitle: ${title || ""}`;
+
+                db.prepare('INSERT OR REPLACE INTO item_info (path, info) VALUES (?, ?)').run(relPath, infoNote || "");
+
+                console.log(`[OK] İşlem Tamamlandı: ${relPath}`);
+                if (!res.headersSent) res.json({ success: true, path: relPath });
+            } catch (err) {
                 if (attempts < 5) {
                     attempts++;
-                    setTimeout(moveFile, 2000);
-                } else {
-                    res.status(404).json({ error: "File not found in Downloads. Make sure it is downloaded to default folder." });
+                    console.log(`[!] Taşıma Hatası (Deneme ${attempts}): ${err.message}`);
+                    return setTimeout(moveFile, 2000);
                 }
+                if (!res.headersSent) res.status(500).json({ error: err.message });
             }
         };
 
-        // Tarayıcının dosyayı serbest bırakması için bekle
+        // İlk denemeden önce 1.5 saniye bekle
         setTimeout(moveFile, 1500);
 
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        console.error(`[CRITICAL] Sunucu Hatası: ${e.message}`);
+        if (!res.headersSent) res.status(500).json({ error: e.message });
     }
 });
 

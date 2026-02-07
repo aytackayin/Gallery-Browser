@@ -10,6 +10,15 @@ function extractYouTubeData() {
                 title: data.title,
                 video_id: data.video_id,
                 author: data.author,
+                channelHandle: (() => {
+                    try {
+                        const link = document.querySelector('link[itemprop="url"][href*="/@"]') ||
+                            document.querySelector('#owner #channel-name a[href*="/@"]') ||
+                            document.querySelector('ytd-video-owner-renderer a[href*="/@"]');
+                        if (link) return link.href.split('/@')[1].split('/')[0].split('?')[0].replace('@', '');
+                    } catch (e) { }
+                    return null;
+                })(),
                 formats: []
             };
         }
@@ -76,3 +85,13 @@ new MutationObserver(() => {
 }).observe(document, { subtree: true, childList: true });
 
 sendMetadata();
+// Sayfa yüklendiğinde YouTube bilgilerini çıkar ve Arka Plana gönder
+setTimeout(() => {
+    const ytData = extractYouTubeData();
+    if (ytData && ytData.channelHandle) {
+        chrome.runtime.sendMessage({
+            type: "YT_PAGE_DATA",
+            formats: { channelHandle: ytData.channelHandle }
+        });
+    }
+}, 2000);
